@@ -1,0 +1,105 @@
+{
+    "EXTERNAL": {
+        "key": "pagedown",
+        "cycle_key": "end",
+        "cameras": [
+            {
+                "label": "TV",
+                "fav": true
+            },
+            {
+                "label": "Action",
+                "fav": true
+            },
+            {
+                "label": "Aerial",
+                "fav": true
+            },
+            {
+                "label": "Static",
+                "fav": false
+            }
+        ]
+    },
+    "ONBOARD": {
+        "key": "home",
+        "cycle_key": "home",
+        "cameras": [
+            {
+                "label": "Dash Close",
+                "fav": false
+            },
+            {
+                "label": "Dash Far (With hands)",
+                "fav": true
+            },
+            {
+                "label": "Front (No hood)",
+                "fav": false
+            },
+            {
+                "label": "Rear (No bumper)",
+                "fav": false
+            },
+            {
+                "label": "Front Left Tyre",
+                "fav": false
+            },
+            {
+                "label": "Front Right Tyre",
+                "fav": false
+            },
+            {
+                "label": "Rear Facing Left Tyre",
+                "fav": false
+            },
+            {
+                "label": "Rear Facing Right Tyre",
+                "fav": true
+            },
+            {
+                "label": "Front Facing Left Quarter",
+                "fav": false
+            },
+            {
+                "label": "Front Facing Right Quarter",
+                "fav": false
+            },
+            {
+                "label": "Hood Front Facing (Left)",
+                "fav": true
+            },
+            {
+                "label": "Rear Facing Inc Bumper",
+                "fav": true
+            }
+        ]
+    },
+    "DRIVER": {
+        "key": "insert",
+        "cycle_key": "insert",
+        "cameras": [
+            {
+                "label": "Nose",
+                "fav": true
+            },
+            {
+                "label": "Hood",
+                "fav": true
+            },
+            {
+                "label": "Cockpit",
+                "fav": true
+            },
+            {
+                "label": "Chase",
+                "fav": true
+            }
+        ]
+    },
+    "settings": {
+        "hold_time": 0.08,
+        "cycle_gap": 0.005,
+        "category_wait": 0.005
+    }
+}

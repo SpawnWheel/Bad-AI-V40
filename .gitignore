@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+env.bak/
+venv.bak/
+
+# Logs
+*.log
+*.txt
+Logs/
+Logger_AMS2/Race_*.txt
+Logger_AMS2/Backup/

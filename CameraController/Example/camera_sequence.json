@@ -1,0 +1,9 @@
+{
+    "sequence": [
+        {"timecode": "00:00:05", "category": "EXTERNAL", "driver" : "Joe Soap", "label": "TV"},
+        {"timecode": "00:00:10", "category": "ONBOARD", "driver" : "James Smith", "label": "Dash Far (With hands)"},
+        {"timecode": "00:00:15", "category": "DRIVER", "driver" : "Joe Soap", "label": "Nose"},
+        {"timecode": "00:00:20", "category": "ONBOARD", "driver" : "Joe Soap", "label": "Rear Facing Inc Bumper"},
+        {"timecode": "00:00:25", "category": "EXTERNAL", "driver" : "James Smith", "label": "Action"}
+    ]
+}

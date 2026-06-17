@@ -1,0 +1,168 @@
+{
+    "global_settings": {
+        "gemini_api_key": "",
+        "gemini_model": "gemini-3.1-pro-preview"
+    },
+    "steps": [
+        {
+            "name": "Log Race Files (Raceroom)",
+            "sims": [
+                "Raceroom"
+            ],
+            "script_path": "1_Logger/gui_app.py",
+            "working_dir": "1_Logger",
+            "description": "Launch the main logging GUI",
+            "input_slots": [],
+            "output_slot": "raw_log",
+            "output_folder": "Logs",
+            "output_extension": ".txt"
+        },
+        {
+            "name": "Log Race Files (AMS2)",
+            "sims": [
+                "AMS2"
+            ],
+            "script_path": "Logger_AMS2/ams2_logger.py",
+            "working_dir": "Logger_AMS2",
+            "description": "Launch the AMS2 logging script",
+            "input_slots": [],
+            "output_slot": "raw_log",
+            "output_folder": "Logs",
+            "output_extension": ".txt"
+        },
+        {
+            "name": "Control Camera (Raceroom)",
+            "sims": [
+                "Raceroom"
+            ],
+            "script_path": "CameraController\\main.py",
+            "working_dir": "CameraController",
+            "input_slots": [
+                "race_events"
+            ],
+            "output_slot": "director_notes",
+            "output_folder": "",
+            "output_extension": "_director_notes.txt"
+        },
+        {
+            "name": "Control Camera (AMS2)",
+            "sims": [
+                "AMS2"
+            ],
+            "script_path": "CameraController_AMS2/main_ams2.py",
+            "working_dir": "CameraController_AMS2",
+            "input_slots": [
+                "raw_log"
+            ],
+            "output_slot": "",
+            "output_folder": "",
+            "output_extension": ""
+        },
+        {
+            "name": "Combine Director and Logs",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "Combiner/combiner.py",
+            "working_dir": "",
+            "input_slots": [
+                "raw_log",
+                "director_notes"
+            ],
+            "output_slot": "combined_log",
+            "output_folder": "",
+            "output_extension": ".txt"
+        },
+        {
+            "name": "Create Events For Commentary",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "AI Steps/gemini_task.py",
+            "working_dir": "AI Steps",
+            "prompt_folder": "Filtering",
+            "description": "Filter raw race events",
+            "input_slots": [
+                "raw_log"
+            ],
+            "output_slot": "filtered_log",
+            "output_folder": "",
+            "output_prefix": "filtered_",
+            "output_extension": ".txt"
+        },
+        {
+            "name": "Review Events",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "3_Refinement/refinement_tool.py",
+            "working_dir": "3_Refinement",
+            "description": "Manual or auto refinement of data",
+            "input_slots": [
+                "filtered_log",
+                "raw_log"
+            ],
+            "output_slot": "refined_log",
+            "output_folder": "",
+            "output_extension": ".txt"
+        },
+        {
+            "name": "Add in Spice",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "AI Steps/gemini_task.py",
+            "working_dir": "AI Steps",
+            "prompt_folder": "Refined Filtering",
+            "description": "Second pass filtering on refined data",
+            "input_slots": [
+                "refined_log",
+                "filtered_log"
+            ],
+            "output_slot": "post_filtered_log",
+            "output_folder": "",
+            "output_prefix": "post_filtered_",
+            "output_extension": ".txt"
+        },
+        {
+            "name": "Calculate Word Count",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "4_FinalFiltering/commentary_calc.py",
+            "working_dir": "4_FinalFiltering",
+            "description": "Final calculations before LLM",
+            "input_slots": [
+                "post_filtered_log",
+                "refined_log",
+                "filtered_log"
+            ],
+            "output_slot": "calc_log",
+            "output_folder": "",
+            "output_extension": "_forCommentary.txt"
+        },
+        {
+            "name": "Generate Commentary Text",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "AI Steps/gemini_task.py",
+            "working_dir": "AI Steps",
+            "prompt_folder": "Commentary",
+            "description": "Generate text commentary using Gemini",
+            "input_slots": [
+                "calc_log"
+            ],
+            "output_slot": "commentary_text",
+            "output_folder": "",
+            "output_prefix": "",
+            "output_extension": "_commentary.txt"
+        }
+    ]
+}

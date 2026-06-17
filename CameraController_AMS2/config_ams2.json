@@ -1,0 +1,8 @@
+{
+    "settings": {
+        "hold_time": 0.01,
+        "step_gap": 0.01,
+        "max_participants": 15,
+        "api_key": ""
+    }
+}
