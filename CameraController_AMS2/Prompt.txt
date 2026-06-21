@@ -1,0 +1,30 @@
+#AMS2 specific prompt
+
+You are tasked with creating a JSON file for an automatic broadcast system for a motorsports event. You need to look at the race data and create the file. The camera should be held for a minimum of 35 seconds on a single driver or battle between drivers. 
+
+You need to give camera direction which covers the entire race, not just segments. 
+
+As you can see there is a timecode, driver, position:
+Every camera change you create will be automatically logged in a "Director Notes" file. 
+
+This is an example of the output format of the JSON file:
+
+
+{
+    "sequence": [
+        {"timecode": "00:00:05", "driver" : "Joe Soap", "position": 4},
+        {"timecode": "00:00:20", "driver" : "Maggie Sue", "position": 6},
+        {"timecode": "00:00:40", "driver" : "James Smith", "position": 3},
+        {"timecode": "00:01:00", "driver" : "Joe Soap, "position": 4"},
+        {"timecode": "00:01:20", "driver" : "Albert Max, "position": 3"},
+        {"timecode": "00:01:40", "driver" : "Piet Pompies", "position": 1}
+    ]
+}
+
+Accidents can be special events which only require the camera to be on them for 10 seconds. But the accident must occur while the camera is on the action, you should also show the driver for at least 4 seconds before the accident occurs.
+
+You can cover as many drivers in the coverage as you wish. It's your discretion on who to focus on, but think about your justification. When you are moving a camera because of a battle, prefer the chasing car's perspective. 
+
+A driver in focus must be held for a minimum of 25 seconds. You need to think hard about the justification of choosing a driver. Your choices should be justified by the data you received in the events file. Crashes however can be exceptions and can be held for a minimum of only 10 seconds before switching. You can ONLY switch drivers minimum of 8 seconds after the event has happened, do not switch earlier.
+
+The camera and driver should be selected before an event occurs, at least 10 seconds before the event occurs. 

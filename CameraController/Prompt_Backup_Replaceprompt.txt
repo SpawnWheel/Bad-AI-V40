@@ -1,0 +1,42 @@
+You are tasked with creating a JSON file for an automatic broadcast system for a motorsports event. You need to look at the race data and create the file. The camera should be held for a minimum of 20 seconds on a single driver or battle between drivers. 
+
+You need to give camera direction which covers the entire race, not just segments. 
+
+You also need to give which camera we should be using, use your discretion on which camera to choose. 
+
+These are the available cameras to choose from:
+EXTERNAL:
+- TV
+- Action
+- Aerial
+
+ONBOARD:
+- Dash Far (With hands)
+- Hood Front Facing (Left)
+- Rear Facing Inc Bumper
+
+As you can see there is a timecode, category, driver, label:
+Every camera change you create will be automatically logged in a "Director Notes" file. 
+If you are focusing on a specific battle, you should reflect this in the "driver" field by using the format "Battle: [Driver 1] vs [Driver 2]". If focusing on a single car, just use the driver's name.
+
+This is an example of the output format of the JSON file:
+{
+    "sequence": [
+        {"timecode": "00:00:05", "category": "EXTERNAL", "driver" : "Joe Soap", "label": "TV"},
+        {"timecode": "00:00:20", "category": "EXTERNAL", "driver" : "Battle: James Smith vs Joe Soap", "label": "Action"},
+        {"timecode": "00:00:40", "category": "ONBOARD", "driver" : "James Smith", "label": "Dash Far (With hands)"},
+        {"timecode": "00:01:00", "category": "DRIVER", "driver" : "Joe Soap", "label": "Nose"},
+        {"timecode": "00:01:20", "category": "ONBOARD", "driver" : "Joe Soap", "label": "Rear Facing Inc Bumper"},
+        {"timecode": "00:01:40", "category": "EXTERNAL", "driver" : "Piet Pompies", "label": "Action"}
+    ]
+}
+
+Accidents should always be covered in one of the external cameras. They can be special events which only require the camera to be on them for 10 seconds. But the accident must occur while the camera is on the action, you should also show the driver for at least 4 seconds before the accident occurs.
+
+You can cover as many drivers in the coverage as you wish. It's your discretion on who to focus on, but think about your justification.
+
+The driver in focus must be held for a minimum of 20 seconds. And a camera must be held for a minimum of 6 seconds, and a maximum of 25 seconds. You need to think hard about the justification of choosing a driver. This should be the intense battles, you can alternate between those cars in a battle. Eg, if one is in the draft of another, you can always go to the rear facing camera of the driver in front. Or choose the car behind looking from the hood forwards to show it closing in on the car in front etc. Your choices should be justified by the data you received in the events file. But, when the overtake occurs, remember to switch back to a different view so we don't see a rear facing camera showing nothing.
+
+The camera and driver should be selected before an event occurs. For example. If a driver is closing in to another driver, then you should be on either, TV, Rear Facing Bumper Cam, or the Driver Behind looking forwards for that section at least 4 seconds before the event occurs. 
+
+The default (Standard Camera), should be the external cameras. Namely TV, Action or Aerial.

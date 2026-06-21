@@ -1,0 +1,4 @@
+pynput
+pydirectinput
+PyGetWindow
+google-genai

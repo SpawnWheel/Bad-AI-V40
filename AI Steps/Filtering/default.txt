@@ -1,0 +1,123 @@
+You are tasked with refining events from a motorsports race.
+
+The events are in the following format:
+Where an event is in the format, HH:MM:SS - [EVENT CLASSIFICATION] - Event.
+
+Your job is to refine or filter these events for an LLM to do commentary on later. 
+
+IMPORTANT: In the events there are Director notes events. These will let you know what the camera is focussing on and details about what we can see on screen.
+00:01:42 - [DIRECTOR NOTES] Watching GG GT (EXTERNAL - Action)
+00:01:46 - [DIRECTOR NOTES] GG Gt loses rear hits another car. Races are over. GG Gt returns to pits.
+00:02:00 - [DIRECTOR NOTES] Watching Battle: iPechito Carlos vs poldi Roth (EXTERNAL - Aerial)
+00:02:12 - [DIRECTOR NOTES] Three wide!
+00:02:16 - [DIRECTOR NOTES] Carlos squeezing him onto the grass.
+00:02:20 - [DIRECTOR NOTES] Watching iPechito Carlos (ONBOARD - Rear Facing Inc Bumper)
+00:02:24 - [DIRECTOR NOTES] Carlos losses the rear. Remains straight, but slow on the straight
+00:02:35 - [DIRECTOR NOTES] Watching Battle: Emmet Keane vs Xavi Casas (ONBOARD - Dash Far (With hands))
+
+These notes are extremely important and will help you to filter. 
+You can ONLY keep events which the camera is focussed on, look for `[DIRECTOR NOTES] Watching...
+This can be that specific car, or the battle in which it's involved in.  
+If the camera is on "Driver A," only report events involving "Driver A" (or the battle Driver A is in).
+If the camera switches, stop reporting on the previous driver immediately.
+Always look to the director notes to how to interpret how an overtake, or accident occurred. You should add this information to the log where the overtake, accident occurred. Director notes can also stand alone as the director is describing the battle in better detail.
+
+Do not include the actual director notes in your output. Only your filtered events.
+
+The closest that any two events can be is 3 seconds. If events are closer than 3 seconds then you should merge them if they are related, (But, take the time of the first event). Do not delete events, unless they are not related to what the camera is currently focussed on. But, do not overly merge events. Only if you have multiple events within 3 seconds.
+
+Use your logic. If there's a yellow flag and an accident within a few seconds, use your logic on how that occurred. For example, if a car makes an overtake, then a few seconds later the accident is reported, then logically those two had an accident and the one is stopped as a result. So in your log where the overtake occurred, you can say, XXX overtakes YYY, they collide! YYY has stopped on track. 
+
+When merging events, only keep the first one's timecodes, but merge the logs into a new coherent log. This log should have all the information which was originally in the data you received and in the same language you received it. You should not summarise data. 
+
+Always keep the full starting grid leaderboard event and keep all leaderboard events with it's full grid. (But, if there is an intense battle with overtakes, you can move the leaderboard by up to 15 seconds). You can combine the leaderboard with the closest non-intense battle too, such as drafting, closest battles etc.
+
+When you notice positions change between the same drivers within two seconds and they exit they continue in the same positions as they started, then an overtake has not happened, but an attempted overtake. You can say this, but do not report an overtake. Say that it was an attempted overtake.
+
+Only report the overtake if the driver behind wins the battle, and keeps it for over 3 seconds. Then the overtake should be at the timecode of the last overtake in the battle. If the battle had multiple overtakes and one came out the winner, say that XXX goes for the move, YYY is not making it easy, but XXX makes it stick.
+
+So for example battles can be interpreted like this:
+Here's the data.
+00:02:55 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
+00:03:00 - [OVERTAKE] Afred Smith overtook James Small for P1 in Hypercars.
+00:03:07 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
+00:03:09 - [OVERTAKE] Afred Smith overtook James Small for P1 in Hypercars.
+00:03:09 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
+00:03:13 - [OVERTAKE] Afred Smith overtook James Small for P1 in Hypercars.
+00:03:15 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
+00:03:16 - [OVERTAKE] Afred Smith overtook James Small for P1 in Hypercars.
+00:03:17 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
+00:03:20 - [OVERTAKE] Afred Smith overtook James Small for P1 in Hypercars.
+The output will be:
+00:02:55 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
+00:03:00 - [OVERTAKE] Afred Smith overtook James Small for P1 in Hypercars.
+00:03:07 - [OVERTAKE] James Small attempts to overtake Afred Smith, Smith fights back.
+00:03:13 - [OVERTAKE] James Small and Afred Smith are still battling for P1 in Hypercars.
+00:03:17 - [OVERTAKE] James Small and Afred Smith are still battling for P1 in Hypercars.
+00:03:20 - [OVERTAKE] Afred Smith keeps P1 from James Small in Hypercars.
+Look at this example above and use this as what to do for complex battle sequences. You can use logic on what's happening in the battle by the [OVERTAKE] events.
+
+The longest time between two events should be 24 seconds. If there is longer than 24 seconds between two events, insert a new event 12 seconds after the one before. These events should say Commentator's ramble. It should not be specific about what they're rambling about. They should have the same format as the existing race events. 
+
+
+Return only the filtered events file with no introductory or concluding remarks. 
+
+Here are some examples. 
+1......RAW INPUT
+00:01:30 - [DIRECTOR NOTES] Watching Battle: iPechito Carlos vs David Phillips (EXTERNAL - TV)
+00:01:30 - [OVERTAKE] juan manuel otero rodriguez overtook Juan Cuesta for P15 in Mazda MX-5 Cup.
+00:01:30 - [OVERTAKE] GG GT overtook Fabian Lorenz for P21 in Mazda MX-5 Cup.
+00:01:30 - [OVERTAKE] Juan Cuesta overtook juan manuel otero rodriguez for P15 in Mazda MX-5 Cup.
+00:01:30 - [OVERTAKE] Adri Rodriguez overtook Peter Neuwald, Olivier Dermont for P17 in Mazda MX-5 Cup.
+00:01:31 - [OVERTAKE] juan manuel otero rodriguez overtook Juan Cuesta for P15 in Mazda MX-5 Cup.
+00:01:31 - [OVERTAKE] Adri Rodriguez overtook Juan Cuesta for P16 in Mazda MX-5 Cup.
+00:01:31 - [OVERTAKE] Fabian Lorenz overtook GG GT for P21 in Mazda MX-5 Cup.
+00:01:32 - [OVERTAKE] GG GT overtook Fabian Lorenz for P21 in Mazda MX-5 Cup.
+00:01:33 - [OVERTAKE] iPechito Carlos overtook Xavi Casas for P5 in Mazda MX-5 Cup.
+00:01:34 - [OVERTAKE] sa??s ?at??s overtook Clinton Nortje for P11 in Mazda MX-5 Cup.
+00:01:34 - [OVERTAKE] GG GT overtook Marcus Fiedler for P20 in Mazda MX-5 Cup.
+00:01:34 - [OVERTAKE] Mirko Rosenboom overtook Fabian Lorenz for P22 in Mazda MX-5 Cup.
+00:01:35 - [DIRECTOR NOTES] Carlos makes move on outside of T1.
+00:01:35 - [OVERTAKE] Mirko Rosenboom overtook Marcus Fiedler for P21 in Mazda MX-5 Cup.
+00:01:36 - [OVERTAKE] Adri Rodriguez overtook juan manuel otero rodriguez for P15 in Mazda MX-5 Cup.
+00:01:36 - [OVERTAKE] michael cheesman overtook Alex Salazar for P13 in Mazda MX-5 Cup.
+00:01:36 - [OVERTAKE] juan manuel otero rodriguez overtook Adri Rodriguez for P15 in Mazda MX-5 Cup.
+00:01:37 - [OVERTAKE] Alex Salazar overtook michael cheesman for P13 in Mazda MX-5 Cup.
+00:01:37 - [OVERTAKE] michael cheesman overtook Alex Salazar for P13 in Mazda MX-5 Cup.
+00:01:37 - [OVERTAKE] Mirko Rosenboom overtook GG GT for P20 in Mazda MX-5 Cup.
+00:01:38 - [OVERTAKE] Emmet Keane overtook Cassaka Cassaka for P8 in Mazda MX-5 Cup.
+00:01:39 - [BATTLE] Side by side! Cassaka Cassaka (P9) is fighting Emmet Keane (P8)!
+00:01:40 - [OVERTAKE] Adri Rodriguez overtook juan manuel otero rodriguez for P15 in Mazda MX-5 Cup.
+00:01:41 - [BATTLE] Side by side! Alex Salazar (P14) is fighting michael cheesman (P13)!
+00:01:42 - [DIRECTOR NOTES] Watching GG GT (EXTERNAL - Action)
+00:01:43 - [BATTLE] Side by side! juan manuel otero rodriguez (P16) is fighting Adri Rodriguez (P15)!
+00:01:44 - [BATTLE] Side by side! iPechito Carlos (P5) is fighting David Phillips (P4)!
+00:01:44 - [BATTLE] Side by side! Miodrag Mirosavic (P3) is fighting poldi Roth (P2)!
+00:01:44 - [OVERTAKE] Marcus Fiedler overtook GG GT for P21 in Mazda MX-5 Cup.
+00:01:44 - [OVERTAKE] Fabian Lorenz overtook GG GT for P22 in Mazda MX-5 Cup.
+00:01:44 - [BATTLE] Side by side! Fabian Lorenz (P22) is fighting Marcus Fiedler (P21)!
+00:01:44 - [BATTLE] Side by side! GG GT (P23) is fighting Fabian Lorenz (P22)!
+00:01:45 - [OVERTAKE] Fabian Lorenz overtook Marcus Fiedler for P21 in Mazda MX-5 Cup.
+00:01:45 - [OVERTAKE] Miodrag Mirosavic overtook poldi Roth for P2 in Mazda MX-5 Cup.
+00:01:45 - [BATTLE] Side by side! poldi Roth (P3) is fighting Miodrag Mirosavic (P2)!
+00:01:45 - [OVERTAKE] iPechito Carlos overtook David Phillips for P4 in Mazda MX-5 Cup.
+00:01:45 - [BATTLE] Side by side! David Phillips (P5) is fighting iPechito Carlos (P4)!
+00:01:45 - [OVERTAKE] Adri Rodriguez overtook Alex Salazar for P14 in Mazda MX-5 Cup.
+00:01:46 - [DIRECTOR NOTES] GG Gt loses rear hits another car. Races are over. GG Gt returns to pits.
+00:01:46 - [ACCIDENT] Alert: GG GT (P23 in Mazda MX-5 Cup) is slow/stopped on track! Potential accident.
+00:01:47 - [ACCIDENT] Alert: Marcus Fiedler (P22 in Mazda MX-5 Cup) is slow/stopped on track! Potential accident.
+00:01:48 - [ACCIDENT] Notice: Marcus Fiedler is back on the move.
+00:01:48 - [PIT] GG GT entered Pit Lane.
+00:01:48 - [ACCIDENT] Notice: GG GT is back on the move.
+00:01:48 - [DNF] Out of the race: GG GT has DNF'd.
+00:01:48 - [BATTLE] poldi Roth (P3) is in the draft of Miodrag Mirosavic (P2).
+00:01:48 - [BATTLE] David Phillips (P5) is in the draft of iPechito Carlos (P4).
+00:01:49 - [OVERTAKE] Alex Salazar overtook Adri Rodriguez for P14 in Mazda MX-5 Cup.
+00:01:49 - [FLAG] Flag: YELLOW FLAG detected!
+00:01:50 - [FLAG] Flag: Green again (Yellow cleared).
+00:01:50 - [ACCIDENT] Alert: juan manuel otero rodriguez (P16 in Mazda MX-5 Cup) is slow/stopped on track! Potential accident.
+1.....OUTPUT FILE
+
+00:01:33 - [OVERTAKE] iPechito Carlos overtook Xavi Casas for P5 in Mazda MX-5 Cup. 
+00:01:46 - [ACCIDENT] Alert: GG GT (P23 in Mazda MX-5 Cup) is slow/stopped on track! Potential accident. GG Gt loses rear hits another car. Races are over. GG Gt returns to pits. Alert: Marcus Fiedler (P22 in Mazda MX-5 Cup) is slow/stopped on track! Potential accident. Out of the race: GG GT has DNF'd.
+00:01:50 - [ACCIDENT] Alert: juan manuel otero rodriguez (P16 in Mazda MX-5 Cup) is slow/stopped on track! Potential accident.

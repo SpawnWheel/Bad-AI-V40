@@ -11,7 +11,14 @@ venv.bak/
 
 # Logs
 *.log
-*.txt
+*.env
 Logs/
 Logger_AMS2/Race_*.txt
 Logger_AMS2/Backup/
+Projects/
+TTS/TTSFast/Output*/
+AudioCombiner/*.wav
+Combiner/combined_race_log.txt
+CameraController/*_director_notes.txt
+launcher_config.json
+launcher_state.json

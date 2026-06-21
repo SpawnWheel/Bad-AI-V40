@@ -244,15 +244,20 @@ class AMS2EventLogger:
         self.last_positions = {} # name -> pos
         self.last_lap_distances = {} # name -> distance
         self.last_laps_completed = {} # name -> laps
+        self.last_laps = {} # name -> mCurrentLap
         self.participant_cars = {} # name -> car_name
         self.participant_classes = {} # name -> class_name
         self.participant_pit_modes = {} # name -> pit_mode
         self.participant_race_states = {} # name -> race_state
-        self.finished_participants = set() # set of names who have finished
+        self.finished_participants = set() # set of names who have finished or retired
+        self.assumed_retired_participants = set() # set of names assumed retired due to no movement
         self.last_overtake_time = {} # name -> timestamp
         self.accidents = {} # name -> start_time
+        self.last_movement_time = {} # name -> time of last movement
         self.battles = {} # (name1, name2) -> {"type": str, "time": float, "count": int}
         self.checkered_flag_shown = False
+        self.grid_log_pending = False
+        self.grid_log_time = None
         self.last_sim_time = -1.0
 
     def connect(self):
@@ -367,7 +372,8 @@ class AMS2EventLogger:
         if self.data.mRaceState != self.last_race_state:
             if self.data.mRaceState == 1: # Not Started
                 self.log("SESSION", "Phase Update: Counting Down", sim_time=self.data.mCurrentTime)
-                self.log_starting_grid()
+                self.grid_log_pending = True
+                self.grid_log_time = now_time
             elif self.data.mRaceState == 2: # Racing
                 if self.last_race_state == 1:
                     self.race_start_sim_time = self.data.mCurrentTime
@@ -375,6 +381,11 @@ class AMS2EventLogger:
                     self.race_start_time = now_time
                     self.last_leaderboard_time = now_time
             self.last_race_state = self.data.mRaceState
+
+        if getattr(self, "grid_log_pending", False) and self.grid_log_time:
+            if now_time - self.grid_log_time >= 1.0:
+                self.log_starting_grid()
+                self.grid_log_pending = False
 
         # Record race limits once when racing
         if self.data.mSessionState == 5 and self.data.mRaceState == 2 and self.recorded_finish_sim_time == -1.0:
@@ -428,11 +439,19 @@ class AMS2EventLogger:
                         leader_name = self.decode(p_leader.mName)
                         leader_laps = p_leader.mLapsCompleted
                         old_leader_laps = self.last_laps_completed.get(leader_name, 0)
+                        leader_lap = p_leader.mCurrentLap
+                        old_leader_lap = getattr(self, 'last_laps', {}).get(leader_name, 0)
                         
-                        if leader_laps > old_leader_laps:
-                            if self.recorded_laps_in_event > 0 and leader_laps >= self.recorded_laps_in_event:
-                                self.checkered_flag_shown = True
-                            elif self.recorded_finish_sim_time > 0.0 and self.data.mCurrentTime >= self.recorded_finish_sim_time:
+                        is_time_up = (self.data.mEventTimeRemaining != -1.0 and self.data.mEventTimeRemaining <= 0.0)
+                        if self.recorded_finish_sim_time > 0.0 and self.data.mCurrentTime >= self.recorded_finish_sim_time:
+                            is_time_up = True
+                            
+                        is_laps_up = (self.data.mLapsInEvent > 0 and leader_laps >= self.data.mLapsInEvent)
+                        
+                        leader_crossed_line = (leader_laps > old_leader_laps) or (leader_lap > old_leader_lap)
+                        
+                        if leader_crossed_line:
+                            if is_time_up or is_laps_up:
                                 self.checkered_flag_shown = True
 
         # Participants
@@ -440,12 +459,17 @@ class AMS2EventLogger:
         new_positions = {}
         new_lap_distances = {}
         new_laps_completed = {}
+        new_laps = {}
         for i in range(self.data.mNumParticipants):
             p = self.data.mParticipantInfo[i]
             if p.mIsActive:
                 name = self.decode(p.mName)
                 car_name = self.decode(self.data.mCarNames[i])
                 class_name = self.decode(self.data.mCarClassNames[i])
+                
+                if self.is_safety_car(name, car_name, class_name):
+                    continue
+                    
                 pos = p.mRacePosition
                 dist = p.mCurrentLapDistance
                 speed = self.data.mSpeeds[i]
@@ -454,16 +478,39 @@ class AMS2EventLogger:
                 pit_mode = self.data.mPitModes[i]
                 race_state = self.data.mRaceStates[i]
 
+                # Retirement by lack of movement (2 mins)
+                if speed < 2.0:
+                    if name not in getattr(self, 'last_movement_time', {}):
+                        if not hasattr(self, 'last_movement_time'): self.last_movement_time = {}
+                        self.last_movement_time[name] = now_time
+                    elif now_time - self.last_movement_time[name] >= 120.0 and name not in self.finished_participants:
+                        self.log("SESSION", f"{name} has not moved in 2 minutes and is assumed retired.", sim_time=self.data.mCurrentTime)
+                        self.finished_participants.add(name)
+                        if not hasattr(self, 'assumed_retired_participants'): self.assumed_retired_participants = set()
+                        self.assumed_retired_participants.add(name)
+                        if name in self.accidents:
+                            del self.accidents[name]
+                else:
+                    if name in getattr(self, 'last_movement_time', {}):
+                        del self.last_movement_time[name]
+                        if name in getattr(self, 'assumed_retired_participants', set()):
+                            self.assumed_retired_participants.remove(name)
+                            if name in self.finished_participants:
+                                self.finished_participants.remove(name)
+                            self.log("SESSION", f"Notice: {name} was assumed retired but has started moving again!", sim_time=self.data.mCurrentTime)
+
                 # Finish Detection
                 old_race_state = self.participant_race_states.get(name, 0)
                 old_laps = self.last_laps_completed.get(name, 0)
+                old_lap = getattr(self, 'last_laps', {}).get(name, 0)
                 
                 is_finished = False
                 
                 if race_state == 3 and old_race_state != 3:
                     is_finished = True
                 elif not is_finished and self.checkered_flag_shown and name not in self.finished_participants:
-                    if laps_completed > old_laps:
+                    crossed_line = (laps_completed > old_laps) or (lap > old_lap)
+                    if crossed_line:
                         is_finished = True
 
                 if is_finished and name not in self.finished_participants:
@@ -488,6 +535,7 @@ class AMS2EventLogger:
                 
                 self.participant_race_states[name] = race_state
                 new_laps_completed[name] = laps_completed
+                new_laps[name] = lap
 
                 # Pit Detection (only if not finished)
                 if name not in self.finished_participants:
@@ -660,6 +708,7 @@ class AMS2EventLogger:
         self.last_positions = new_positions
         self.last_lap_distances = new_lap_distances
         self.last_laps_completed = new_laps_completed
+        self.last_laps = new_laps
 
     def log_periodic_leaderboard(self):
         grid = []

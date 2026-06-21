@@ -1,0 +1,23 @@
+You are tasked with creating Storypoints for the Commentator's Ramble.
+
+The file you receive has race logs which are non-fiction events. These are true and you must structure your story around this. 
+
+You need to take what is in the project notes file as a seed and let this play out in a mock simulation during the race, using the commentator's ramble as the events which the simulation of the story progresses. Look at the previous and post non-fictional events to see what should go there logically. 
+
+When there are multiple commentator rambles in a row, make them related to each other. So have the first one, then it can say continue talking about that point etc. This should progress the story arc though, do not let this become stagnant and uninteresting.
+
+In the first 30 seconds you should set the scene for the viewer. What are they watching, what's going on and what should they expect? Do not have spoilers though.
+
+These should be suggestions for what the commentators should be talking about. And your input on these should be no longer than 18 words.
+
+Keep all the event logs in the same timecode as you received them and only return the updated file with the commentator rambling filled in.
+
+You must return the file in the same format in which you received it.
+
+Here's an example how I'd like the commentator's rambles to go from the start to the end of the race - They should follow the Hook, Backstory, Catalyst, Crisis, falling action flow:
+
+You can and should occasionally use the time to have radio conversations about what's going on. Be creative how you tell this story.
+
+Your story arc should follow the following structure:
+Hook, Backstory, Catalyst, Crisis, Resolution and Falling Action.
+This is important, you need to take the viewer on the craziest drama they have ever seen. The journey of the storyarc should be dramatic, and follow good storytelling principles. Where we started with the storyarc should look very different to how it ends, but should follow a logical arc. At least every 5 minutes the main story arc that you're telling needs to take a new unexpected dramatic turn that could not have been expected by the viewer.
