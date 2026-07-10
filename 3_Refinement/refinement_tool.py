@@ -118,11 +118,24 @@ class RefinementApp(QMainWindow):
         self.chk_autoscroll.setChecked(True)
         self.chk_autoscroll.clicked.connect(self.toggle_autoscroll)
 
+        # Event Navigation Buttons
+        self.btn_prev_event = QPushButton("\u25C0 Previous Event")
+        self.btn_prev_event.setToolTip("Jump to the previous overtake or accident")
+        self.btn_prev_event.clicked.connect(self.go_to_previous_event)
+        self.btn_prev_event.setEnabled(False)
+
+        self.btn_next_event = QPushButton("Next Event \u25B6")
+        self.btn_next_event.setToolTip("Jump to the next overtake or accident")
+        self.btn_next_event.clicked.connect(self.go_to_next_event)
+        self.btn_next_event.setEnabled(False)
+
         log_toolbar.addWidget(btn_load_vid)
         log_toolbar.addWidget(btn_load_log)
         log_toolbar.addWidget(self.btn_merge_log)
         log_toolbar.addWidget(btn_save_log)
         log_toolbar.addStretch()
+        log_toolbar.addWidget(self.btn_prev_event)
+        log_toolbar.addWidget(self.btn_next_event)
         log_toolbar.addWidget(self.chk_autoscroll)
         log_toolbar.addWidget(self.btn_sync)
         
@@ -233,6 +246,7 @@ class RefinementApp(QMainWindow):
         if confirm == QMessageBox.Yes:
             for row in rows:
                 self.table.removeRow(row)
+            self.update_event_nav_buttons()
 
     def merge_selected_events(self):
         """Merges multiple selected events into the earliest one."""
@@ -420,9 +434,15 @@ class RefinementApp(QMainWindow):
         event_item = QTableWidgetItem(description)
         self.table.setItem(insert_row, 1, event_item)
 
+        # Apply color for the new row
+        self.apply_row_color(insert_row)
+
         # Scroll to new item
         self.table.scrollToItem(time_item)
         self.table.selectRow(insert_row)
+
+        # Update nav button state
+        self.update_event_nav_buttons()
 
     def load_log(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Log", "", "Text Files (*.txt)")
@@ -480,6 +500,11 @@ class RefinementApp(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to load log: {e}")
         finally:
             self.table.blockSignals(False) # Re-enable signals
+
+        # Apply colors to all rows after loading (signals were blocked, so
+        # itemChanged/apply_row_color never fired during the batch insert)
+        self.apply_all_row_colors()
+        self.update_event_nav_buttons()
 
     def save_log(self):
         # Determine initial directory and filename
@@ -611,6 +636,91 @@ class RefinementApp(QMainWindow):
             self.table.blockSignals(False)
 
         QMessageBox.information(self, "Synced", "All timestamps have been updated.")
+
+    # --- Color Helpers ---
+
+    def apply_all_row_colors(self):
+        """Applies coloring to every row in the table. Call after batch loading."""
+        for row in range(self.table.rowCount()):
+            self.apply_row_color(row)
+
+    def _is_event_row(self, row):
+        """Returns True if the row is an overtake or accident."""
+        item = self.table.item(row, 1)
+        if not item:
+            return False
+        desc = item.text().lower()
+        return "overtake" in desc or "accident" in desc
+
+    # --- Event Navigation ---
+
+    def update_event_nav_buttons(self):
+        """Enable/disable nav buttons based on whether event rows exist."""
+        has_events = any(self._is_event_row(r) for r in range(self.table.rowCount()))
+        self.btn_prev_event.setEnabled(has_events)
+        self.btn_next_event.setEnabled(has_events)
+
+    def go_to_next_event(self):
+        """Navigate to the next overtake or accident after the current video position and autoplay."""
+        current_ms = self.media_player.position()
+        current_seconds = current_ms / 1000.0
+
+        for row in range(self.table.rowCount()):
+            if not self._is_event_row(row):
+                continue
+            time_item = self.table.item(row, 0)
+            if time_item:
+                row_seconds = str_to_seconds(time_item.text())
+                if row_seconds is not None and row_seconds > current_seconds:
+                    self._jump_to_event_row(row, row_seconds)
+                    return
+
+        # Wrap around: go to the first event
+        for row in range(self.table.rowCount()):
+            if self._is_event_row(row):
+                time_item = self.table.item(row, 0)
+                if time_item:
+                    row_seconds = str_to_seconds(time_item.text())
+                    if row_seconds is not None:
+                        self._jump_to_event_row(row, row_seconds)
+                        return
+
+    def go_to_previous_event(self):
+        """Navigate to the previous overtake or accident before the current video position and autoplay."""
+        current_ms = self.media_player.position()
+        current_seconds = current_ms / 1000.0
+
+        # Walk backwards looking for the first event before current position
+        for row in range(self.table.rowCount() - 1, -1, -1):
+            if not self._is_event_row(row):
+                continue
+            time_item = self.table.item(row, 0)
+            if time_item:
+                row_seconds = str_to_seconds(time_item.text())
+                if row_seconds is not None and row_seconds < current_seconds:
+                    self._jump_to_event_row(row, row_seconds)
+                    return
+
+        # Wrap around: go to the last event
+        for row in range(self.table.rowCount() - 1, -1, -1):
+            if self._is_event_row(row):
+                time_item = self.table.item(row, 0)
+                if time_item:
+                    row_seconds = str_to_seconds(time_item.text())
+                    if row_seconds is not None:
+                        self._jump_to_event_row(row, row_seconds)
+                        return
+
+    def _jump_to_event_row(self, row, seconds):
+        """Seek the video to 5 seconds before the event, select the row, and autoplay."""
+        seek_seconds = max(0, seconds - 5)
+        self.media_player.setPosition(int(seek_seconds * 1000))
+        self.table.blockSignals(True)
+        self.table.selectRow(row)
+        self.table.scrollToItem(self.table.item(row, 0), QAbstractItemView.PositionAtCenter)
+        self.table.blockSignals(False)
+        self.media_player.play()
+        self.setFocus()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
