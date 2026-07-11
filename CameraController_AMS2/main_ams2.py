@@ -1,6 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import json
+import sys
 import os
 import threading
 import time
@@ -47,6 +48,13 @@ class AMS2CameraController:
         self.pause_start_time = None
         
         self.session_log_filename = None
+        
+        # Pre-loaded input file from launcher
+        self.preloaded_input_file = None
+        if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
+            self.preloaded_input_file = sys.argv[1]
+        elif os.environ.get("R3E_INPUT_FILE") and os.path.exists(os.environ.get("R3E_INPUT_FILE")):
+            self.preloaded_input_file = os.environ.get("R3E_INPUT_FILE")
         
         self.setup_ui()
         self.refresh_windows()
@@ -169,6 +177,27 @@ class AMS2CameraController:
         ttk.Button(sf3, text="Capture Sim GF", command=self._set_sim_gf_now).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         ttk.Button(sf3, text="Apply Sync", command=self._calculate_and_set_offset).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
 
+        # Race Log Input (pre-loaded from launcher)
+        input_f = ttk.LabelFrame(self.main_frame, text="Race Log Input")
+        input_f.pack(fill=tk.X, pady=5)
+        
+        self.input_file_display = tk.StringVar()
+        if self.preloaded_input_file:
+            self.input_file_display.set(os.path.basename(self.preloaded_input_file))
+        else:
+            self.input_file_display.set("(no file loaded)")
+        
+        inp_row = ttk.Frame(input_f); inp_row.pack(fill=tk.X, pady=2)
+        input_lbl = tk.Label(inp_row, textvariable=self.input_file_display,
+                             font=("Consolas", 9, "bold"),
+                             bg="#1a2e1a" if self.preloaded_input_file else "#2e1a1a",
+                             fg="#0f0" if self.preloaded_input_file else "#f55",
+                             anchor="w", padx=5, pady=3)
+        input_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.input_status_label = input_lbl
+        
+        ttk.Button(inp_row, text="Change", command=self._browse_input_file).pack(side=tk.RIGHT, padx=2)
+
         # Sequence Controls
         seq_f = ttk.LabelFrame(self.main_frame, text="Sequence")
         seq_f.pack(fill=tk.X, pady=5)
@@ -235,17 +264,57 @@ class AMS2CameraController:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
 
+    def _browse_input_file(self):
+        """Let the user change the pre-loaded input file."""
+        initial_dir = os.environ.get("R3E_PROJECT_PATH", ".")
+        path = filedialog.askopenfilename(
+            title="Select Race Data Log",
+            initialdir=initial_dir,
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        if path:
+            self.preloaded_input_file = path
+            self.input_file_display.set(os.path.basename(path))
+            self.input_status_label.config(bg="#1a2e1a", fg="#0f0")
+            self.log_message(f"Input file changed to: {os.path.basename(path)}")
+
     def generate_sequence_with_gemini(self):
         api_key = self._get_gemini_api_key()
         if not api_key:
-            api_key = tk.simpledialog.askstring("API Key", "Enter your Gemini API Key:", show='*')
+            api_key = simpledialog.askstring("API Key", "Enter your Gemini API Key:", show='*')
             if not api_key: return
             api_key_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "API_Key.txt")
             with open(api_key_path, "w") as f:
                 f.write(api_key.strip())
 
-        data_path = filedialog.askopenfilename(title="Select Race Data Log", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
-        if not data_path: return
+        # Use pre-loaded input file if available, otherwise ask
+        data_path = self.preloaded_input_file
+        if data_path and os.path.exists(data_path):
+            # Confirm with the user
+            if not messagebox.askyesno("Confirm Input", 
+                    f"Generate sequence from:\n{os.path.basename(data_path)}\n\nProceed?"):
+                # User said no — let them pick a different file
+                data_path = filedialog.askopenfilename(
+                    title="Select Race Data Log",
+                    initialdir=os.environ.get("R3E_PROJECT_PATH", "."),
+                    filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+                )
+                if not data_path: return
+                # Update the preloaded reference
+                self.preloaded_input_file = data_path
+                self.input_file_display.set(os.path.basename(data_path))
+                self.input_status_label.config(bg="#1a2e1a", fg="#0f0")
+        else:
+            # No pre-loaded file, fall back to file dialog
+            data_path = filedialog.askopenfilename(
+                title="Select Race Data Log",
+                initialdir=os.environ.get("R3E_PROJECT_PATH", "."),
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            )
+            if not data_path: return
+            self.preloaded_input_file = data_path
+            self.input_file_display.set(os.path.basename(data_path))
+            self.input_status_label.config(bg="#1a2e1a", fg="#0f0")
 
         try:
             prompt_file = "Prompt.txt" # Always use root Prompt.txt

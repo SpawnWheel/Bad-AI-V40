@@ -80,4 +80,9 @@ if __name__ == "__main__":
         sys.exit(1)
         
     output_name = "combined_race_log.txt"
-    combine_files(path1, path2, output_name)
+    project_path = os.environ.get("R3E_PROJECT_PATH")
+    if project_path:
+        output_path = os.path.join(project_path, output_name)
+    else:
+        output_path = output_name
+    combine_files(path1, path2, output_path)

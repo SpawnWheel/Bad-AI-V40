@@ -5,6 +5,17 @@ import subprocess
 import threading
 import time
 import re
+import sys
+
+default_input_file = os.environ.get("R3E_INPUT_FILE")
+if not default_input_file and len(sys.argv) > 1:
+    if os.path.exists(sys.argv[1]):
+        default_input_file = sys.argv[1]
+
+default_output_folder = "outputs test"
+r3e_project_path = os.environ.get("R3E_PROJECT_PATH")
+if r3e_project_path:
+    default_output_folder = os.path.join(r3e_project_path, "AudioClipsRAW")
 
 # Get initial list of speakers to show in the UI if possible
 def get_speakers_from_file(file_path):
@@ -202,8 +213,8 @@ with gr.Blocks(title="Faster Qwen3 TTS - Race Commentary") as demo:
     with gr.Tab("Generation"):
         with gr.Row():
             with gr.Column():
-                input_file = gr.File(label="Commentary Text File", file_types=[".txt"])
-                output_folder = gr.Textbox(label="Output Folder", value="outputs test")
+                input_file = gr.File(label="Commentary Text File", file_types=[".txt"], value=default_input_file)
+                output_folder = gr.Textbox(label="Output Folder", value=default_output_folder)
                 
                 with gr.Row():
                     model_size = gr.Dropdown(

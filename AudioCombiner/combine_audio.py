@@ -124,6 +124,9 @@ if __name__ == "__main__":
     # Default paths
     input_dir = "SAMPLE AUDIO"
     output_name = "combined_timeline.wav"
+    r3e_project_path = os.environ.get("R3E_PROJECT_PATH")
+    if r3e_project_path:
+        output_name = os.path.join(r3e_project_path, output_name)
     
     # If no folder is provided as a command-line argument, ask the user
     if len(sys.argv) > 1:

@@ -163,6 +163,44 @@
             "output_folder": "",
             "output_prefix": "",
             "output_extension": "_commentary.txt"
+        },
+        {
+            "name": "Generate TTS Audio",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "TTS/TTSFast/app_gui.py",
+            "working_dir": "TTS/TTSFast",
+            "description": "Launch Fast TTS GUI",
+            "input_slots": [
+                "commentary_text"
+            ],
+            "input_labels": [
+                "Commentary Text"
+            ],
+            "output_slot": "tts_audio_folder",
+            "output_folder": "AudioClipsRAW",
+            "output_extension": "FOLDER"
+        },
+        {
+            "name": "Combine Audio",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "AudioCombiner/combine_audio.py",
+            "working_dir": "AudioCombiner",
+            "description": "Combine the TTS audio clips",
+            "input_slots": [
+                "tts_audio_folder"
+            ],
+            "input_labels": [
+                "Audio Clips Folder"
+            ],
+            "output_slot": "final_audio",
+            "output_folder": "",
+            "output_extension": ".wav"
         }
     ]
 }

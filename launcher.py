@@ -16,6 +16,8 @@ THEME_FG = "#00ff41" # Matrix Green
 THEME_ACCENT = "#d32f2f" # Red
 THEME_BUTTON_BG = "#333333"
 THEME_BUTTON_ACTIVE = "#555555"
+THEME_READY_BG = "#1a2e1a" # Subtle green background for ready steps
+THEME_PENDING_FG = "#888888" # Grey for pending/placeholder text
 
 class ProjectManager:
     def __init__(self, config_steps):
@@ -372,15 +374,36 @@ class BadAILauncher:
                     
                     # Always re-check readiness for this step if it uses this slot
                     if key in self.steps[step_idx].get('input_slots', []):
-                        ready = True
-                        for req in self.steps[step_idx].get('input_slots', []):
-                            if not self.pm.project_state.get(req):
-                                ready = False
-                                break
-                        if step_idx in self.step_labels:
-                            self.step_labels[step_idx].config(fg=THEME_FG if ready else THEME_ACCENT)
+                        self._update_step_readiness(step_idx, self.steps[step_idx])
         
         self.state_text.config(state="disabled")
+
+    def _slot_display_name(self, slot):
+        """Convert a slot key like 'raw_log' to a readable label 'Raw Log'."""
+        return slot.replace('_', ' ').title()
+
+    def _create_tooltip(self, widget, text_func):
+        """Attach a hover tooltip to a widget. text_func() returns the tooltip string."""
+        tip_window = [None]
+        def show(event):
+            text = text_func()
+            if not text:
+                return
+            x = widget.winfo_rootx() + 10
+            y = widget.winfo_rooty() + widget.winfo_height() + 2
+            tw = tk.Toplevel(widget)
+            tw.wm_overrideredirect(True)
+            tw.wm_geometry(f"+{x}+{y}")
+            label = tk.Label(tw, text=text, bg="#444", fg="#ddd", font=("Consolas", 8),
+                             relief="solid", borderwidth=1, padx=4, pady=2)
+            label.pack()
+            tip_window[0] = tw
+        def hide(event):
+            if tip_window[0]:
+                tip_window[0].destroy()
+                tip_window[0] = None
+        widget.bind("<Enter>", show)
+        widget.bind("<Leave>", hide)
 
     def refresh_run_tab(self):
         # Clear existing buttons and vars
@@ -389,6 +412,7 @@ class BadAILauncher:
         self.step_input_vars = {}
         self.step_labels = {}
         self.step_prompt_vars = {}
+        self.step_frames = {}
 
         header = tk.Label(self.run_scroll_frame, text="/// SEQUENCE INITIATION ///", bg=THEME_BG, fg=THEME_ACCENT, font=("Consolas", 16, "bold"))
         header.pack(pady=10)
@@ -404,6 +428,7 @@ class BadAILauncher:
 
             frame = tk.Frame(self.run_scroll_frame, bg=THEME_BG, pady=5)
             frame.pack(fill="x", pady=5)
+            self.step_frames[idx] = frame
 
             # Label
             lbl = tk.Label(frame, text=f"[{display_idx}] {step.get('name', 'Unknown')}", bg=THEME_BG, fg=THEME_FG, width=25, anchor="w", font=("Consolas", 10, "bold"))
@@ -413,6 +438,7 @@ class BadAILauncher:
 
             # Input Selection
             input_slots = step.get('input_slots', [])
+            input_labels = step.get('input_labels', [])
             self.step_input_vars[idx] = []
             
             if input_slots:
@@ -423,6 +449,12 @@ class BadAILauncher:
                     slot_frame = tk.Frame(inputs_frame, bg=THEME_BG)
                     slot_frame.pack(fill="x", pady=1)
                     
+                    # Descriptive label for the slot
+                    label_text = input_labels[slot_idx] if slot_idx < len(input_labels) else self._slot_display_name(slot)
+                    slot_lbl = tk.Label(slot_frame, text=f"{label_text}:", bg=THEME_BG, fg="#888", font=("Consolas", 7), anchor="w", width=22)
+                    slot_lbl.pack(side="left")
+
+                    # Hidden var stores the full path
                     input_var = tk.StringVar()
                     val = self.pm.project_state.get(slot, "")
                     input_var.set(val)
@@ -431,8 +463,24 @@ class BadAILauncher:
                     # Trace changes to update project state
                     input_var.trace_add("write", lambda *a, v=input_var, s=slot: self.update_project_slot(s, v.get()))
 
-                    entry = tk.Entry(slot_frame, textvariable=input_var, bg="#333", fg="white", font=("Consolas", 8), width=35)
+                    # Display var shows filename only
+                    display_var = tk.StringVar()
+                    if val:
+                        display_var.set(os.path.basename(val))
+                    else:
+                        display_var.set("(select file...)" if slot == "video_file" else "(waiting...)")
+
+                    entry = tk.Entry(slot_frame, textvariable=display_var, bg="#333",
+                                     fg="white" if val else THEME_PENDING_FG,
+                                     font=("Consolas", 8), width=30, state="readonly",
+                                     readonlybackground="#333", cursor="arrow")
                     entry.pack(side="left")
+                    
+                    # Tooltip shows full path on hover
+                    self._create_tooltip(entry, lambda v=input_var: v.get() if v.get() else None)
+
+                    # Keep references for updating display when var changes
+                    input_var.trace_add("write", lambda *a, dv=display_var, iv=input_var, e=entry, sl=slot: self._update_display_var(dv, iv, e, sl))
                     
                     btn_browse = tk.Button(slot_frame, text="...", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 8),
                                            command=lambda i=idx, si=slot_idx: self.browse_for_step_input(i, si))
@@ -464,16 +512,62 @@ class BadAILauncher:
             btn.pack(side="right")
 
             # Readiness Visual
-            ready = True
-            if input_slots:
-                for req in input_slots:
-                    if not self.pm.project_state.get(req):
-                        ready = False
-                        break
-            if not ready:
-                lbl.config(fg=THEME_ACCENT)
+            self._update_step_readiness(idx, step)
+
+    def _update_display_var(self, display_var, input_var, entry, slot):
+        """Sync the display entry to show basename when the hidden input_var changes."""
+        val = input_var.get()
+        if val:
+            display_var.set(os.path.basename(val))
+            entry.config(fg="white")
+        else:
+            display_var.set("(select file...)" if slot == "video_file" else "(waiting...)")
+            entry.config(fg=THEME_PENDING_FG)
+
+    def _update_step_readiness(self, idx, step):
+        """Update the visual readiness state of a step row."""
+        input_slots = step.get('input_slots', [])
+        ready = True
+        if input_slots:
+            for req in input_slots:
+                if not self.pm.project_state.get(req):
+                    ready = False
+                    break
+
+        if idx in self.step_labels:
+            step_name = step.get('name', 'Unknown')
+            # Find display index for this step
+            display_idx = 1
+            current_sim = self.sim_var.get()
+            for i, s in enumerate(self.steps):
+                step_sims = s.get('sims', [])
+                if step_sims and current_sim not in step_sims:
+                    continue
+                if i == idx:
+                    break
+                display_idx += 1
+
+            if ready:
+                self.step_labels[idx].config(text=f"\u2713 [{display_idx}] {step_name}", fg=THEME_FG)
+                if idx in self.step_frames:
+                    self.step_frames[idx].config(bg=THEME_READY_BG)
+                    # Update child widgets background
+                    for child in self.step_frames[idx].winfo_children():
+                        try:
+                            if isinstance(child, tk.Label):
+                                child.config(bg=THEME_READY_BG)
+                        except:
+                            pass
             else:
-                lbl.config(fg=THEME_FG)
+                self.step_labels[idx].config(text=f"[{display_idx}] {step_name}", fg=THEME_ACCENT)
+                if idx in self.step_frames:
+                    self.step_frames[idx].config(bg=THEME_BG)
+                    for child in self.step_frames[idx].winfo_children():
+                        try:
+                            if isinstance(child, tk.Label):
+                                child.config(bg=THEME_BG)
+                        except:
+                            pass
 
     def update_project_slot(self, slot, value):
         if self.pm.project_state.get(slot) != value:
@@ -483,10 +577,15 @@ class BadAILauncher:
 
     def browse_for_step_input(self, step_idx, slot_idx):
         initial_dir = self.pm.get_project_path() or "."
-        filename = filedialog.askopenfilename(initialdir=initial_dir)
-        if filename:
-            var, _ = self.step_input_vars[step_idx][slot_idx]
-            var.set(os.path.abspath(filename))
+        var, slot_name = self.step_input_vars[step_idx][slot_idx]
+        
+        if "folder" in slot_name.lower() or "dir" in slot_name.lower():
+            selected_path = filedialog.askdirectory(initialdir=initial_dir)
+        else:
+            selected_path = filedialog.askopenfilename(initialdir=initial_dir)
+            
+        if selected_path:
+            var.set(os.path.abspath(selected_path))
 
     def run_script(self, step, step_idx=None):
         script_path = step.get('script_path')

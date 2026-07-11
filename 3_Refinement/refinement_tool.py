@@ -192,11 +192,18 @@ class RefinementApp(QMainWindow):
         self.delete_shortcut.activated.connect(self.delete_selected_rows)
 
         # Check for CLI args for auto-loading
-        if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
-            print(f"Auto-loading log file: {sys.argv[1]}")
-            self.current_log_file_path = sys.argv[1]
-            self.populate_table(sys.argv[1])
-            self.btn_merge_log.setEnabled(True)
+        for arg in sys.argv[1:]:
+            if os.path.exists(arg):
+                ext = os.path.splitext(arg)[1].lower()
+                if ext in ['.mp4', '.avi', '.mkv', '.mov']:
+                    print(f"Auto-loading video file: {arg}")
+                    self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(arg)))
+                    self.play_btn.setEnabled(True)
+                elif ext == '.txt':
+                    print(f"Auto-loading log file: {arg}")
+                    self.current_log_file_path = arg
+                    self.populate_table(arg)
+                    self.btn_merge_log.setEnabled(True)
 
     def handle_space_bar(self):
         """Called when Space is pressed (unless consumed by focused input)."""
