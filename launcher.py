@@ -84,7 +84,11 @@ class ProjectManager:
             print(f"Failed to save project state: {e}")
 
     def scan_project_files(self):
-        """Scans the project folders for the latest files based on config definitions."""
+        """Scans the project folders for the latest files based on config definitions.
+        
+        Respects pipeline order: a step's output is only scanned if all of
+        its input slots are already populated in the project state.
+        """
         if not self.current_project:
             return
 
@@ -98,31 +102,42 @@ class ProjectManager:
             if step_sims and current_sim not in step_sims:
                 continue
 
+            # Pipeline ordering: only scan for this step's output if all
+            # its input slots are already satisfied in the project state
+            input_slots = step.get('input_slots', [])
+            if input_slots:
+                inputs_ready = all(self.project_state.get(slot) for slot in input_slots)
+                if not inputs_ready:
+                    continue
+
             output_slot = step.get('output_slot')
             output_folder = step.get('output_folder')
             output_ext = step.get('output_extension')
+            output_prefix = step.get('output_prefix', '')
 
-            if output_slot and output_folder:
-                # Special handling for "FOLDER" extension type (Timeline/Audio)
-                target_dir = os.path.join(proj_path, output_folder)
+            if output_slot:
+                target_dir = os.path.join(proj_path, output_folder) if output_folder else proj_path
                 if not os.path.exists(target_dir):
                     continue
 
                 if output_ext == "FOLDER":
-                    # For folder outputs, we just point to the folder itself
-                    # Or check if the folder is not empty?
-                    # For now, let's just set the path to the folder if it exists
+                    # For folder outputs, point to the folder itself if it has contents
                     if os.listdir(target_dir):
                          if self.project_state.get(output_slot) != target_dir:
                             self.project_state[output_slot] = target_dir
                             changes = True
                 else:
-                    # File scanning
-                    files = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.endswith(output_ext or "")]
+                    # File scanning with extension and optional prefix matching
+                    files = []
+                    for f in os.listdir(target_dir):
+                        if output_ext and not f.endswith(output_ext):
+                            continue
+                        if output_prefix and output_prefix not in f:
+                            continue
+                        files.append(os.path.join(target_dir, f))
+                    
                     if files:
                         latest_file = max(files, key=os.path.getmtime)
-                        # Only update if different or missing (to avoid overwriting manual overrides if we had them, 
-                        # but for now we assume 'latest is greatest' is the desired auto-behavior)
                         if self.project_state.get(output_slot) != latest_file:
                              self.project_state[output_slot] = latest_file
                              changes = True
@@ -579,10 +594,10 @@ class BadAILauncher:
         initial_dir = self.pm.get_project_path() or "."
         var, slot_name = self.step_input_vars[step_idx][slot_idx]
         
-        if "folder" in slot_name.lower() or "dir" in slot_name.lower():
+        if slot_name.lower().endswith("_folder") or slot_name.lower().endswith("_dir"):
             selected_path = filedialog.askdirectory(initialdir=initial_dir)
         else:
-            selected_path = filedialog.askopenfilename(initialdir=initial_dir)
+            selected_path = filedialog.askopenfilename(initialdir=initial_dir, filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
             
         if selected_path:
             var.set(os.path.abspath(selected_path))

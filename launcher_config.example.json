@@ -42,7 +42,8 @@
             ],
             "output_slot": "director_notes",
             "output_folder": "",
-            "output_extension": "_director_notes.txt"
+            "output_prefix": "director_notes",
+            "output_extension": ".txt"
         },
         {
             "name": "Control Camera (AMS2)",
@@ -54,9 +55,10 @@
             "input_slots": [
                 "raw_log"
             ],
-            "output_slot": "",
+            "output_slot": "director_notes",
             "output_folder": "",
-            "output_extension": ""
+            "output_prefix": "director_notes",
+            "output_extension": ".txt"
         },
         {
             "name": "Combine Director and Logs",

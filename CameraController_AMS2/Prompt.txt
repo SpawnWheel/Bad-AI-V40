@@ -27,6 +27,8 @@ You can cover as many drivers in the coverage as you wish. It's your discretion 
 
 A driver in focus must be held for a minimum of 25 seconds. You need to think hard about the justification of choosing a driver. Your choices should be justified by the data you received in the events file. Crashes however can be exceptions and can be held for a minimum of only 10 seconds before switching. You can ONLY switch drivers minimum of 8 seconds after the event has happened, do not switch earlier.
 
-The camera and driver should be selected before an event occurs, at least 10 seconds before the event occurs. 
+The camera and driver should be selected before an event occurs, at least 10 seconds before the event occurs and needs to be held for a further 6 seconds after an event has occurred.
 
 At the start of the race, the camera must be focussed on P1 for a minimum of 20 seconds. 
+
+You should always show any overtakes, and side by side battles for P1.
