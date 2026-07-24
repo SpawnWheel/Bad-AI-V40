@@ -40,7 +40,9 @@ def main(input_folder, output_file):
         else:
             print(f"Skipping {f} - does not match HHMMSS pattern.")
     
-    valid_files.sort()
+    # Sort by timecode first, then by file modification time for same-timecode files
+    # This preserves the original commentary order when multiple clips share a timecode
+    valid_files.sort(key=lambda f: (parse_timecode(f), os.path.getmtime(os.path.join(input_folder, f))))
     
     if not valid_files:
         print("No valid WAV or MP3 files found.")
@@ -71,6 +73,9 @@ def main(input_folder, output_file):
         })
 
     # Apply shifting and truncation logic
+    GAP_MS = 500        # Gap between clips that are too close together
+    FADE_OUT_MS = 100   # Fade-out duration when truncating a clip
+    
     print("Applying timeline logic (shifts and truncations)...")
     for i in range(len(timeline_items)):
         item = timeline_items[i]
@@ -79,12 +84,16 @@ def main(input_folder, output_file):
             prev_item = timeline_items[i-1]
             prev_end = prev_item['actual_start'] + prev_item['duration']
             
-            # Constraint: shift max 5 seconds (5000ms)
-            max_allowed_start = item['scheduled_start'] + 5000
-            
-            # Desired start is exactly after previous one
-            # Actual start is max of (scheduled) and min of (desired, max_allowed)
-            new_start = max(item['scheduled_start'], min(prev_end, max_allowed_start))
+            if item['scheduled_start'] == prev_item['scheduled_start']:
+                # Same timecode: play sequentially after the previous clip with a short gap
+                new_start = max(item['scheduled_start'], prev_end + GAP_MS)
+            else:
+                # Different timecodes: apply normal 5-second shift cap
+                max_allowed_start = item['scheduled_start'] + 5000
+                
+                # Desired start is exactly after previous one
+                # Actual start is max of (scheduled) and min of (desired, max_allowed)
+                new_start = max(item['scheduled_start'], min(prev_end, max_allowed_start))
             
             if new_start > item['scheduled_start']:
                 shift = new_start - item['scheduled_start']
@@ -94,11 +103,22 @@ def main(input_folder, output_file):
             
             # If previous item still overlaps even after shifting this one, truncate previous item
             if prev_end > item['actual_start']:
-                truncate_ms = prev_end - item['actual_start']
+                # Leave a short gap after truncation
+                truncate_at = max(0, item['actual_start'] - prev_item['actual_start'] - GAP_MS)
+                truncate_ms = prev_item['duration'] - truncate_at
                 print(f"  Truncating {prev_item['filename']} by {truncate_ms}ms to fit.")
-                truncate_at = item['actual_start'] - prev_item['actual_start']
-                prev_item['audio'] = prev_item['audio'][:truncate_at]
+                prev_item['audio'] = prev_item['audio'][:truncate_at].fade_out(min(FADE_OUT_MS, truncate_at))
                 prev_item['duration'] = len(prev_item['audio'])
+                # Shift current item to start after the gap
+                item['actual_start'] = prev_item['actual_start'] + prev_item['duration'] + GAP_MS
+            
+            # Enforce minimum gap between any two adjacent clips
+            actual_prev_end = prev_item['actual_start'] + prev_item['duration']
+            if item['actual_start'] - actual_prev_end < GAP_MS and actual_prev_end > prev_item['actual_start']:
+                old_start = item['actual_start']
+                item['actual_start'] = actual_prev_end + GAP_MS
+                if item['actual_start'] != old_start:
+                    print(f"  Enforcing {GAP_MS}ms gap before {item['filename']} (pushed {item['actual_start'] - old_start}ms)")
 
     # Build final timeline
     print("Building final WAV...")

@@ -198,8 +198,16 @@ def main():
             # Convert to MP3
             safe_time = timecode.replace(":", "")
             safe_speaker = speaker.replace(" ", "_").replace(".", "")
-            output_filename = f"{safe_time}_{safe_speaker}.mp3"
+            base_filename = f"{safe_time}_{safe_speaker}"
+            output_filename = f"{base_filename}.mp3"
             output_path = os.path.join(args.output, output_filename)
+            
+            # If file exists, add incrementing suffix to avoid overwriting
+            suffix = 1
+            while os.path.exists(output_path):
+                output_filename = f"{base_filename}_{suffix}.mp3"
+                output_path = os.path.join(args.output, output_filename)
+                suffix += 1
             
             audio_seg = AudioSegment.from_wav(temp_wav)
             audio_seg.export(output_path, format="mp3")

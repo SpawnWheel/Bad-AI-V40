@@ -243,6 +243,27 @@ class BadAILauncher:
 
         self.update_project_list()
 
+        # Auto-refresh project state every 5 seconds to pick up changes
+        # made by subprocess tools (e.g. camera controller writing director notes)
+        self._last_project_state_mtime = 0
+        self._start_auto_refresh()
+
+    def _start_auto_refresh(self):
+        """Periodically check if project_state.json was modified externally and refresh."""
+        try:
+            proj_path = self.pm.get_project_path()
+            if proj_path:
+                state_path = os.path.join(proj_path, "project_state.json")
+                if os.path.exists(state_path):
+                    mtime = os.path.getmtime(state_path)
+                    if mtime > self._last_project_state_mtime:
+                        self._last_project_state_mtime = mtime
+                        self.pm.load_project_state()
+                        self.refresh_state_display()
+        except Exception:
+            pass
+        self.root.after(5000, self._start_auto_refresh)
+
     def update_project_list(self):
         projects = self.pm.get_projects()
         self.project_combo['values'] = projects

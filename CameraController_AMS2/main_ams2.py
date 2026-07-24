@@ -392,8 +392,63 @@ class AMS2CameraController:
             self.root.after(0, lambda: messagebox.showerror("Generation Error", f"An error occurred: {e}"))
             self.root.after(0, lambda: self.status_msg.set("Generation failed"))
 
+    def _generate_director_notes_from_sequence(self, sequence_data, json_filename):
+        """Generate the director notes .txt file directly from the sequence data,
+        without requiring playback."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        txt_filename = f"director_notes_ams2_{timestamp}.txt"
+
+        project_path = os.environ.get("R3E_PROJECT_PATH")
+        if project_path:
+            txt_filename = os.path.join(project_path, txt_filename)
+
+        try:
+            with open(txt_filename, "w", encoding="utf-8") as f:
+                for item in sequence_data:
+                    tc = item.get("timecode", "00:00:00")
+                    driver = item.get("driver", "Unknown")
+                    pos = item.get("position")
+                    if pos is not None:
+                        f.write(f"{tc} - [DIRECTOR NOTES] Watching {driver} (P{pos})\n")
+            self.log_message(f"Director notes saved: {os.path.basename(txt_filename)}")
+            return txt_filename
+        except Exception as e:
+            self.log_message(f"Warning: Failed to save director notes: {e}")
+            return None
+
+    def _update_project_state(self, slot, filepath):
+        """Update the project_state.json so the launcher picks up the new file."""
+        project_path = os.environ.get("R3E_PROJECT_PATH")
+        if not project_path:
+            return
+        state_path = os.path.join(project_path, "project_state.json")
+        try:
+            state = {}
+            if os.path.exists(state_path):
+                with open(state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+            state[slot] = os.path.abspath(filepath)
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=4)
+            self.log_message(f"Project state updated: {slot}")
+        except Exception as e:
+            self.log_message(f"Warning: Could not update project state: {e}")
+
     def _on_generation_success(self, filename):
         self.status_msg.set(f"Sequence saved: {filename}")
+        
+        # Generate director notes text file immediately from the JSON
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            sequence = data.get("sequence", [])
+            if sequence:
+                notes_file = self._generate_director_notes_from_sequence(sequence, filename)
+                if notes_file:
+                    self._update_project_state("director_notes", notes_file)
+        except Exception as e:
+            self.log_message(f"Warning: Could not generate director notes: {e}")
+        
         if messagebox.askyesno("Success", f"Sequence saved to {filename}\nLoad it now?"):
             self._load_sequence_from_path(filename)
 
