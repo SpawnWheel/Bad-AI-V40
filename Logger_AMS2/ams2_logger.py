@@ -234,10 +234,7 @@ class AMS2EventLogger:
         self.shm = None
         self.data = None
         self.log_file = None
-        self.start_time = None
-        self.race_start_time = None # Track when the green flag drops
-        self.race_start_remaining = None # Capture mEventTimeRemaining at race start for elapsed time calc
-        self.last_leaderboard_time = None # Track periodic leaderboard updates
+        self.last_leaderboard_time = None # Track periodic leaderboard updates (sim time)
         self.last_session_state = None
         self.last_race_state = None
         self.last_pit_mode = None
@@ -252,13 +249,13 @@ class AMS2EventLogger:
         self.participant_race_states = {} # name -> race_state
         self.finished_participants = set() # set of names who have finished or retired
         self.assumed_retired_participants = set() # set of names assumed retired due to no movement
-        self.last_overtake_time = {} # name -> timestamp
-        self.accidents = {} # name -> start_time
-        self.last_movement_time = {} # name -> time of last movement
-        self.battles = {} # (name1, name2) -> {"type": str, "time": float, "count": int}
+        self.last_overtake_time = {} # name -> sim_time of last overtake
+        self.accidents = {} # name -> sim_time when accident started
+        self.last_movement_time = {} # name -> sim_time of last movement
+        self.battles = {} # (name1, name2) -> {"type": str, "time": float (sim_time), "count": int}
         self.checkered_flag_shown = False
         self.starting_grid_pending = False
-        self.starting_grid_pending_time = None
+        self.starting_grid_pending_sim_time = None # Sim time when grid became pending
         self.green_flag_fired = False
         self.green_flag_logged = False
         self.manual_timer_expired = False # Set True when F12 is pressed
@@ -290,18 +287,15 @@ class AMS2EventLogger:
         filepath = os.path.join(log_dir, filename)
         
         self.log_file = open(filepath, "w", encoding="utf-8")
-        self.start_time = time.time()
         self.log("SYSTEM", f"New log file started: {os.path.abspath(filepath)}")
 
     def log(self, category, message, sim_time=None, print_to_console=True, write_to_file=True):
         if sim_time is not None:
             ts_val = max(0, int(sim_time))
-            timestamp = str(datetime.timedelta(seconds=ts_val))
         else:
-            elapsed = 0
-            if self.start_time is not None:
-                elapsed = max(0, int(time.time() - self.start_time))
-            timestamp = str(datetime.timedelta(seconds=elapsed))
+            # Always use sim time, even for system messages
+            ts_val = max(0, int(self.get_session_time()))
+        timestamp = str(datetime.timedelta(seconds=ts_val))
         
         log_line = f"{timestamp} - [{category}] {message}"
         if print_to_console:
@@ -327,12 +321,11 @@ class AMS2EventLogger:
         return False
 
     def get_session_time(self):
-        """Get elapsed session time using mEventTimeRemaining countdown."""
-        if self.race_start_remaining is not None and self.data.mEventTimeRemaining >= 0:
-            return self.race_start_remaining - self.data.mEventTimeRemaining
-        # Fallback: wall-clock time for lap-based races where mEventTimeRemaining is -1
-        if self.race_start_time is not None:
-            return time.time() - self.race_start_time
+        """Get elapsed session time directly from the sim's own session clock (mCurrentTime).
+        This is the pCars2/AMS2 equivalent of R3E's game_simulation_time.
+        Never uses wall-clock time."""
+        if self.data is not None and self.data.mCurrentTime >= 0:
+            return self.data.mCurrentTime
         return 0.0
 
     def check_f12_key(self):
@@ -354,60 +347,55 @@ class AMS2EventLogger:
         if not self.data:
             return
 
-        now_time = time.time()
+        sim_now = self.get_session_time()  # Sim time for ALL event timing — never wall-clock
 
         # Session and State
         if self.data.mSessionState != self.last_session_state:
             session_name = SESSION_STATES.get(self.data.mSessionState, "Unknown")
-            self.log("SESSION", f"Session Changed: We are now in {session_name}.", sim_time=self.get_session_time())
+            self.log("SESSION", f"Session Changed: We are now in {session_name}.", sim_time=sim_now)
 
             self.last_session_state = self.data.mSessionState
             self.checkered_flag_shown = False
             self.finished_participants.clear()
             self.starting_grid_pending = False
-            self.starting_grid_pending_time = None
+            self.starting_grid_pending_sim_time = None
             self.green_flag_fired = False
             self.green_flag_logged = False
-            self.race_start_remaining = None
             self.manual_timer_expired = False
-
-
 
         # Phase Updates
         if self.data.mPitMode != self.last_pit_mode:
             if self.data.mPitMode == 4: # In Garage
-                self.log("SESSION", "Phase Update: in the Garage", sim_time=self.get_session_time())
+                self.log("SESSION", "Phase Update: in the Garage", sim_time=sim_now)
             self.last_pit_mode = self.data.mPitMode
 
         if self.data.mRaceState != self.last_race_state:
             if self.data.mRaceState == 1: # Not Started / Countdown
-                self.log("SESSION", "Phase Update: Counting Down", sim_time=self.get_session_time())
+                self.log("SESSION", "Phase Update: Counting Down", sim_time=sim_now)
                 if self.data.mSessionState == 5: # Race
                     if self.data.mLapsInEvent > 0:
-                        self.log("SESSION", f"Race Distance: {self.data.mLapsInEvent} laps.", sim_time=self.get_session_time())
+                        self.log("SESSION", f"Race Distance: {self.data.mLapsInEvent} laps.", sim_time=sim_now)
                     if self.data.mEventTimeRemaining > 0.0:
                         duration = int(self.data.mEventTimeRemaining / 60)
                         if duration > 0:
-                            self.log("SESSION", f"Race Duration: {duration} minutes.", sim_time=self.get_session_time())
+                            self.log("SESSION", f"Race Duration: {duration} minutes.", sim_time=sim_now)
             elif self.data.mRaceState == 2: # Racing
                 # Fire the green flag exactly once per race session.
                 # This works regardless of whether we caught the countdown state or not.
                 if not self.green_flag_fired and self.data.mSessionState == 5:
-                    self.race_start_remaining = self.data.mEventTimeRemaining
-                    self.race_start_time = now_time
-                    self.last_leaderboard_time = now_time
+                    self.last_leaderboard_time = sim_now
                     self.green_flag_fired = True
                     # Don't log grid or green flag yet — AMS2 doesn't populate
                     # mRacePosition until shortly after the race state transition.
                     # We'll log both once positions are confirmed valid.
                     self.starting_grid_pending = True
-                    self.starting_grid_pending_time = now_time
+                    self.starting_grid_pending_sim_time = sim_now
             self.last_race_state = self.data.mRaceState
 
         # Deferred Starting Grid + Green Flag logging.
         # AMS2 reports all-zero mRacePosition at the exact race start transition.
         # We wait until positions are populated, then log the grid followed by
-        # the green flag message, both timestamped at race start (0:00:00).
+        # the green flag message, both at the actual sim time.
         if self.starting_grid_pending:
             positions_ready = False
             for i in range(self.data.mNumParticipants):
@@ -416,19 +404,19 @@ class AMS2EventLogger:
                     positions_ready = True
                     break
             
-            # Proceed if positions are populated, or after 10 seconds (safety net)
-            if positions_ready or (now_time - self.starting_grid_pending_time >= 10.0):
-                self.log_starting_grid()
+            # Proceed if positions are populated, or after 10 seconds of sim time (safety net)
+            if positions_ready or (sim_now - self.starting_grid_pending_sim_time >= 10.0):
+                self.log_starting_grid(sim_time=sim_now)
                 if not self.green_flag_logged:
-                    self.log("SESSION", "Green Flag! The race begins!", sim_time=0)
+                    self.log("SESSION", "Green Flag! The race begins!", sim_time=sim_now)
                     self.green_flag_logged = True
                 self.starting_grid_pending = False
 
         # Periodic Leaderboard Updates (every 4 minutes)
-        if self.data.mRaceState == 2 and self.last_leaderboard_time:
-            if now_time - self.last_leaderboard_time > 240: # 4 minutes
+        if self.data.mRaceState == 2 and self.last_leaderboard_time is not None:
+            if sim_now - self.last_leaderboard_time > 240: # 4 minutes of sim time
                 self.log_periodic_leaderboard()
-                self.last_leaderboard_time = now_time
+                self.last_leaderboard_time = sim_now
 
         # Flags
         if self.data.mHighestFlagColour != self.last_flag_colour:
@@ -513,8 +501,8 @@ class AMS2EventLogger:
                 if speed < 2.0:
                     if name not in getattr(self, 'last_movement_time', {}):
                         if not hasattr(self, 'last_movement_time'): self.last_movement_time = {}
-                        self.last_movement_time[name] = now_time
-                    elif now_time - self.last_movement_time[name] >= 120.0 and name not in self.finished_participants:
+                        self.last_movement_time[name] = sim_now
+                    elif sim_now - self.last_movement_time[name] >= 120.0 and name not in self.finished_participants:
                         self.log("SESSION", f"{name} has not moved in 2 minutes and is assumed retired.", sim_time=self.get_session_time())
                         self.finished_participants.add(name)
                         if not hasattr(self, 'assumed_retired_participants'): self.assumed_retired_participants = set()
@@ -628,13 +616,14 @@ class AMS2EventLogger:
                             self.log("OVERTAKE", f"{name} overtook {overtaken_str} for P{pos} in {class_name}.", sim_time=self.get_session_time())
                             
                             # Track overtake time for suppression logic
-                            self.last_overtake_time[name] = now_time
+                            self.last_overtake_time[name] = sim_now
                             for o_name in overtaken:
-                                self.last_overtake_time[o_name] = now_time
+                                self.last_overtake_time[o_name] = sim_now
 
         # Accidents
         # COOLDOWN: No accidents for the first 20 seconds of the race
-        accident_cooldown = self.race_start_time and (now_time - self.race_start_time < 20)
+        green_flag_sim_time = self.starting_grid_pending_sim_time if self.starting_grid_pending_sim_time is not None else 0
+        accident_cooldown = self.green_flag_fired and (sim_now - green_flag_sim_time < 20)
         
         for p in active_participants:
             name, pos, dist, speed, class_name, lap, pit = p.values()
@@ -646,7 +635,7 @@ class AMS2EventLogger:
 
             if self.data.mRaceState == 2 and speed < 2.0 and dist > 10 and not accident_cooldown: # Stopped on track
                 if name not in self.accidents:
-                    self.accidents[name] = now_time
+                    self.accidents[name] = sim_now
                     self.log("ACCIDENT", f"Alert: {name} (P{pos} in {class_name}) is slow/stopped on track! Potential accident.", sim_time=self.get_session_time())
             elif name in self.accidents:
                 if speed > 5.0:
@@ -682,7 +671,7 @@ class AMS2EventLogger:
             # Check last overtake times for suppression
             last_ot1 = self.last_overtake_time.get(name1, 0)
             last_ot2 = self.last_overtake_time.get(name2, 0)
-            since_ot = min(now_time - last_ot1, now_time - last_ot2)
+            since_ot = min(sim_now - last_ot1, sim_now - last_ot2)
 
             # Prevent flybys or post-overtake ghost battles
             # 1. Filter out if speed diff is too high (e.g. one has an issue, > 36 km/h diff)
@@ -699,17 +688,17 @@ class AMS2EventLogger:
                 sbs_cooldown = 15.0
                 # If we were drafting and now side-by-side, we can log immediately (escalation)
                 # But if we were already side-by-side, we must respect the cooldown
-                if not battle_info or battle_info["type"] != "Side by side" or (now_time - battle_info["time"] > sbs_cooldown):
+                if not battle_info or battle_info["type"] != "Side by side" or (sim_now - battle_info["time"] > sbs_cooldown):
                     count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Side by side") else 1
                     if count > 1:
                         self.log("BATTLE", f"{name2} (P{pos2}) and {name1} (P{pos1}) are still battling side by side!", sim_time=self.get_session_time())
                     else:
                         self.log("BATTLE", f"Side by side! {name2} (P{pos2}) is fighting {name1} (P{pos1})!", sim_time=self.get_session_time())
-                    self.battles[battle_key] = {"type": "Side by side", "time": now_time, "count": count}
+                    self.battles[battle_key] = {"type": "Side by side", "time": sim_now, "count": count}
             elif dist_diff < 15.0:
                 draft_cooldown = 15.0
                 # Check if we are already in a battle of ANY type within the cooldown
-                if not battle_info or (now_time - battle_info["time"] > draft_cooldown):
+                if not battle_info or (sim_now - battle_info["time"] > draft_cooldown):
                     count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Drafting") else 1
                     # Determine who is drafting whom
                     drafter, leader = (name2, name1) if dist1 > dist2 else (name1, name2)
@@ -737,7 +726,7 @@ class AMS2EventLogger:
                         f"{drafter} (P{d_pos}) is nose to tail with {leader} (P{l_pos}), waiting for the moment to strike."
                     ]
                     self.log("BATTLE", random.choice(messages), sim_time=self.get_session_time())
-                    self.battles[battle_key] = {"type": "Drafting", "time": now_time, "count": count}
+                    self.battles[battle_key] = {"type": "Drafting", "time": sim_now, "count": count}
             else:
                 # Do NOT clear the battle immediately if they spread out.
                 # This ensures the cooldown persists even if they "flicker" in and out of 15m.
@@ -768,7 +757,7 @@ class AMS2EventLogger:
         leaderboard_str = " | ".join([f"P{pos}: {name}" for pos, name in grid])
         self.log("LEADERBOARD", f"Current Standings: {leaderboard_str}", sim_time=self.get_session_time())
 
-    def log_starting_grid(self):
+    def log_starting_grid(self, sim_time=None):
         grid = []
         for i in range(self.data.mNumParticipants):
             p = self.data.mParticipantInfo[i]
@@ -793,7 +782,7 @@ class AMS2EventLogger:
         grid.sort(key=lambda x: x["pos"])
             
         grid_str = " | ".join([f"P{item['pos']}: {item['name']} [{item['car']}]" for item in grid])
-        self.log("LEADERBOARD", f"Starting Grid Order: {grid_str}", sim_time=0)
+        self.log("LEADERBOARD", f"Starting Grid Order: {grid_str}", sim_time=sim_time)
 
     def run(self):
         if not self.connect():
