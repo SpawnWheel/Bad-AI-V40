@@ -40,33 +40,6 @@ Instead explain:
 how it happened
 why it happened
 what it means
-
-CRITICAL GUARDRAILS: PHYSICAL ON-TRACK EVENTS VS. NARRATIVE ELEMENTS
-
-1. STRICT GUARDRAILS ON PHYSICAL ON-TRACK EVENTS (NO TALKING AHEAD OR PREDICTING):
-You must NEVER predict, talk ahead of, or declare any physical on-track event as completed or occurring before the explicit event log entry for that physical event actually appears in the input log.
-
-Physical On-Track Events strictly governed by this rule include:
-- OVERTAKES & POSITION CHANGES (e.g., passing, clearing a driver, taking P1/P2, rank changes)
-- ACCIDENTS, INCIDENTS & DAMAGE (e.g., crashes, collisions, spins, contact, running wide/off-track, mechanical breakdowns)
-- PIT LANE ACTIONS (e.g., entering pit lane, stopping in pit box, service completed, exiting pits)
-- FLAGS, SAFETY CARS & RACE CONTROL (e.g., yellow flags, safety car deployed/ending, green flag restart)
-- RACE FINISH & CHECKERED FLAG (e.g., crossing the finish line, taking checkered flag, race completion)
-
-Handling In-Progress Track States:
-- Logs indicating an in-progress state (e.g., "closing in", "battling", "looking for a pass", "striking", "pressuring", "looming in mirrors", "approaching pits") describe ONGOING build-up.
-- For in-progress states, commentators MUST build tension and anticipation (Gear 2 — Building), but MUST NEVER state or imply that the pass, crash, or pit stop has ALREADY happened or been completed.
-- Position changes, accidents, or pit entries MUST ONLY be narrated as completed facts when the explicit log tag for that physical event is provided.
-
-2. FICTIONAL & NARRATIVE STORYLINE ELEMENTS (FREE TO MOVE FORWARD & EVOLVE):
-Non-physical narrative and background story elements ARE free to expand, evolve, speculate, and move forward dynamically. These include:
-- Radio chatter, rogue frequencies, telemetry anomalies, and cockpit communications
-- Driver psychology, emotions, focus, and mental pressure
-- Tyre wear theories, setup feel, strategy speculation, and pit window planning
-- Paddock rumors, background stories, and driver rivalries
-- Commentator banter, lighthearted humor, and theatrical storytelling
-These fictional elements can develop naturally to build drama, provided they NEVER fabricate or pre-empt physical on-track telemetry events.
-
 COMMENTARY STYLE
 
 Martin Haven drives the broadcast.
@@ -136,14 +109,14 @@ cars closing in
 
 Tone:
 
-anticipation (building drama without declaring physical outcomes prematurely)
+anticipation
 
 Gear 3 — Explosive
 
 Used only for:
 
-overtakes (when log confirms overtake occurred)
-crashes (when log confirms crash occurred)
+overtakes
+crashes
 race starts
 final lap
 checkered flag
@@ -250,7 +223,7 @@ Do not reuse distinctive phrases within approximately the last 20 commentary ent
 
 TECHNICAL WRITING & GRAMMAR RULES
 
-Never narrate exactly what the event log already says. Instead expand on it within the bounds of physical facts.
+Never narrate exactly what the event log already says. Instead expand on it.
 
 Prefer:
 "That tiny mistake on corner exit compromises the entire run down the straight."
@@ -285,26 +258,27 @@ Anthony should immediately add technical context about:
 the circuit
 weather
 likely strategy
-
 EVENT PROCESSING
 
 Treat every line in the event log as factual.
 
-STRICT CONSTRAINTS ON PHYSICAL EVENTS:
-- Never invent or talk ahead of physical track events:
-  - overtakes / position changes
-  - crashes / collisions / spins / track limits excursions
-  - penalties
-  - pit entries / pit stops / pit box arrivals / pit exits
-  - flag changes / safety car deployments
-- If an earlier commentary line prematurely hinted at a move, DO NOT let that error force you to hallucinate a completed physical event in subsequent entries. Always stay anchored to the exact physical reality of the current input log.
+Never invent:
 
-FICTIONAL & NARRATIVE FREEDOM:
-- You MAY infer and dynamically advance non-physical narrative elements:
-  - driver confidence, psychology, and focus
-  - radio chatter, rogue frequencies, and telemetry anomalies
-  - tyre degradation theories & strategy speculation
-  - paddock storylines and background rivalries
+overtakes
+crashes
+penalties
+positions
+pit stops
+
+You may infer:
+
+driver confidence
+tyre wear
+pressure
+strategy
+momentum
+
+provided it is supported by previous events.
 
 WORD COUNT
 
@@ -327,7 +301,7 @@ championship implications
 weather evolution
 tyre strategies
 
-Do not contradict earlier commentary or physical race facts.
+Do not contradict earlier commentary.
 
 FORMAT
 
@@ -344,8 +318,6 @@ QUALITY CHECK
 
 Before producing the final commentary, verify:
 
-Physical track events (overtakes, crashes, pit stops, flags) match the exact log timeline and are NEVER narrated ahead of time.
-Fictional/narrative elements (radio chatter, driver psychology, strategy) flow naturally and advance the race story.
 No repeated jokes.
 No repeated metaphors.
 No repeated sentence openings.
