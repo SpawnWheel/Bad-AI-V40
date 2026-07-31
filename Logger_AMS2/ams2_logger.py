@@ -70,6 +70,25 @@ PIT_MODES = {
     5: "Driving out of Garage"
 }
 
+YELLOW_FLAG_STATES = {
+    -1: "Invalid",
+    0: "None",
+    1: "Pending",
+    2: "Pits Closed",
+    3: "Pit Lead Lap",
+    4: "Pits Open",
+    5: "Pits Open",
+    6: "Last Lap",
+    7: "Resume",
+    8: "Race Halt"
+}
+
+PIT_SCHEDULE_PENALTIES = {
+    5: "Drive-Through",
+    6: "Stop-Go",
+    7: "Drive-Through (Pit Spot Occupied)"
+}
+
 class ParticipantInfo(ctypes.Structure):
     _pack_ = 4
     _fields_ = [
@@ -224,6 +243,25 @@ class SharedMemory(ctypes.Structure):
         ("mHighestFlagReasons", ctypes.c_uint * STORED_PARTICIPANTS_MAX),
         ("mNationalities", ctypes.c_uint * STORED_PARTICIPANTS_MAX),
         ("mSnowDensity", ctypes.c_float),
+        # AMS2 Additions (v10+)
+        ("mSessionDuration", ctypes.c_float),
+        ("mSessionAdditionalLaps", ctypes.c_int),
+        ("mTyreTempLeft", ctypes.c_float * TYRE_MAX),
+        ("mTyreTempCenter", ctypes.c_float * TYRE_MAX),
+        ("mTyreTempRight", ctypes.c_float * TYRE_MAX),
+        ("mDrsState", ctypes.c_uint),
+        ("mRideHeight", ctypes.c_float * TYRE_MAX),
+        ("mJoyPad0", ctypes.c_uint),
+        ("mDPad", ctypes.c_uint),
+        ("mAntiLockSetting", ctypes.c_int),
+        ("mTractionControlSetting", ctypes.c_int),
+        ("mErsDeploymentMode", ctypes.c_int),
+        ("mErsAutoModeEnabled", ctypes.c_bool),
+        ("mClutchTemp", ctypes.c_float),
+        ("mClutchWear", ctypes.c_float),
+        ("mClutchOverheated", ctypes.c_bool),
+        ("mClutchSlipping", ctypes.c_bool),
+        ("mYellowFlagState", ctypes.c_int),
     ]
 
 # Windows Virtual Key Code for F12
@@ -260,6 +298,9 @@ class AMS2EventLogger:
         self.green_flag_logged = False
         self.manual_timer_expired = False # Set True when F12 is pressed
         self.f12_was_pressed = False # Tracks the previous state of the F12 key
+        self.safety_car_active = False # Whether we are currently under safety car
+        self.sc_vehicle_on_track = False # Whether the SC vehicle is on track (not in pits)
+        self.participant_pit_schedules = {} # name -> pit_schedule (for penalty detection)
 
     def connect(self):
         try:
@@ -362,6 +403,9 @@ class AMS2EventLogger:
             self.green_flag_fired = False
             self.green_flag_logged = False
             self.manual_timer_expired = False
+            self.safety_car_active = False
+            self.sc_vehicle_on_track = False
+            self.participant_pit_schedules.clear()
 
         # Phase Updates
         if self.data.mPitMode != self.last_pit_mode:
@@ -418,14 +462,46 @@ class AMS2EventLogger:
                 self.log_periodic_leaderboard()
                 self.last_leaderboard_time = sim_now
 
-        # Flags
+        # Pre-scan for safety car vehicle presence on track
+        sc_on_track_now = False
+        for i in range(self.data.mNumParticipants):
+            p = self.data.mParticipantInfo[i]
+            if p.mIsActive:
+                sc_name = self.decode(p.mName)
+                sc_car = self.decode(self.data.mCarNames[i])
+                sc_cls = self.decode(self.data.mCarClassNames[i])
+                if self.is_safety_car(sc_name, sc_car, sc_cls):
+                    sc_pit = self.data.mPitModes[i]
+                    if sc_pit == 0:  # On track, not in pits
+                        sc_on_track_now = True
+                    break  # Only one SC vehicle expected
+
+        # Safety Car Detection: SC vehicle on track + double yellow flag
+        if sc_on_track_now and self.data.mHighestFlagColour == 7 and not self.safety_car_active:
+            # Safety car deployed
+            self.safety_car_active = True
+            self.log("SAFETY_CAR", "Safety Car has been deployed!", sim_time=self.get_session_time())
+            self.log_safety_car_leaderboard("Safety Car Deployed")
+        elif self.safety_car_active and self.sc_vehicle_on_track and not sc_on_track_now:
+            # SC vehicle has left the track (entered pits or disappeared)
+            self.safety_car_active = False
+            self.log("SAFETY_CAR", "Safety Car period is over. Racing resumes!", sim_time=self.get_session_time())
+            self.log_safety_car_leaderboard("Safety Car Ending")
+
+        self.sc_vehicle_on_track = sc_on_track_now
+
+        # Flags (suppress Double Yellow and Green-after-yellow when safety car handles it)
         if self.data.mHighestFlagColour != self.last_flag_colour:
             flag_name = FLAG_COLOURS.get(self.data.mHighestFlagColour, "None")
             if self.data.mHighestFlagColour == 1: # Green
                 if self.last_flag_colour in [6, 7]: # Only log if clearing a Yellow or Double Yellow
-                    self.log("FLAG", "Flag: Green again (Yellow cleared).", sim_time=self.get_session_time())
+                    if not self.safety_car_active:
+                        self.log("FLAG", "Flag: Green again (Yellow cleared).", sim_time=self.get_session_time())
             elif self.data.mHighestFlagColour == 2: # Blue
                 pass # Suppress blue flag messages
+            elif self.data.mHighestFlagColour == 7: # Double Yellow
+                if not self.safety_car_active:
+                    self.log("FLAG", f"Flag: {flag_name}", sim_time=self.get_session_time())
             elif self.data.mHighestFlagColour != 0 and self.data.mHighestFlagColour != 11:
                 self.log("FLAG", f"Flag: {flag_name}", sim_time=self.get_session_time())
             self.last_flag_colour = self.data.mHighestFlagColour
@@ -487,7 +563,7 @@ class AMS2EventLogger:
                 class_name = self.decode(self.data.mCarClassNames[i])
                 
                 if self.is_safety_car(name, car_name, class_name):
-                    continue
+                    continue  # SC vehicle tracked separately in pre-scan above
                     
                 pos = p.mRacePosition
                 dist = p.mCurrentLapDistance
@@ -566,6 +642,20 @@ class AMS2EventLogger:
                             self.log("PIT", f"{name} is leaving the pits.", sim_time=self.get_session_time())
                 
                 self.participant_pit_modes[name] = pit_mode
+
+                # Penalty Detection (via mPitSchedules)
+                if name not in self.finished_participants:
+                    pit_schedule = self.data.mPitSchedules[i]
+                    old_pit_schedule = self.participant_pit_schedules.get(name, 0)
+                    if pit_schedule != old_pit_schedule:
+                        # Penalty issued
+                        if pit_schedule in PIT_SCHEDULE_PENALTIES and old_pit_schedule not in PIT_SCHEDULE_PENALTIES:
+                            penalty_name = PIT_SCHEDULE_PENALTIES[pit_schedule]
+                            self.log("PENALTY", f"{name} (P{pos}) has been given a {penalty_name} penalty!", sim_time=self.get_session_time())
+                        # Penalty served (transition from penalty back to non-penalty)
+                        elif old_pit_schedule in PIT_SCHEDULE_PENALTIES and pit_schedule not in PIT_SCHEDULE_PENALTIES:
+                            self.log("PENALTY", f"{name} has served their penalty.", sim_time=self.get_session_time())
+                    self.participant_pit_schedules[name] = pit_schedule
                 self.participant_cars[name] = car_name
                 self.participant_classes[name] = class_name
                 new_positions[name] = pos
@@ -642,96 +732,100 @@ class AMS2EventLogger:
                     del self.accidents[name]
                     self.log("ACCIDENT", f"Notice: {name} is back on the move.", sim_time=self.get_session_time())
 
-        # Battles
-        # Sort by race position for easier battle detection
-        sorted_participants = sorted(active_participants, key=lambda x: x["pos"])
-        for i in range(len(sorted_participants) - 1):
-            p1 = sorted_participants[i]
-            p2 = sorted_participants[i+1]
-            name1, pos1, dist1, speed1, class1, lap1, pit1 = p1.values()
-            name2, pos2, dist2, speed2, class2, lap2, pit2 = p2.values()
-            
-            # Ignore drivers who have finished
-            if name1 in self.finished_participants or name2 in self.finished_participants:
-                continue
-
-            # COOLDOWN: No battles for the first lap
-            if lap1 <= 1 or lap2 <= 1:
-                continue
-            
-            # Ignore cars in pits
-            if pit1 != 0 or pit2 != 0:
-                continue
-
-            # Use lap distance to check proximity
-            dist_diff = abs(dist1 - dist2)
-            battle_key = tuple(sorted([name1, name2]))
-            battle_info = self.battles.get(battle_key)
-            
-            # Check last overtake times for suppression
-            last_ot1 = self.last_overtake_time.get(name1, 0)
-            last_ot2 = self.last_overtake_time.get(name2, 0)
-            since_ot = min(sim_now - last_ot1, sim_now - last_ot2)
-
-            # Prevent flybys or post-overtake ghost battles
-            # 1. Filter out if speed diff is too high (e.g. one has an issue, > 36 km/h diff)
-            if abs(speed1 - speed2) > 10.0:
-                continue
+        # Battles (suppressed during safety car period)
+        if self.safety_car_active:
+            # Clear active battles so they don't carry over after SC ends
+            self.battles.clear()
+        else:
+            # Sort by race position for easier battle detection
+            sorted_participants = sorted(active_participants, key=lambda x: x["pos"])
+            for i in range(len(sorted_participants) - 1):
+                p1 = sorted_participants[i]
+                p2 = sorted_participants[i+1]
+                name1, pos1, dist1, speed1, class1, lap1, pit1 = p1.values()
+                name2, pos2, dist2, speed2, class2, lap2, pit2 = p2.values()
                 
-            # 2. Apply cooldown after an overtake to ALL battles (prevent battle message right after overtake)
-            if since_ot < 20.0:
-                continue
+                # Ignore drivers who have finished
+                if name1 in self.finished_participants or name2 in self.finished_participants:
+                    continue
 
-            # Tighten side-by-side threshold to 2.5m (approx one car length/overlap)
-            if dist_diff < 2.5:
-                # Use 15s cooldown
-                sbs_cooldown = 15.0
-                # If we were drafting and now side-by-side, we can log immediately (escalation)
-                # But if we were already side-by-side, we must respect the cooldown
-                if not battle_info or battle_info["type"] != "Side by side" or (sim_now - battle_info["time"] > sbs_cooldown):
-                    count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Side by side") else 1
-                    if count > 1:
-                        self.log("BATTLE", f"{name2} (P{pos2}) and {name1} (P{pos1}) are still battling side by side!", sim_time=self.get_session_time())
-                    else:
-                        self.log("BATTLE", f"Side by side! {name2} (P{pos2}) is fighting {name1} (P{pos1})!", sim_time=self.get_session_time())
-                    self.battles[battle_key] = {"type": "Side by side", "time": sim_now, "count": count}
-            elif dist_diff < 15.0:
-                draft_cooldown = 15.0
-                # Check if we are already in a battle of ANY type within the cooldown
-                if not battle_info or (sim_now - battle_info["time"] > draft_cooldown):
-                    count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Drafting") else 1
-                    # Determine who is drafting whom
-                    drafter, leader = (name2, name1) if dist1 > dist2 else (name1, name2)
-                    d_pos, l_pos = (pos2, pos1) if dist1 > dist2 else (pos1, pos2)
+                # COOLDOWN: No battles for the first lap
+                if lap1 <= 1 or lap2 <= 1:
+                    continue
+                
+                # Ignore cars in pits
+                if pit1 != 0 or pit2 != 0:
+                    continue
+
+                # Use lap distance to check proximity
+                dist_diff = abs(dist1 - dist2)
+                battle_key = tuple(sorted([name1, name2]))
+                battle_info = self.battles.get(battle_key)
+                
+                # Check last overtake times for suppression
+                last_ot1 = self.last_overtake_time.get(name1, 0)
+                last_ot2 = self.last_overtake_time.get(name2, 0)
+                since_ot = min(sim_now - last_ot1, sim_now - last_ot2)
+
+                # Prevent flybys or post-overtake ghost battles
+                # 1. Filter out if speed diff is too high (e.g. one has an issue, > 36 km/h diff)
+                if abs(speed1 - speed2) > 10.0:
+                    continue
                     
-                    messages = [
-                        f"{drafter} (P{d_pos}) is in the draft of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is still pressuring {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is looking for a way to make the pass on {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is still battling with {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is glued to the back of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is stalking {leader} (P{l_pos}) through the corners.",
-                        f"{drafter} (P{d_pos}) is trying to force a mistake from {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is right in the wheel tracks of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is refusing to let {leader} (P{l_pos}) escape.",
-                        f"{drafter} (P{d_pos}) is all over the back of {leader} (P{l_pos}), looking for an opening.",
-                        f"{drafter} (P{d_pos}) is closing in on {leader} (P{l_pos}) under braking.",
-                        f"{drafter} (P{d_pos}) is keeping the pressure on {leader} (P{l_pos}) lap after lap.",
-                        f"{drafter} (P{d_pos}) has the pace to challenge {leader} (P{l_pos}) here.",
-                        f"{drafter} (P{d_pos}) is filling the mirrors of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is using the slipstream to stay right with {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is biding their time behind {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is probing for a gap on {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is turning up the heat on {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is nose to tail with {leader} (P{l_pos}), waiting for the moment to strike."
-                    ]
-                    self.log("BATTLE", random.choice(messages), sim_time=self.get_session_time())
-                    self.battles[battle_key] = {"type": "Drafting", "time": sim_now, "count": count}
-            else:
-                # Do NOT clear the battle immediately if they spread out.
-                # This ensures the cooldown persists even if they "flicker" in and out of 15m.
-                # The battle will eventually be overwritten or time out via the cooldown checks above.
-                pass
+                # 2. Apply cooldown after an overtake to ALL battles (prevent battle message right after overtake)
+                if since_ot < 20.0:
+                    continue
+
+                # Tighten side-by-side threshold to 2.5m (approx one car length/overlap)
+                if dist_diff < 2.5:
+                    # Use 15s cooldown
+                    sbs_cooldown = 15.0
+                    # If we were drafting and now side-by-side, we can log immediately (escalation)
+                    # But if we were already side-by-side, we must respect the cooldown
+                    if not battle_info or battle_info["type"] != "Side by side" or (sim_now - battle_info["time"] > sbs_cooldown):
+                        count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Side by side") else 1
+                        if count > 1:
+                            self.log("BATTLE", f"{name2} (P{pos2}) and {name1} (P{pos1}) are still battling side by side!", sim_time=self.get_session_time())
+                        else:
+                            self.log("BATTLE", f"Side by side! {name2} (P{pos2}) is fighting {name1} (P{pos1})!", sim_time=self.get_session_time())
+                        self.battles[battle_key] = {"type": "Side by side", "time": sim_now, "count": count}
+                elif dist_diff < 15.0:
+                    draft_cooldown = 15.0
+                    # Check if we are already in a battle of ANY type within the cooldown
+                    if not battle_info or (sim_now - battle_info["time"] > draft_cooldown):
+                        count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Drafting") else 1
+                        # Determine who is drafting whom
+                        drafter, leader = (name2, name1) if dist1 > dist2 else (name1, name2)
+                        d_pos, l_pos = (pos2, pos1) if dist1 > dist2 else (pos1, pos2)
+                        
+                        messages = [
+                            f"{drafter} (P{d_pos}) is in the draft of {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is still pressuring {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is looking for a way to make the pass on {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is still battling with {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is glued to the back of {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is stalking {leader} (P{l_pos}) through the corners.",
+                            f"{drafter} (P{d_pos}) is trying to force a mistake from {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is right in the wheel tracks of {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is refusing to let {leader} (P{l_pos}) escape.",
+                            f"{drafter} (P{d_pos}) is all over the back of {leader} (P{l_pos}), looking for an opening.",
+                            f"{drafter} (P{d_pos}) is closing in on {leader} (P{l_pos}) under braking.",
+                            f"{drafter} (P{d_pos}) is keeping the pressure on {leader} (P{l_pos}) lap after lap.",
+                            f"{drafter} (P{d_pos}) has the pace to challenge {leader} (P{l_pos}) here.",
+                            f"{drafter} (P{d_pos}) is filling the mirrors of {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is using the slipstream to stay right with {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is biding their time behind {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is probing for a gap on {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is turning up the heat on {leader} (P{l_pos}).",
+                            f"{drafter} (P{d_pos}) is nose to tail with {leader} (P{l_pos}), waiting for the moment to strike."
+                        ]
+                        self.log("BATTLE", random.choice(messages), sim_time=self.get_session_time())
+                        self.battles[battle_key] = {"type": "Drafting", "time": sim_now, "count": count}
+                else:
+                    # Do NOT clear the battle immediately if they spread out.
+                    # This ensures the cooldown persists even if they "flicker" in and out of 15m.
+                    # The battle will eventually be overwritten or time out via the cooldown checks above.
+                    pass
 
         self.last_positions = new_positions
         self.last_lap_distances = new_lap_distances
@@ -783,6 +877,26 @@ class AMS2EventLogger:
             
         grid_str = " | ".join([f"P{item['pos']}: {item['name']} [{item['car']}]" for item in grid])
         self.log("LEADERBOARD", f"Starting Grid Order: {grid_str}", sim_time=sim_time)
+
+    def log_safety_car_leaderboard(self, label):
+        """Log the leaderboard at the time of safety car deployment or ending."""
+        grid = []
+        for i in range(self.data.mNumParticipants):
+            p = self.data.mParticipantInfo[i]
+            if p.mIsActive:
+                name = self.decode(p.mName)
+                car = self.decode(self.data.mCarNames[i])
+                cls = self.decode(self.data.mCarClassNames[i])
+                
+                if self.is_safety_car(name, car, cls):
+                    continue
+                    
+                pos = p.mRacePosition
+                grid.append((pos, name))
+        
+        grid.sort(key=lambda x: x[0])
+        leaderboard_str = " | ".join([f"P{pos}: {name}" for pos, name in grid])
+        self.log("LEADERBOARD", f"{label} Standings: {leaderboard_str}", sim_time=self.get_session_time())
 
     def run(self):
         if not self.connect():

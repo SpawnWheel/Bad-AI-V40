@@ -331,8 +331,27 @@ class AMS2CameraController:
             messagebox.showerror("Error", f"Failed to read data file: {e}")
             return
 
+        # 4b. Optional: Project Specific Notes
+        extra_context = ""
+        project_path = os.environ.get("R3E_PROJECT_PATH")
+        if not project_path:
+            possible_project_path = os.path.dirname(os.path.dirname(os.path.abspath(data_path)))
+            if os.path.exists(os.path.join(possible_project_path, "project_notes.txt")):
+                project_path = possible_project_path
+
+        if project_path:
+            notes_path = os.path.join(project_path, "project_notes.txt")
+            if os.path.exists(notes_path):
+                try:
+                    with open(notes_path, 'r', encoding='utf-8') as f:
+                        extra_context = f"\n\nProject Specific Instructions:\n{f.read().strip()}"
+                    self.log_message(f"Loaded project notes from: {os.path.basename(notes_path)}")
+                except Exception as e:
+                    self.log_message(f"Warning: Failed to read project notes: {e}")
+
         self.status_msg.set("Generating sequence with Gemini...")
-        threading.Thread(target=self._call_gemini_api, args=(api_key, prompt_text, data_content, data_path), daemon=True).start()
+        full_prompt = f"{prompt_text}{extra_context}\n\nRace Data:\n{data_content}"
+        threading.Thread(target=self._call_gemini_api, args=(api_key, full_prompt, data_path), daemon=True).start()
 
     def _get_gemini_api_key(self):
         # 0. Check Environment Variable (passed from launcher)
@@ -349,15 +368,14 @@ class AMS2CameraController:
                 with open(p, "r") as f: return f.read().strip()
         return None
 
-    def _call_gemini_api(self, api_key, prompt_text, data_content, original_data_path):
+    def _call_gemini_api(self, api_key, full_prompt, original_data_path):
         try:
             client = genai.Client(api_key=api_key)
-            full_prompt = f"{prompt_text}\n\nRace Data:\n{data_content}"
-            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-2.5-pro')
+            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.1-pro')
             
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(
-                    include_thoughts=False,
+                    include_thoughts=True,
                     thinking_level="HIGH"
                 )
             ) if "gemini-3" in model_name.lower() else None
@@ -367,6 +385,17 @@ class AMS2CameraController:
                 contents=full_prompt,
                 config=config
             )
+            
+            # Print thinking to console
+            if response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if part.thought:
+                        print("\n" + "="*60)
+                        print("GEMINI THINKING:")
+                        print("="*60)
+                        print(part.text)
+                        print("="*60 + "\n")
+                        self.log_message("Gemini thinking printed to console")
             
             result_text = response.text
             if "```json" in result_text:

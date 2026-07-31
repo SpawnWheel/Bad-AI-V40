@@ -11,13 +11,29 @@ CONFIG_FILE = "launcher_config.json"
 STATE_FILE = "launcher_state.json"
 PROJECT_ROOT_DIR = "Projects"
 
-THEME_BG = "#1e1e1e"
-THEME_FG = "#00ff41" # Matrix Green
-THEME_ACCENT = "#d32f2f" # Red
-THEME_BUTTON_BG = "#333333"
-THEME_BUTTON_ACTIVE = "#555555"
-THEME_READY_BG = "#1a2e1a" # Subtle green background for ready steps
-THEME_PENDING_FG = "#888888" # Grey for pending/placeholder text
+# --- Modern Dark Theme ---
+THEME_BG = "#0f1117"
+THEME_BG_CARD = "#1a1d27"
+THEME_BG_INPUT = "#252836"
+THEME_FG = "#e2e4e9"
+THEME_FG_DIM = "#6b7280"
+THEME_FG_MUTED = "#9ca3af"
+THEME_ACCENT = "#6366f1"       # Indigo
+THEME_ACCENT_LIGHT = "#818cf8"
+THEME_ACCENT_PURPLE = "#8b5cf6"
+THEME_SUCCESS = "#22c55e"
+THEME_SUCCESS_BG = "#0f2918"
+THEME_WARNING = "#f59e0b"
+THEME_DANGER = "#ef4444"
+THEME_BUTTON_BG = "#252836"
+THEME_BUTTON_HOVER = "#363a4d"
+THEME_BORDER = "#2d3142"
+THEME_READY_BG = "#111827"
+THEME_READY_BORDER = "#22c55e"
+
+FONT_FAMILY = "Segoe UI"
+FONT_MONO = "Consolas"
+
 
 class ProjectManager:
     def __init__(self, config_steps):
@@ -175,12 +191,14 @@ class ProjectManager:
             return os.path.abspath(os.path.join(PROJECT_ROOT_DIR, self.current_project))
         return None
 
+
 class BadAILauncher:
     def __init__(self, root):
         self.root = root
-        self.root.title("BAD AI: Raceroom Edition")
-        self.root.geometry("1000x800")
+        self.root.title("BAD AI — Commentary Suite")
+        self.root.geometry("1050x800")
         self.root.configure(bg=THEME_BG)
+        self.root.minsize(800, 600)
 
         # Load Config First
         self.steps = []
@@ -195,51 +213,84 @@ class BadAILauncher:
         self.style.theme_use('clam')
         
         self.style.configure("TFrame", background=THEME_BG)
-        self.style.configure("TLabel", background=THEME_BG, foreground=THEME_FG, font=("Consolas", 10))
-        self.style.configure("TButton", background=THEME_BUTTON_BG, foreground=THEME_FG, font=("Consolas", 10, "bold"), borderwidth=1)
-        self.style.map("TButton", background=[('active', THEME_BUTTON_ACTIVE)])
+        self.style.configure("TLabel", background=THEME_BG, foreground=THEME_FG, font=(FONT_FAMILY, 10))
+        self.style.configure("TButton", background=THEME_BUTTON_BG, foreground=THEME_FG, font=(FONT_FAMILY, 10), borderwidth=0, padding=(12, 6))
+        self.style.map("TButton", background=[('active', THEME_BUTTON_HOVER)])
         self.style.configure("TNotebook", background=THEME_BG, borderwidth=0)
-        self.style.configure("TNotebook.Tab", background=THEME_BUTTON_BG, foreground=THEME_FG, padding=[10, 5])
-        self.style.map("TNotebook.Tab", background=[('selected', THEME_ACCENT)])
+        self.style.configure("TNotebook.Tab", background=THEME_BG_CARD, foreground=THEME_FG_DIM, padding=[16, 8], font=(FONT_FAMILY, 10, "bold"))
+        self.style.map("TNotebook.Tab", background=[('selected', THEME_ACCENT)], foreground=[('selected', '#ffffff')])
+        self.style.configure("TCombobox", fieldbackground=THEME_BG_INPUT, background=THEME_BG_INPUT, foreground=THEME_FG, borderwidth=0)
+        self.style.map("TCombobox", fieldbackground=[('readonly', THEME_BG_INPUT)])
 
-        # --- Project Selection Header ---
-        self.project_frame = tk.Frame(root, bg=THEME_BG, pady=10)
-        self.project_frame.pack(fill='x', padx=10)
+        # --- Header Bar ---
+        self.header_bar = tk.Frame(root, bg=THEME_BG_CARD, height=56)
+        self.header_bar.pack(fill='x')
+        self.header_bar.pack_propagate(False)
+
+        title_frame = tk.Frame(self.header_bar, bg=THEME_BG_CARD)
+        title_frame.pack(side="left", padx=20, pady=8)
+        tk.Label(title_frame, text="BAD AI", bg=THEME_BG_CARD, fg=THEME_ACCENT, font=(FONT_FAMILY, 18, "bold")).pack(side="left")
+        tk.Label(title_frame, text="  Commentary Suite", bg=THEME_BG_CARD, fg=THEME_FG_DIM, font=(FONT_FAMILY, 12)).pack(side="left", pady=(4, 0))
+
+        # --- Project Selection Bar ---
+        self.project_frame = tk.Frame(root, bg=THEME_BG, pady=12)
+        self.project_frame.pack(fill='x', padx=20)
+
+        # Project selector
+        proj_left = tk.Frame(self.project_frame, bg=THEME_BG)
+        proj_left.pack(side="left")
         
-        tk.Label(self.project_frame, text="ACTIVE PROJECT:", bg=THEME_BG, fg=THEME_ACCENT, font=("Consolas", 10, "bold")).pack(side="left")
+        tk.Label(proj_left, text="Project", bg=THEME_BG, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 9)).pack(side="left", padx=(0, 8))
         
         self.project_var = tk.StringVar()
-        self.project_combo = ttk.Combobox(self.project_frame, textvariable=self.project_var, state="readonly", width=40)
-        self.project_combo.pack(side="left", padx=10)
+        self.project_combo = ttk.Combobox(proj_left, textvariable=self.project_var, state="readonly", width=35)
+        self.project_combo.pack(side="left", padx=(0, 12))
         self.project_combo.bind("<<ComboboxSelected>>", self.on_project_change)
 
-        tk.Label(self.project_frame, text="SIM:", bg=THEME_BG, fg=THEME_ACCENT, font=("Consolas", 10, "bold")).pack(side="left", padx=(10, 0))
+        tk.Label(proj_left, text="Sim", bg=THEME_BG, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 9)).pack(side="left", padx=(8, 8))
         self.sim_var = tk.StringVar(value="Raceroom")
-        self.sim_combo = ttk.Combobox(self.project_frame, textvariable=self.sim_var, values=["Raceroom", "AMS2"], state="readonly", width=10)
-        self.sim_combo.pack(side="left", padx=5)
+        self.sim_combo = ttk.Combobox(proj_left, textvariable=self.sim_var, values=["Raceroom", "AMS2"], state="readonly", width=10)
+        self.sim_combo.pack(side="left")
         self.sim_combo.bind("<<ComboboxSelected>>", self.on_sim_change)
 
-        tk.Button(self.project_frame, text="NEW PROJECT", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 9), command=self.create_project).pack(side="left", padx=5)
-        tk.Button(self.project_frame, text="OPEN FOLDER", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 9), command=self.open_project_folder).pack(side="left", padx=5)
-        tk.Button(self.project_frame, text="PROJECT NOTES", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 9), command=self.edit_project_notes).pack(side="left", padx=5)
-        tk.Button(self.project_frame, text="SCAN FILES", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 9), command=self.scan_files).pack(side="left", padx=5)
+        # Action buttons
+        proj_right = tk.Frame(self.project_frame, bg=THEME_BG)
+        proj_right.pack(side="right")
 
-        # Layout
+        for text, cmd in [("New Project", self.create_project), 
+                          ("Open Folder", self.open_project_folder),
+                          ("Project Notes", self.edit_project_notes),
+                          ("Scan Files", self.scan_files)]:
+            btn = tk.Button(proj_right, text=text, bg=THEME_BUTTON_BG, fg=THEME_FG,
+                           font=(FONT_FAMILY, 9), command=cmd, relief="flat",
+                           padx=12, pady=4, cursor="hand2",
+                           activebackground=THEME_BUTTON_HOVER, activeforeground=THEME_FG,
+                           bd=0, highlightthickness=0)
+            btn.pack(side="left", padx=3)
+            self._bind_hover(btn, THEME_BUTTON_BG, THEME_BUTTON_HOVER)
+
+        # Separator
+        tk.Frame(root, bg=THEME_BORDER, height=1).pack(fill='x', padx=20)
+
+        # Layout - Notebook
         self.notebook = ttk.Notebook(root)
-        self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        self.notebook.pack(fill='both', expand=True, padx=20, pady=(12, 8))
 
         self.tab_run = ttk.Frame(self.notebook)
         self.tab_settings = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.tab_run, text=">> EXECUTE <<")
-        self.notebook.add(self.tab_settings, text=":: CONFIGURE ::")
+        self.notebook.add(self.tab_run, text="  Pipeline  ")
+        self.notebook.add(self.tab_settings, text="  Settings  ")
 
         self.build_run_tab()
         self.build_settings_tab()
         
         # Footer
-        self.footer = tk.Label(root, text="SYSTEM READY...", bg=THEME_BG, fg=THEME_ACCENT, font=("Consolas", 8), anchor="w")
-        self.footer.pack(side="bottom", fill="x", padx=10, pady=2)
+        self.footer_frame = tk.Frame(root, bg=THEME_BG_CARD, height=32)
+        self.footer_frame.pack(side="bottom", fill="x")
+        self.footer_frame.pack_propagate(False)
+        self.footer = tk.Label(self.footer_frame, text="Ready", bg=THEME_BG_CARD, fg=THEME_FG_DIM, font=(FONT_FAMILY, 9), anchor="w", padx=20)
+        self.footer.pack(fill="both", expand=True)
 
         self.update_project_list()
 
@@ -247,6 +298,11 @@ class BadAILauncher:
         # made by subprocess tools (e.g. camera controller writing director notes)
         self._last_project_state_mtime = 0
         self._start_auto_refresh()
+
+    def _bind_hover(self, widget, normal_bg, hover_bg):
+        """Add hover color effect to a widget."""
+        widget.bind("<Enter>", lambda e: widget.config(bg=hover_bg))
+        widget.bind("<Leave>", lambda e: widget.config(bg=normal_bg))
 
     def _start_auto_refresh(self):
         """Periodically check if project_state.json was modified externally and refresh."""
@@ -377,42 +433,45 @@ class BadAILauncher:
         self.global_settings[key] = value
 
     def build_run_tab(self):
-        # Top: Pipeline Flow
-        self.run_scroll_frame = tk.Frame(self.tab_run, bg=THEME_BG)
-        self.run_scroll_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
-
-        # Right: State Monitor
-        self.state_frame = tk.LabelFrame(self.tab_run, text="Project Context", bg=THEME_BG, fg=THEME_ACCENT, padx=10, pady=10)
-        self.state_frame.pack(side="right", fill="y", padx=10, pady=10, ipadx=5)
+        # Scrollable pipeline — full width, no side panel
+        canvas = tk.Canvas(self.tab_run, bg=THEME_BG, highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(self.tab_run, orient="vertical", command=canvas.yview)
         
-        self.state_text = tk.Text(self.state_frame, height=30, width=40, bg="#222", fg="#ddd", font=("Consolas", 8))
-        self.state_text.pack(fill="both", expand=True)
+        self.run_scroll_frame = tk.Frame(canvas, bg=THEME_BG)
+        self.run_scroll_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=self.run_scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Bind mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        scrollbar.pack(side="right", fill="y", pady=10)
         
         self.refresh_run_tab()
 
     def refresh_state_display(self):
-        self.state_text.config(state="normal")
-        self.state_text.delete(1.0, tk.END)
-        
+        """Update input vars in run tab from project state."""
         if not self.pm.project_state:
-            self.state_text.insert(tk.END, "(No State Loaded)")
-        else:
-            for key, value in self.pm.project_state.items():
-                short_val = os.path.basename(value) if value else "None"
-                self.state_text.insert(tk.END, f"[{key}]\n -> {short_val}\n\n")
+            return
+
+        for key, value in self.pm.project_state.items():
+            # Update input vars and labels in run tab
+            for step_idx, vars_list in self.step_input_vars.items():
+                for var, slot in vars_list:
+                    if slot == key:
+                        if var.get() != value:
+                            var.set(value)
                 
-                # Update input vars and labels in run tab
-                for step_idx, vars_list in self.step_input_vars.items():
-                    for var, slot in vars_list:
-                        if slot == key:
-                            if var.get() != value:
-                                var.set(value)
-                    
-                    # Always re-check readiness for this step if it uses this slot
-                    if key in self.steps[step_idx].get('input_slots', []):
-                        self._update_step_readiness(step_idx, self.steps[step_idx])
-        
-        self.state_text.config(state="disabled")
+                # Always re-check readiness for this step if it uses this slot
+                if key in self.steps[step_idx].get('input_slots', []):
+                    self._update_step_readiness(step_idx, self.steps[step_idx])
 
     def _slot_display_name(self, slot):
         """Convert a slot key like 'raw_log' to a readable label 'Raw Log'."""
@@ -430,8 +489,8 @@ class BadAILauncher:
             tw = tk.Toplevel(widget)
             tw.wm_overrideredirect(True)
             tw.wm_geometry(f"+{x}+{y}")
-            label = tk.Label(tw, text=text, bg="#444", fg="#ddd", font=("Consolas", 8),
-                             relief="solid", borderwidth=1, padx=4, pady=2)
+            label = tk.Label(tw, text=text, bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_MONO, 8),
+                             relief="solid", borderwidth=1, padx=6, pady=3)
             label.pack()
             tip_window[0] = tw
         def hide(event):
@@ -450,9 +509,6 @@ class BadAILauncher:
         self.step_prompt_vars = {}
         self.step_frames = {}
 
-        header = tk.Label(self.run_scroll_frame, text="/// SEQUENCE INITIATION ///", bg=THEME_BG, fg=THEME_ACCENT, font=("Consolas", 16, "bold"))
-        header.pack(pady=10)
-
         current_sim = self.sim_var.get()
 
         display_idx = 1
@@ -462,32 +518,71 @@ class BadAILauncher:
             if step_sims and current_sim not in step_sims:
                 continue
 
-            frame = tk.Frame(self.run_scroll_frame, bg=THEME_BG, pady=5)
-            frame.pack(fill="x", pady=5)
-            self.step_frames[idx] = frame
+            has_prompt = bool(step.get('prompt_folder'))
 
-            # Label
-            lbl = tk.Label(frame, text=f"[{display_idx}] {step.get('name', 'Unknown')}", bg=THEME_BG, fg=THEME_FG, width=25, anchor="w", font=("Consolas", 10, "bold"))
-            lbl.pack(side="left")
+            # --- Card Frame ---
+            card = tk.Frame(self.run_scroll_frame, bg=THEME_BG_CARD, padx=16, pady=12,
+                           highlightbackground=THEME_BORDER, highlightthickness=1)
+            card.pack(fill="x", pady=4, padx=4)
+            self.step_frames[idx] = card
+
+            # Top row: step number + name + buttons
+            top_row = tk.Frame(card, bg=THEME_BG_CARD)
+            top_row.pack(fill="x")
+
+            # Step number badge
+            badge = tk.Label(top_row, text=f" {display_idx} ", bg=THEME_ACCENT, fg="#ffffff",
+                           font=(FONT_FAMILY, 9, "bold"), padx=6, pady=1)
+            badge.pack(side="left", padx=(0, 10))
+
+            # Step name
+            lbl = tk.Label(top_row, text=step.get('name', 'Unknown'), bg=THEME_BG_CARD, fg=THEME_FG,
+                          font=(FONT_FAMILY, 11, "bold"), anchor="w")
+            lbl.pack(side="left", fill="x", expand=True)
             self.step_labels[idx] = lbl
+
+            # Buttons on the right
+            btn_frame = tk.Frame(top_row, bg=THEME_BG_CARD)
+            btn_frame.pack(side="right")
+
+            # Copy to Clipboard button (only for AI steps with prompt_folder)
+            if has_prompt:
+                copy_btn = tk.Button(btn_frame, text="\U0001F4CB Copy Prompt", bg=THEME_BG_INPUT, fg=THEME_ACCENT_LIGHT,
+                                    font=(FONT_FAMILY, 9), relief="flat", padx=10, pady=4, cursor="hand2",
+                                    activebackground=THEME_BUTTON_HOVER, activeforeground=THEME_ACCENT_LIGHT,
+                                    bd=0, highlightthickness=0,
+                                    command=lambda s=step, i=idx: self.copy_ai_prompt_to_clipboard(s, i))
+                copy_btn.pack(side="left", padx=(0, 6))
+                self._bind_hover(copy_btn, THEME_BG_INPUT, THEME_BUTTON_HOVER)
+
+            # Run button
+            run_btn = tk.Button(btn_frame, text="\u25B6  Run", bg=THEME_ACCENT, fg="#ffffff",
+                               font=(FONT_FAMILY, 10, "bold"), relief="flat", padx=16, pady=4,
+                               cursor="hand2", activebackground=THEME_ACCENT_LIGHT, activeforeground="#ffffff",
+                               bd=0, highlightthickness=0,
+                               command=lambda s=step, i=idx: self.run_script(s, i))
+            run_btn.pack(side="left")
+            self._bind_hover(run_btn, THEME_ACCENT, THEME_ACCENT_LIGHT)
+
             display_idx += 1
 
-            # Input Selection
+            # Bottom row: inputs
             input_slots = step.get('input_slots', [])
             input_labels = step.get('input_labels', [])
             self.step_input_vars[idx] = []
             
             if input_slots:
-                inputs_frame = tk.Frame(frame, bg=THEME_BG)
-                inputs_frame.pack(side="left", padx=5)
+                inputs_frame = tk.Frame(card, bg=THEME_BG_CARD)
+                inputs_frame.pack(fill="x", pady=(8, 0))
                 
                 for slot_idx, slot in enumerate(input_slots):
-                    slot_frame = tk.Frame(inputs_frame, bg=THEME_BG)
-                    slot_frame.pack(fill="x", pady=1)
+                    slot_frame = tk.Frame(inputs_frame, bg=THEME_BG_CARD)
+                    slot_frame.pack(fill="x", pady=2)
                     
                     # Descriptive label for the slot
                     label_text = input_labels[slot_idx] if slot_idx < len(input_labels) else self._slot_display_name(slot)
-                    slot_lbl = tk.Label(slot_frame, text=f"{label_text}:", bg=THEME_BG, fg="#888", font=("Consolas", 7), anchor="w", width=22)
+                    slot_lbl = tk.Label(slot_frame, text=f"{label_text}:", bg=THEME_BG_CARD, fg=THEME_FG_DIM,
+                                       font=(FONT_FAMILY, 9), anchor="w", width=22)
                     slot_lbl.pack(side="left")
 
                     # Hidden var stores the full path
@@ -506,11 +601,12 @@ class BadAILauncher:
                     else:
                         display_var.set("(select file...)" if slot == "video_file" else "(waiting...)")
 
-                    entry = tk.Entry(slot_frame, textvariable=display_var, bg="#333",
-                                     fg="white" if val else THEME_PENDING_FG,
-                                     font=("Consolas", 8), width=30, state="readonly",
-                                     readonlybackground="#333", cursor="arrow")
-                    entry.pack(side="left")
+                    entry = tk.Entry(slot_frame, textvariable=display_var, bg=THEME_BG_INPUT,
+                                     fg=THEME_FG if val else THEME_FG_DIM,
+                                     font=(FONT_MONO, 9), width=40, state="readonly",
+                                     readonlybackground=THEME_BG_INPUT, cursor="arrow",
+                                     relief="flat", bd=0, highlightthickness=0)
+                    entry.pack(side="left", padx=(0, 4))
                     
                     # Tooltip shows full path on hover
                     self._create_tooltip(entry, lambda v=input_var: v.get() if v.get() else None)
@@ -518,16 +614,20 @@ class BadAILauncher:
                     # Keep references for updating display when var changes
                     input_var.trace_add("write", lambda *a, dv=display_var, iv=input_var, e=entry, sl=slot: self._update_display_var(dv, iv, e, sl))
                     
-                    btn_browse = tk.Button(slot_frame, text="...", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 8),
-                                           command=lambda i=idx, si=slot_idx: self.browse_for_step_input(i, si))
-                    btn_browse.pack(side="left", padx=2)
-            else:
-                # Placeholder for steps without input
-                tk.Label(frame, text="(No input required)", bg=THEME_BG, fg="#555", font=("Consolas", 8), width=40).pack(side="left", padx=5)
+                    btn_browse = tk.Button(slot_frame, text="...", bg=THEME_BG_INPUT, fg=THEME_FG_MUTED,
+                                          font=(FONT_MONO, 9), relief="flat", padx=6, cursor="hand2",
+                                          activebackground=THEME_BUTTON_HOVER,
+                                          bd=0, highlightthickness=0,
+                                          command=lambda i=idx, si=slot_idx: self.browse_for_step_input(i, si))
+                    btn_browse.pack(side="left")
+                    self._bind_hover(btn_browse, THEME_BG_INPUT, THEME_BUTTON_HOVER)
 
             # Prompt Selection (if configured)
             prompt_folder = step.get('prompt_folder')
             if prompt_folder:
+                prompt_frame = tk.Frame(card, bg=THEME_BG_CARD)
+                prompt_frame.pack(fill="x", pady=(6, 0))
+
                 abs_prompt_folder = os.path.join(os.path.abspath(step.get('working_dir', '.')), prompt_folder)
                 prompts = []
                 if os.path.exists(abs_prompt_folder):
@@ -538,14 +638,12 @@ class BadAILauncher:
                 
                 prompt_var = tk.StringVar(value=prompts[0])
                 self.step_prompt_vars[idx] = (prompt_var, abs_prompt_folder)
-                
-                prompt_cb = ttk.Combobox(frame, textvariable=prompt_var, values=prompts, state="readonly", width=25)
-                prompt_cb.pack(side="left", padx=5)
 
-            # Run Button
-            btn = tk.Button(frame, text="INITIALIZE", bg=THEME_BUTTON_BG, fg=THEME_FG, font=("Consolas", 10, "bold"),
-                            command=lambda s=step, i=idx: self.run_script(s, i), relief="flat", padx=15)
-            btn.pack(side="right")
+                tk.Label(prompt_frame, text="Prompt:", bg=THEME_BG_CARD, fg=THEME_FG_DIM,
+                        font=(FONT_FAMILY, 9), anchor="w", width=22).pack(side="left")
+                
+                prompt_cb = ttk.Combobox(prompt_frame, textvariable=prompt_var, values=prompts, state="readonly", width=30)
+                prompt_cb.pack(side="left")
 
             # Readiness Visual
             self._update_step_readiness(idx, step)
@@ -555,10 +653,10 @@ class BadAILauncher:
         val = input_var.get()
         if val:
             display_var.set(os.path.basename(val))
-            entry.config(fg="white")
+            entry.config(fg=THEME_FG)
         else:
             display_var.set("(select file...)" if slot == "video_file" else "(waiting...)")
-            entry.config(fg=THEME_PENDING_FG)
+            entry.config(fg=THEME_FG_DIM)
 
     def _update_step_readiness(self, idx, step):
         """Update the visual readiness state of a step row."""
@@ -570,40 +668,28 @@ class BadAILauncher:
                     ready = False
                     break
 
-        if idx in self.step_labels:
-            step_name = step.get('name', 'Unknown')
-            # Find display index for this step
-            display_idx = 1
-            current_sim = self.sim_var.get()
-            for i, s in enumerate(self.steps):
-                step_sims = s.get('sims', [])
-                if step_sims and current_sim not in step_sims:
-                    continue
-                if i == idx:
-                    break
-                display_idx += 1
-
+        if idx in self.step_frames:
             if ready:
-                self.step_labels[idx].config(text=f"\u2713 [{display_idx}] {step_name}", fg=THEME_FG)
-                if idx in self.step_frames:
-                    self.step_frames[idx].config(bg=THEME_READY_BG)
-                    # Update child widgets background
-                    for child in self.step_frames[idx].winfo_children():
-                        try:
-                            if isinstance(child, tk.Label):
-                                child.config(bg=THEME_READY_BG)
-                        except:
-                            pass
+                self.step_frames[idx].config(bg=THEME_READY_BG, highlightbackground=THEME_SUCCESS)
+                if idx in self.step_labels:
+                    self.step_labels[idx].config(bg=THEME_READY_BG, fg=THEME_SUCCESS)
+                # Update child widget backgrounds
+                for child in self.step_frames[idx].winfo_children():
+                    try:
+                        child.config(bg=THEME_READY_BG)
+                        # Recurse into child frames
+                        for subchild in child.winfo_children():
+                            try:
+                                if isinstance(subchild, (tk.Label, tk.Frame)):
+                                    subchild.config(bg=THEME_READY_BG)
+                            except:
+                                pass
+                    except:
+                        pass
             else:
-                self.step_labels[idx].config(text=f"[{display_idx}] {step_name}", fg=THEME_ACCENT)
-                if idx in self.step_frames:
-                    self.step_frames[idx].config(bg=THEME_BG)
-                    for child in self.step_frames[idx].winfo_children():
-                        try:
-                            if isinstance(child, tk.Label):
-                                child.config(bg=THEME_BG)
-                        except:
-                            pass
+                self.step_frames[idx].config(bg=THEME_BG_CARD, highlightbackground=THEME_BORDER)
+                if idx in self.step_labels:
+                    self.step_labels[idx].config(bg=THEME_BG_CARD, fg=THEME_FG)
 
     def update_project_slot(self, slot, value):
         if self.pm.project_state.get(slot) != value:
@@ -622,6 +708,76 @@ class BadAILauncher:
             
         if selected_path:
             var.set(os.path.abspath(selected_path))
+
+    def copy_ai_prompt_to_clipboard(self, step, step_idx):
+        """Assemble the full prompt that would be sent to the AI and copy it to clipboard.
+        
+        This mirrors the logic in gemini_task.py: prompt_text + extra_context + data_content
+        """
+        # 1. Resolve the prompt file
+        if step_idx not in self.step_prompt_vars:
+            self.status("Error: No prompt configured for this step.")
+            return
+        
+        prompt_var, abs_prompt_folder = self.step_prompt_vars[step_idx]
+        selected_prompt = prompt_var.get()
+        prompt_file = os.path.join(abs_prompt_folder, selected_prompt)
+        
+        if not os.path.exists(prompt_file):
+            messagebox.showerror("Error", f"Prompt file not found:\n{prompt_file}")
+            return
+        
+        try:
+            with open(prompt_file, 'r', encoding='utf-8') as f:
+                prompt_text = f.read()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read prompt file:\n{e}")
+            return
+        
+        # 2. Resolve the input data file
+        input_slots = step.get('input_slots', [])
+        data_content = ""
+        
+        if input_slots:
+            data_filename = self.pm.project_state.get(input_slots[0])
+            if data_filename and os.path.exists(data_filename):
+                try:
+                    with open(data_filename, 'r', encoding='utf-8') as f:
+                        data_content = f.read()
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to read input file:\n{e}")
+                    return
+            else:
+                messagebox.showwarning("Warning", f"Input file for slot '{input_slots[0]}' not found.\nCopying prompt only (without data).")
+        
+        # 3. Read project notes (extra context)
+        extra_context = ""
+        project_path = self.pm.get_project_path()
+        
+        if project_path:
+            notes_path = os.path.join(project_path, "project_notes.txt")
+            if os.path.exists(notes_path):
+                try:
+                    with open(notes_path, 'r', encoding='utf-8') as f:
+                        notes_content = f.read().strip()
+                        if notes_content:
+                            extra_context = f"\n\nProject Specific Instructions:\n{notes_content}"
+                except Exception:
+                    pass
+        
+        # 4. Assemble (same as gemini_task.py line 70)
+        full_prompt = f"{prompt_text}{extra_context}\n\n{data_content}"
+        
+        # 5. Copy to clipboard
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(full_prompt)
+            self.root.update()  # Required to keep clipboard after potential focus loss
+            
+            char_count = len(full_prompt)
+            self.status(f"Copied to clipboard — {char_count:,} characters ({step.get('name', 'AI Step')})")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to copy to clipboard:\n{e}")
 
     def run_script(self, step, step_idx=None):
         script_path = step.get('script_path')
@@ -707,135 +863,65 @@ class BadAILauncher:
                 subprocess.Popen(args, cwd=abs_work_dir, env=env)
             
             # Post-Launch: Suggest scanning
-            self.status("Process launched. Click 'SCAN FILES' after completion to update state.")
+            self.status("Process launched. Click 'Scan Files' after completion to update state.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to launch:\n{e}")
 
     def build_settings_tab(self):
-        # List of steps to edit
         self.settings_frame = ttk.Frame(self.tab_settings)
         self.settings_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        # --- GLOBAL SETTINGS ---
-        global_frame = tk.LabelFrame(self.settings_frame, text="GLOBAL SETTINGS", bg=THEME_BG, fg=THEME_ACCENT, padx=10, pady=10)
-        global_frame.pack(fill="x", pady=(0, 20))
+        # --- API Settings Card ---
+        api_card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20,
+                           highlightbackground=THEME_BORDER, highlightthickness=1)
+        api_card.pack(fill="x", pady=(0, 16))
         
-        tk.Label(global_frame, text="Gemini API Key:", bg=THEME_BG, fg=THEME_FG).grid(row=0, column=0, sticky="w")
+        tk.Label(api_card, text="API Configuration", bg=THEME_BG_CARD, fg=THEME_FG,
+                font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+        
+        # API Key
+        tk.Label(api_card, text="Gemini API Key", bg=THEME_BG_CARD, fg=THEME_FG_MUTED,
+                font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
         self.api_key_var = tk.StringVar(value=self.global_settings.get("gemini_api_key", ""))
         self.api_key_var.trace_add("write", lambda *a: self.update_global_setting("gemini_api_key", self.api_key_var.get()))
-        tk.Entry(global_frame, textvariable=self.api_key_var, bg="#333", fg="white", width=60, show="*").grid(row=0, column=1, padx=10, pady=2, sticky="w")
-
-        tk.Label(global_frame, text="Gemini Model:", bg=THEME_BG, fg=THEME_FG).grid(row=1, column=0, sticky="w")
+        api_entry = tk.Entry(api_card, textvariable=self.api_key_var, bg=THEME_BG_INPUT, fg=THEME_FG,
+                            width=60, show="\u2022", font=(FONT_MONO, 10), relief="flat", bd=0,
+                            insertbackground=THEME_FG, highlightthickness=0)
+        api_entry.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 12), ipady=4)
+        
+        # Model
+        tk.Label(api_card, text="Gemini Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED,
+                font=(FONT_FAMILY, 10)).grid(row=3, column=0, sticky="w", pady=(0, 4))
         self.model_var = tk.StringVar(value=self.global_settings.get("gemini_model", "gemini-3.1-pro-preview"))
         self.model_var.trace_add("write", lambda *a: self.update_global_setting("gemini_model", self.model_var.get()))
-        tk.Entry(global_frame, textvariable=self.model_var, bg="#333", fg="white", width=60).grid(row=1, column=1, padx=10, pady=2, sticky="w")
-
-        # Control Buttons
-        ctrl_frame = ttk.Frame(self.settings_frame)
-        ctrl_frame.pack(fill="x", pady=10)
+        model_entry = tk.Entry(api_card, textvariable=self.model_var, bg=THEME_BG_INPUT, fg=THEME_FG,
+                              width=60, font=(FONT_MONO, 10), relief="flat", bd=0,
+                              insertbackground=THEME_FG, highlightthickness=0)
+        model_entry.grid(row=4, column=0, columnspan=2, sticky="ew", ipady=4)
         
-        ttk.Button(ctrl_frame, text="Add Step", command=self.add_step).pack(side="left", padx=5)
-        ttk.Button(ctrl_frame, text="Save Config", command=self.save_config).pack(side="right", padx=5)
-        ttk.Button(ctrl_frame, text="Reload Config", command=lambda: [self.load_config(), self.refresh_settings_list(), self.refresh_run_tab()]).pack(side="right", padx=5)
+        api_card.columnconfigure(0, weight=1)
 
-        # List Area
-        self.list_canvas = tk.Canvas(self.settings_frame, bg=THEME_BG, highlightthickness=0)
-        self.scrollbar = ttk.Scrollbar(self.settings_frame, orient="vertical", command=self.list_canvas.yview)
-        self.edit_frame = ttk.Frame(self.list_canvas)
+        # --- Action Buttons ---
+        btn_frame = tk.Frame(self.settings_frame, bg=THEME_BG)
+        btn_frame.pack(fill="x", pady=(8, 0))
 
-        self.edit_frame.bind(
-            "<Configure>",
-            lambda e: self.list_canvas.configure(
-                scrollregion=self.list_canvas.bbox("all")
-            )
-        )
+        save_btn = tk.Button(btn_frame, text="Save Configuration", bg=THEME_ACCENT, fg="#ffffff",
+                            font=(FONT_FAMILY, 10, "bold"), relief="flat", padx=20, pady=6,
+                            cursor="hand2", activebackground=THEME_ACCENT_LIGHT, activeforeground="#ffffff",
+                            bd=0, highlightthickness=0, command=self.save_config)
+        save_btn.pack(side="right", padx=(8, 0))
+        self._bind_hover(save_btn, THEME_ACCENT, THEME_ACCENT_LIGHT)
 
-        self.list_canvas.create_window((0, 0), window=self.edit_frame, anchor="nw")
-        self.list_canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.list_canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
-        
-        self.refresh_settings_list()
-
-    def refresh_settings_list(self):
-        for widget in self.edit_frame.winfo_children():
-            widget.destroy()
-            
-        for idx, step in enumerate(self.steps):
-            self.create_step_editor(idx, step)
-
-    def create_step_editor(self, idx, step):
-        frame = tk.LabelFrame(self.edit_frame, text=f"Step {idx+1}", bg=THEME_BG, fg=THEME_ACCENT, padx=10, pady=5)
-        frame.pack(fill="x", pady=5, padx=5)
-        
-        # Helper to create label/entry pair
-        def add_field(row, label, key):
-            tk.Label(frame, text=label, bg=THEME_BG, fg="#888").grid(row=row, column=0, sticky="e")
-            val = step.get(key, "")
-            if isinstance(val, list): val = ",".join(val)
-            var = tk.StringVar(value=str(val))
-            entry = tk.Entry(frame, textvariable=var, bg="#333", fg="white", insertbackground="white")
-            entry.grid(row=row, column=1, sticky="ew", padx=5)
-            
-            # Special handler for lists
-            if key in ("input_slots", "sims"):
-                 var.trace_add("write", lambda *a: self.update_step_list(idx, key, var.get()))
-            else:
-                 var.trace_add("write", lambda *a: self.update_step(idx, key, var.get()))
-
-        add_field(0, "Name:", "name")
-        add_field(1, "Sims (comma sep):", "sims")
-        add_field(2, "Script:", "script_path")
-        add_field(3, "Work Dir:", "working_dir")
-        add_field(4, "Inputs (comma sep):", "input_slots")
-        add_field(5, "Output Slot:", "output_slot")
-        add_field(6, "Out Folder:", "output_folder")
-        add_field(7, "Out Ext:", "output_extension")
-
-        # Buttons
-        btn_frame = tk.Frame(frame, bg=THEME_BG)
-        btn_frame.grid(row=0, column=2, rowspan=8, padx=5)
-        
-        tk.Button(btn_frame, text="Del", bg="#500", fg="white", command=lambda: self.delete_step(idx)).pack(fill="x", pady=2)
-        tk.Button(btn_frame, text="Up", bg="#333", fg="white", command=lambda: self.move_step(idx, -1)).pack(fill="x", pady=2)
-        tk.Button(btn_frame, text="Dn", bg="#333", fg="white", command=lambda: self.move_step(idx, 1)).pack(fill="x", pady=2)
-
-        frame.columnconfigure(1, weight=1)
-
-    def update_step(self, idx, key, value):
-        if 0 <= idx < len(self.steps):
-            self.steps[idx][key] = value
-
-    def update_step_list(self, idx, key, value):
-        if 0 <= idx < len(self.steps):
-            self.steps[idx][key] = [x.strip() for x in value.split(",") if x.strip()]
-
-    def add_step(self):
-        self.steps.append({
-            "name": "New Step",
-            "script_path": "",
-            "working_dir": "",
-            "input_slots": [],
-            "output_slot": "",
-            "output_folder": "",
-            "output_extension": ""
-        })
-        self.refresh_settings_list()
-
-    def delete_step(self, idx):
-        if 0 <= idx < len(self.steps):
-            del self.steps[idx]
-            self.refresh_settings_list()
-
-    def move_step(self, idx, direction):
-        new_idx = idx + direction
-        if 0 <= new_idx < len(self.steps):
-            self.steps[idx], self.steps[new_idx] = self.steps[new_idx], self.steps[idx]
-            self.refresh_settings_list()
+        reload_btn = tk.Button(btn_frame, text="Reload Configuration", bg=THEME_BUTTON_BG, fg=THEME_FG,
+                              font=(FONT_FAMILY, 10), relief="flat", padx=20, pady=6,
+                              cursor="hand2", activebackground=THEME_BUTTON_HOVER, activeforeground=THEME_FG,
+                              bd=0, highlightthickness=0,
+                              command=lambda: [self.load_config(), self.refresh_run_tab()])
+        reload_btn.pack(side="right")
+        self._bind_hover(reload_btn, THEME_BUTTON_BG, THEME_BUTTON_HOVER)
 
     def status(self, msg):
-        self.footer.config(text=f">> {msg}")
+        self.footer.config(text=f"  {msg}")
         print(msg)
 
 if __name__ == "__main__":
