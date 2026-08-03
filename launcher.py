@@ -257,6 +257,17 @@ class BadAILauncher:
         proj_right = tk.Frame(self.project_frame, bg=THEME_BG)
         proj_right.pack(side="right")
 
+        self.live_btn_container = tk.Frame(proj_right, bg=THEME_BG)
+        self.live_btn_container.pack(side="left")
+
+        self.btn_live_mode = tk.Button(self.live_btn_container, text="🎙️ AMS2 Live", bg=THEME_SUCCESS, fg="#ffffff",
+                                       font=(FONT_FAMILY, 9, "bold"), command=self.launch_live_mode, relief="flat",
+                                       padx=12, pady=4, cursor="hand2",
+                                       activebackground=THEME_SUCCESS_BG, activeforeground="#ffffff",
+                                       bd=0, highlightthickness=0)
+        self.btn_live_mode.pack(side="left", padx=(0, 10))
+        self._bind_hover(self.btn_live_mode, THEME_SUCCESS, THEME_SUCCESS_BG)
+
         for text, cmd in [("New Project", self.create_project), 
                           ("Open Folder", self.open_project_folder),
                           ("Project Notes", self.edit_project_notes),
@@ -298,6 +309,7 @@ class BadAILauncher:
         # made by subprocess tools (e.g. camera controller writing director notes)
         self._last_project_state_mtime = 0
         self._start_auto_refresh()
+        self._update_live_button_visibility()
 
     def _bind_hover(self, widget, normal_bg, hover_bg):
         """Add hover color effect to a widget."""
@@ -356,6 +368,36 @@ class BadAILauncher:
             self.pm.save_project_state()
             self.refresh_run_tab()
             self.refresh_state_display()
+        self._update_live_button_visibility()
+
+    def _update_live_button_visibility(self):
+        if hasattr(self, 'btn_live_mode'):
+            if self.sim_var.get() == "AMS2":
+                self.btn_live_mode.pack(side="left", padx=(0, 10))
+            else:
+                self.btn_live_mode.pack_forget()
+
+    def launch_live_mode(self):
+        script_path = os.path.abspath(os.path.join('LiveMode_AMS2', 'orchestrator.py'))
+        if not os.path.exists(script_path):
+            messagebox.showerror('Error', f'Live mode script not found:\n{script_path}')
+            return
+        
+        env = os.environ.copy()
+        api_key = self.global_settings.get('gemini_api_key')
+        if api_key:
+            env['GEMINI_API_KEY'] = api_key
+        
+        self.status('Launching AMS2 Live Mode...')
+        try:
+            subprocess.Popen(
+                [sys.executable, "-m", "LiveMode_AMS2.orchestrator"],
+                cwd=os.getcwd(),
+                env=env,
+                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0
+            )
+        except Exception as e:
+            messagebox.showerror('Error', f'Failed to launch live mode:\n{e}')
 
     def scan_files(self):
         self.pm.scan_project_files()
@@ -413,6 +455,8 @@ class BadAILauncher:
         else:
             self.steps = []
             self.global_settings = {"gemini_api_key": ""}
+            
+        self.global_settings.setdefault('live_mode', {})
 
     def save_config(self):
         try:
@@ -868,8 +912,22 @@ class BadAILauncher:
             messagebox.showerror("Error", f"Failed to launch:\n{e}")
 
     def build_settings_tab(self):
-        self.settings_frame = ttk.Frame(self.tab_settings)
-        self.settings_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        # We replace the static ttk.Frame with a scrollable canvas setup
+        canvas = tk.Canvas(self.tab_settings, bg=THEME_BG, highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(self.tab_settings, orient="vertical", command=canvas.yview)
+        
+        self.settings_frame = tk.Frame(canvas, bg=THEME_BG)
+        self.settings_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        canvas.create_window((0, 0), window=self.settings_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        scrollbar.pack(side="right", fill="y", pady=10)
         
         # --- API Settings Card ---
         api_card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20,
@@ -900,6 +958,105 @@ class BadAILauncher:
         model_entry.grid(row=4, column=0, columnspan=2, sticky="ew", ipady=4)
         
         api_card.columnconfigure(0, weight=1)
+
+        # --- Live Mode — LLM card ---
+        llm_card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
+        llm_card.pack(fill="x", pady=(0, 16))
+        
+        tk.Label(llm_card, text="Live Mode — LLM", bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+        
+        tk.Label(llm_card, text="LLM Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
+        self.lm_llm_model_var = tk.StringVar(value=self.global_settings['live_mode'].get("llm_model", "gemini-3.6-flash"))
+        self.lm_llm_model_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"llm_model": self.lm_llm_model_var.get()}))
+        tk.Entry(llm_card, textvariable=self.lm_llm_model_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=40, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
+        
+        tk.Label(llm_card, text="Thinking Level", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=1, sticky="w", pady=(0, 4))
+        self.lm_thinking_var = tk.StringVar(value=self.global_settings['live_mode'].get("thinking_level", "NONE"))
+        self.lm_thinking_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"thinking_level": self.lm_thinking_var.get()}))
+        ttk.Combobox(llm_card, textvariable=self.lm_thinking_var, values=["NONE", "LOW", "MEDIUM", "HIGH"], state="readonly", width=15).grid(row=2, column=1, sticky="w", pady=(0, 12))
+
+        tk.Label(llm_card, text="Max Output Tokens", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=0, sticky="w", pady=(0, 4))
+        self.lm_max_tokens_var = tk.StringVar(value=str(self.global_settings['live_mode'].get("max_output_tokens", 200)))
+        def _update_max_tokens(*args):
+            try:
+                self.global_settings['live_mode']["max_output_tokens"] = int(self.lm_max_tokens_var.get())
+            except ValueError:
+                pass
+        self.lm_max_tokens_var.trace_add("write", _update_max_tokens)
+        tk.Spinbox(llm_card, from_=50, to=500, textvariable=self.lm_max_tokens_var, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_MONO, 10), relief="flat", bd=0).grid(row=4, column=0, sticky="w", pady=(0, 12))
+
+        tk.Label(llm_card, text="Max RPM (Rate Limit)", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=1, sticky="w", pady=(0, 4))
+        self.lm_max_rpm_var = tk.StringVar(value=str(self.global_settings['live_mode'].get("max_requests_per_minute", 8)))
+        def _update_max_rpm(*args):
+            try:
+                self.global_settings['live_mode']["max_requests_per_minute"] = int(self.lm_max_rpm_var.get())
+            except ValueError:
+                pass
+        self.lm_max_rpm_var.trace_add("write", _update_max_rpm)
+        tk.Spinbox(llm_card, from_=1, to=60, textvariable=self.lm_max_rpm_var, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_MONO, 10), relief="flat", bd=0).grid(row=4, column=1, sticky="w", pady=(0, 12))
+
+        tk.Label(llm_card, text="Commentary Style", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        self.lm_style_text = tk.Text(llm_card, height=3, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_FAMILY, 10), relief="flat", bd=0, insertbackground=THEME_FG)
+        self.lm_style_text.insert("1.0", self.global_settings['live_mode'].get("commentary_style", ""))
+        self.lm_style_text.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        self.lm_style_text.bind("<KeyRelease>", lambda e: self.global_settings['live_mode'].update({"commentary_style": self.lm_style_text.get("1.0", "end-1c")}))
+        
+        llm_card.columnconfigure(0, weight=1)
+
+        voices_list = ['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi']
+
+        def create_commentator_card(title, prefix):
+            card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
+            card.pack(fill="x", pady=(0, 16))
+            tk.Label(card, text=title, bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+            
+            tk.Label(card, text="Name", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
+            name_var = tk.StringVar(value=self.global_settings['live_mode'].get(f"{prefix}_name", ""))
+            name_var.trace_add("write", lambda *a, k=f"{prefix}_name", v=name_var: self.global_settings['live_mode'].update({k: v.get()}))
+            tk.Entry(card, textvariable=name_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=30, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
+            
+            tk.Label(card, text="Voice", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=1, sticky="w", pady=(0, 4))
+            voice_var = tk.StringVar(value=self.global_settings['live_mode'].get(f"{prefix}_voice", ""))
+            voice_var.trace_add("write", lambda *a, k=f"{prefix}_voice", v=voice_var: self.global_settings['live_mode'].update({k: v.get()}))
+            ttk.Combobox(card, textvariable=voice_var, values=voices_list, state="readonly", width=25).grid(row=2, column=1, sticky="w", pady=(0, 12))
+
+            tk.Label(card, text="Voice Style Prompt", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 4))
+            style_text = tk.Text(card, height=3, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_FAMILY, 10), relief="flat", bd=0, insertbackground=THEME_FG)
+            style_text.insert("1.0", self.global_settings['live_mode'].get(f"{prefix}_style", ""))
+            style_text.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+            style_text.bind("<KeyRelease>", lambda e, k=f"{prefix}_style", t=style_text: self.global_settings['live_mode'].update({k: t.get("1.0", "end-1c")}))
+            
+            card.columnconfigure(0, weight=1)
+
+        create_commentator_card("Live Mode — Commentator 1 (Play-by-Play)", "commentator_1")
+        create_commentator_card("Live Mode — Commentator 2 (Analyst)", "commentator_2")
+
+        # Live Mode - Pipeline
+        pipe_card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
+        pipe_card.pack(fill="x", pady=(0, 16))
+        tk.Label(pipe_card, text="Live Mode — Pipeline", bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+
+        tk.Label(pipe_card, text="TTS Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
+        self.lm_tts_model_var = tk.StringVar(value=self.global_settings['live_mode'].get("tts_model", "gemini-3.1-flash-tts-preview"))
+        self.lm_tts_model_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"tts_model": self.lm_tts_model_var.get()}))
+        tk.Entry(pipe_card, textvariable=self.lm_tts_model_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=40, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
+
+        self.lm_emotion_var = tk.BooleanVar(value=self.global_settings['live_mode'].get("emotion_tags_enabled", True))
+        self.lm_emotion_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"emotion_tags_enabled": self.lm_emotion_var.get()}))
+        check = tk.Checkbutton(pipe_card, text="Emotion Tags Enabled", variable=self.lm_emotion_var, bg=THEME_BG_CARD, fg=THEME_FG, activebackground=THEME_BG_CARD, activeforeground=THEME_FG, selectcolor=THEME_BG_INPUT, bd=0, highlightthickness=0)
+        check.grid(row=2, column=1, sticky="w", pady=(0, 12))
+
+        tk.Label(pipe_card, text="Prefetch Threshold", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=0, sticky="w", pady=(0, 4))
+        self.lm_prefetch_var = tk.DoubleVar(value=self.global_settings['live_mode'].get("prefetch_threshold_seconds", 1.0))
+        self.lm_prefetch_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"prefetch_threshold_seconds": self.lm_prefetch_var.get()}))
+        tk.Scale(pipe_card, from_=0.5, to=3.0, resolution=0.1, orient="horizontal", variable=self.lm_prefetch_var, bg=THEME_BG_CARD, fg=THEME_FG, highlightthickness=0, bd=0, length=200).grid(row=4, column=0, sticky="w", pady=(0, 12))
+
+        tk.Label(pipe_card, text="Event TTL Multiplier", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=1, sticky="w", pady=(0, 4))
+        self.lm_ttl_var = tk.DoubleVar(value=self.global_settings['live_mode'].get("event_ttl_multiplier", 1.0))
+        self.lm_ttl_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"event_ttl_multiplier": self.lm_ttl_var.get()}))
+        tk.Scale(pipe_card, from_=0.5, to=2.0, resolution=0.1, orient="horizontal", variable=self.lm_ttl_var, bg=THEME_BG_CARD, fg=THEME_FG, highlightthickness=0, bd=0, length=200).grid(row=4, column=1, sticky="w", pady=(0, 12))
+        
+        pipe_card.columnconfigure(0, weight=1)
 
         # --- Action Buttons ---
         btn_frame = tk.Frame(self.settings_frame, bg=THEME_BG)
