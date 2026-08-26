@@ -340,6 +340,8 @@ No additional formatting.
 Example:
 00:00:38 - [Martin Haven] Green flag drops and we are racing!
 
+You must do only ONE commentator per event.
+
 QUALITY CHECK
 
 Before producing the final commentary, verify:

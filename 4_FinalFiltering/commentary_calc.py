@@ -50,7 +50,7 @@ def main():
         })
 
     output_lines = []
-    default_last_duration = 10.0  # Seconds to assume for the final event
+    default_last_duration = 15.0  # Seconds to assume for the final event
 
     for i in range(len(parsed_data)):
         current_item = parsed_data[i]
@@ -73,7 +73,7 @@ def main():
                     duration = total_seconds
                 break
         
-        word_count = min(int(round(duration * 2.8)), 80)
+        word_count = min(int(round(duration * 2.82)), 80)
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"
