@@ -1,0 +1,32 @@
+{
+  "track_location": "Brands Hatch",
+  "track_variation": "Indy",
+  "track_length": 1730.0,
+  "corners": [
+    {
+      "name": "Paddock Hill",
+      "start": 2000.0,
+      "end": 380.0
+    },
+    {
+      "name": "Druids",
+      "start": 550.0,
+      "end": 670.0
+    },
+    {
+      "name": "Graham Hill Bend",
+      "start": 820.0,
+      "end": 910.0
+    },
+    {
+      "name": "Surtees",
+      "start": 1150.0,
+      "end": 1300.0
+    },
+    {
+      "name": "Clearways",
+      "start": 1400.0,
+      "end": 1530.0
+    }
+  ]
+}

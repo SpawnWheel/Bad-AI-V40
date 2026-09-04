@@ -77,7 +77,7 @@ NOTABLE EVENTS SINCE LAST UPDATE:
 @dataclass
 class LiveModeConfig:
     gemini_api_key: str = ""
-    llm_model: str = "gemini-3.6-flash"
+    llm_model: str = "gemini-3.8-flash"
     thinking_level: str = "HIGH"
     max_output_tokens: int = 4096
     max_requests_per_minute: int = 4

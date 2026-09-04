@@ -172,7 +172,7 @@ class CommentatorApp:
         
         # LLM Model (Live)
         ttk.Label(scrollable_frame, text="Model Name").grid(row=row, column=0, sticky="w", padx=10)
-        var_model = tk.StringVar(value=settings.get("gemini", "llm_model", "gemini-3-flash-preview"))
+        var_model = tk.StringVar(value=settings.get("gemini", "llm_model", "gemini-3.8-flash"))
         entry_model = ttk.Entry(scrollable_frame, textvariable=var_model)
         entry_model.grid(row=row, column=1, padx=10, sticky="w")
         self.gemini_vars["llm_model"] = var_model

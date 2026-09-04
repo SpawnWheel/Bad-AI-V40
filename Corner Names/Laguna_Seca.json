@@ -1,0 +1,57 @@
+{
+  "track_location": "Laguna Seca",
+  "track_variation": "",
+  "track_length": 3510.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 160.0,
+      "end": 260.0
+    },
+    {
+      "name": "The Andretti Hairpin",
+      "start": 410.0,
+      "end": 560.0
+    },
+    {
+      "name": "Turn3",
+      "start": 730.0,
+      "end": 850.0
+    },
+    {
+      "name": "Turn4",
+      "start": 1000.0,
+      "end": 1130.0
+    },
+    {
+      "name": "Turn5",
+      "start": 1480.0,
+      "end": 1640.0
+    },
+    {
+      "name": "Turn6",
+      "start": 1910.0,
+      "end": 2000.0
+    },
+    {
+      "name": "The Corkscrew",
+      "start": 2420.0,
+      "end": 2530.0
+    },
+    {
+      "name": "Rainey Curve",
+      "start": 2640.0,
+      "end": 2820.0
+    },
+    {
+      "name": "Turn10",
+      "start": 2930.0,
+      "end": 3030.0
+    },
+    {
+      "name": "Turn11",
+      "start": 3230.0,
+      "end": 3310.0
+    }
+  ]
+}

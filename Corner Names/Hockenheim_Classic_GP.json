@@ -1,0 +1,47 @@
+{
+  "track_location": "Hockenheim Classic",
+  "track_variation": "GP",
+  "track_length": 6750.0,
+  "corners": [
+    {
+      "name": "Nord Kurve",
+      "start": 220.0,
+      "end": 365.0
+    },
+    {
+      "name": "Bremskurve1",
+      "start": 1855.0,
+      "end": 2105.0
+    },
+    {
+      "name": "Bremskurve2",
+      "start": 3170.0,
+      "end": 3230.0
+    },
+    {
+      "name": "Ost Kurve",
+      "start": 3230.0,
+      "end": 3550.0
+    },
+    {
+      "name": "Bremskurve3",
+      "start": 4480.0,
+      "end": 4775.0
+    },
+    {
+      "name": "Agip Kurve",
+      "start": 5510.0,
+      "end": 5700.0
+    },
+    {
+      "name": "Sachs",
+      "start": 5850.0,
+      "end": 6015.0
+    },
+    {
+      "name": "Opel Kurve",
+      "start": 6225.0,
+      "end": 6550.0
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "track_location": "Monza",
+  "track_variation": "GP",
+  "track_length": 5370.0,
+  "corners": [
+    {
+      "name": "The First Chicane",
+      "start": 590.0,
+      "end": 690.0
+    },
+    {
+      "name": "Curva Grande",
+      "start": 1010.0,
+      "end": 1440.0
+    },
+    {
+      "name": "Della Roggia",
+      "start": 1800.0,
+      "end": 1910.0
+    },
+    {
+      "name": "Lesmos1",
+      "start": 2160.0,
+      "end": 2330.0
+    },
+    {
+      "name": "Lesmos2",
+      "start": 2520.0,
+      "end": 2610.0
+    },
+    {
+      "name": "Ascari",
+      "start": 3600.0,
+      "end": 3850.0
+    },
+    {
+      "name": "Parabolica",
+      "start": 4780.0,
+      "end": 5170.0
+    }
+  ]
+}

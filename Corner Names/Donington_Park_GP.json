@@ -1,0 +1,47 @@
+{
+  "track_location": "Donington Park",
+  "track_variation": "GP",
+  "track_length": 3930.0,
+  "corners": [
+    {
+      "name": "Redgate",
+      "start": 320.0,
+      "end": 440.0
+    },
+    {
+      "name": "The Craner Curves",
+      "start": 720.0,
+      "end": 960.0
+    },
+    {
+      "name": "The Old Hairpin",
+      "start": 1060.0,
+      "end": 1180.0
+    },
+    {
+      "name": "Mcleans",
+      "start": 1690.0,
+      "end": 1800.0
+    },
+    {
+      "name": "Coppice",
+      "start": 2010.0,
+      "end": 2240.0
+    },
+    {
+      "name": "The Esses",
+      "start": 2770.0,
+      "end": 2870.0
+    },
+    {
+      "name": "Melbourne Haipin",
+      "start": 3240.0,
+      "end": 3330.0
+    },
+    {
+      "name": "Goddards",
+      "start": 3610.0,
+      "end": 3730.0
+    }
+  ]
+}

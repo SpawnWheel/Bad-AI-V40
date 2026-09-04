@@ -66,8 +66,8 @@
     },
     "gemini": {
         "api_key": "",
-        "llm_model": "gemini-3-flash-preview",
-        "thinking_level": "LOW",
+        "llm_model": "gemini-3.8-flash",
+        "thinking_level": "HIGH",
         "tts_enabled": true,
         "voice_engine": "gemini",
         "tts_model": "gemini-2.0-flash-exp",

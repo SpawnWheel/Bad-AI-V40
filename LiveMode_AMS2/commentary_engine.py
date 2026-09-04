@@ -44,10 +44,11 @@ class CommentaryEngine:
         self._log_transcript("SYSTEM PROMPT (INITIALIZATION)", system_prompt)
 
         thinking_config = None
-        if self.config.thinking_level and self.config.thinking_level.upper() != "NONE":
+        thinking_level = (self.config.thinking_level or "HIGH").upper()
+        if thinking_level != "NONE":
             thinking_config = types.ThinkingConfig(
                 include_thoughts=True,
-                thinking_level=self.config.thinking_level.upper()
+                thinking_level=thinking_level
             )
             
         config = types.GenerateContentConfig(

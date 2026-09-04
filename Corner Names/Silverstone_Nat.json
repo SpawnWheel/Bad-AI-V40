@@ -1,0 +1,27 @@
+{
+  "track_location": "Silverstone",
+  "track_variation": "Nat",
+  "track_length": 2260.0,
+  "corners": [
+    {
+      "name": "Copse",
+      "start": 180.0,
+      "end": 360.0
+    },
+    {
+      "name": "Beckets",
+      "start": 730.0,
+      "end": 1020.0
+    },
+    {
+      "name": "Brooklands",
+      "start": 1680.0,
+      "end": 1830.0
+    },
+    {
+      "name": "Luffield",
+      "start": 1890.0,
+      "end": 2060.0
+    }
+  ]
+}

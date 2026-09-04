@@ -5,6 +5,11 @@ import os
 import datetime
 import sys
 import random
+import json
+
+def sanitize_filename(name):
+    name = name.replace(":", "_").replace("/", "_").replace("\\", "_").replace(" ", "_")
+    return "".join(c for c in name if c.isalnum() or c in ("_", "-"))
 
 # Constants
 STRING_LENGTH_MAX = 64
@@ -301,6 +306,81 @@ class AMS2EventLogger:
         self.safety_car_active = False # Whether we are currently under safety car
         self.sc_vehicle_on_track = False # Whether the SC vehicle is on track (not in pits)
         self.participant_pit_schedules = {} # name -> pit_schedule (for penalty detection)
+        self.distance_history = {} # name -> list of (sim_time, total_distance)
+        self.last_track_key = ""
+        self.current_track_corners = []
+        self.corner_names_dir = self._find_corner_names_dir()
+
+    def _find_corner_names_dir(self):
+        """Locate the Corner Names folder."""
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        target = os.path.join(base_dir, "Corner Names")
+        if os.path.exists(target):
+            return target
+        if os.path.exists("Corner Names"):
+            return os.path.abspath("Corner Names")
+        return target
+
+    def load_track_corners(self, track_location, track_variation=""):
+        """Load corner definitions for the active track from Corner Names/."""
+        self.current_track_corners = []
+        if not track_location or not os.path.exists(self.corner_names_dir):
+            return
+
+        loc_clean = sanitize_filename(track_location).lower()
+        var_clean = sanitize_filename(track_variation).lower() if track_variation else ""
+
+        # Candidates to look for
+        matched_file = None
+        exact_candidate = f"{sanitize_filename(track_location)}_{sanitize_filename(track_variation)}.json".strip("_")
+        loc_candidate = f"{sanitize_filename(track_location)}.json"
+
+        exact_path = os.path.join(self.corner_names_dir, exact_candidate)
+        loc_path = os.path.join(self.corner_names_dir, loc_candidate)
+
+        if os.path.exists(exact_path):
+            matched_file = exact_path
+        elif os.path.exists(loc_path):
+            matched_file = loc_path
+        else:
+            # Substring / fuzzy match across files in Corner Names
+            for f in os.listdir(self.corner_names_dir):
+                if f.endswith(".json") and f not in ("trackLandmarksData.json", "raceroomTrackLandmarksData.json"):
+                    f_lower = f.lower()
+                    if loc_clean and loc_clean in f_lower:
+                        if var_clean and var_clean in f_lower:
+                            matched_file = os.path.join(self.corner_names_dir, f)
+                            break
+                        elif not matched_file:
+                            matched_file = os.path.join(self.corner_names_dir, f)
+
+        if matched_file and os.path.exists(matched_file):
+            try:
+                with open(matched_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.current_track_corners = data.get("corners", [])
+                filename = os.path.basename(matched_file)
+                self.log("SYSTEM", f"Loaded {len(self.current_track_corners)} corner landmarks for {track_location} ({filename})")
+            except Exception as e:
+                self.log("SYSTEM", f"Error reading corner file {matched_file}: {e}")
+        else:
+            self.log("SYSTEM", f"Notice: No corner landmark file found for '{track_location}' in Corner Names/.")
+
+    def get_corner_at_distance(self, distance):
+        """Lookup which corner contains the given lap distance (meters)."""
+        if not self.current_track_corners or distance is None:
+            return None
+        for c in self.current_track_corners:
+            start = c.get("start", 0.0)
+            end = c.get("end", 0.0)
+            name = c.get("name", "")
+            if start <= end:
+                if start <= distance <= end:
+                    return name
+            else: # Wrap around start/finish line
+                if distance >= start or distance <= end:
+                    return name
+        return None
 
     def connect(self):
         try:
@@ -390,6 +470,19 @@ class AMS2EventLogger:
 
         sim_now = self.get_session_time()  # Sim time for ALL event timing — never wall-clock
 
+        # Track Identification & Reporting
+        track_loc = self.decode(self.data.mTrackLocation)
+        track_var = self.decode(self.data.mTrackVariation)
+        track_len = self.data.mTrackLength
+        track_key = f"{track_loc}_{track_var}".strip("_")
+        if track_loc and track_key != self.last_track_key:
+            self.last_track_key = track_key
+            track_display = f"{track_loc} - {track_var}".strip(" -")
+            self.log("TRACK", f"Track Loaded: {track_display}", sim_time=sim_now)
+            if track_len > 0:
+                self.log("TRACK", f"Track Length: {track_len:.1f} meters", sim_time=sim_now)
+            self.load_track_corners(track_loc, track_var)
+
         # Session and State
         if self.data.mSessionState != self.last_session_state:
             session_name = SESSION_STATES.get(self.data.mSessionState, "Unknown")
@@ -406,6 +499,7 @@ class AMS2EventLogger:
             self.safety_car_active = False
             self.sc_vehicle_on_track = False
             self.participant_pit_schedules.clear()
+            self.distance_history.clear()
 
         # Phase Updates
         if self.data.mPitMode != self.last_pit_mode:
@@ -573,6 +667,11 @@ class AMS2EventLogger:
                 pit_mode = self.data.mPitModes[i]
                 race_state = self.data.mRaceStates[i]
 
+                # Record distance history for trajectory interpolation
+                track_length = self.data.mTrackLength if (self.data and self.data.mTrackLength > 0) else 4000.0
+                total_dist = laps_completed * track_length + dist
+                self._record_distance_history(name, sim_now, total_dist)
+
                 # Retirement by lack of movement (2 mins)
                 if speed < 2.0:
                     if name not in getattr(self, 'last_movement_time', {}):
@@ -703,7 +802,10 @@ class AMS2EventLogger:
                         if overtaken:
                             overtaken_str = ", ".join(overtaken)
                             class_name = self.participant_classes.get(name, "Unknown")
-                            self.log("OVERTAKE", f"{name} overtook {overtaken_str} for P{pos} in {class_name}.", sim_time=self.get_session_time())
+                            dist = new_lap_distances.get(name, 0.0)
+                            corner = self.get_corner_at_distance(dist)
+                            location_str = f" at {corner}" if corner else ""
+                            self.log("OVERTAKE", f"{name} overtook {overtaken_str} for P{pos} in {class_name}{location_str}.", sim_time=self.get_session_time())
                             
                             # Track overtake time for suppression logic
                             self.last_overtake_time[name] = sim_now
@@ -726,7 +828,9 @@ class AMS2EventLogger:
             if self.data.mRaceState == 2 and speed < 2.0 and dist > 10 and not accident_cooldown: # Stopped on track
                 if name not in self.accidents:
                     self.accidents[name] = sim_now
-                    self.log("ACCIDENT", f"Alert: {name} (P{pos} in {class_name}) is slow/stopped on track! Potential accident.", sim_time=self.get_session_time())
+                    corner = self.get_corner_at_distance(dist)
+                    location_str = f" at {corner}" if corner else ""
+                    self.log("ACCIDENT", f"Alert: {name} (P{pos} in {class_name}) is slow/stopped on track{location_str}! Potential accident.", sim_time=self.get_session_time())
             elif name in self.accidents:
                 if speed > 5.0:
                     del self.accidents[name]
@@ -832,7 +936,81 @@ class AMS2EventLogger:
         self.last_laps_completed = new_laps_completed
         self.last_laps = new_laps
 
+    def _record_distance_history(self, name, sim_time, total_distance):
+        if name not in self.distance_history:
+            self.distance_history[name] = []
+        hist = self.distance_history[name]
+        hist.append((sim_time, total_distance))
+        cutoff = sim_time - 90.0
+        while hist and hist[0][0] < cutoff:
+            hist.pop(0)
+
+    def _calculate_time_gap(self, ahead_info, behind_info, sim_now):
+        """
+        Calculate the time gap between a driver and the driver directly ahead.
+        Uses trajectory/distance history interpolation when available,
+        falling back to pace-based calculation.
+        """
+        if behind_info.get("race_state") in [4, 5, 6] or behind_info["name"] in getattr(self, "assumed_retired_participants", set()):
+            if behind_info.get("race_state") == 4:
+                return "DQ"
+            elif behind_info.get("race_state") == 6:
+                return "DNF"
+            else:
+                return "Retired"
+
+        track_length = self.data.mTrackLength if (self.data and self.data.mTrackLength > 0) else 4000.0
+        
+        dist_ahead = ahead_info["laps"] * track_length + ahead_info["dist"]
+        dist_behind = behind_info["laps"] * track_length + behind_info["dist"]
+        
+        dist_diff = dist_ahead - dist_behind
+
+        # Check for lapped status
+        if dist_diff >= track_length:
+            laps_behind = int(dist_diff // track_length)
+            if laps_behind == 1:
+                return "+1 Lap"
+            elif laps_behind > 1:
+                return f"+{laps_behind} Laps"
+
+        # Try to find exact time gap using distance history of the car ahead
+        hist_ahead = self.distance_history.get(ahead_info["name"], [])
+        if hist_ahead and len(hist_ahead) >= 2:
+            for j in range(len(hist_ahead) - 1):
+                t1, d1 = hist_ahead[j]
+                t2, d2 = hist_ahead[j + 1]
+                if d1 <= dist_behind <= d2 and d2 > d1:
+                    fraction = (dist_behind - d1) / (d2 - d1)
+                    t_ahead_at_dist = t1 + fraction * (t2 - t1)
+                    gap = sim_now - t_ahead_at_dist
+                    if gap >= 0.0:
+                        return f"+{gap:.3f}s"
+
+        # Fallback: estimate time gap from distance difference and pace
+        dist_gap = max(0.0, dist_diff)
+        
+        speed = 0.0
+        if behind_info.get("last_lap_time", 0) > 10.0:
+            speed = track_length / behind_info["last_lap_time"]
+        elif ahead_info.get("last_lap_time", 0) > 10.0:
+            speed = track_length / ahead_info["last_lap_time"]
+        elif behind_info.get("fastest_lap_time", 0) > 10.0:
+            speed = track_length / behind_info["fastest_lap_time"]
+        elif ahead_info.get("fastest_lap_time", 0) > 10.0:
+            speed = track_length / ahead_info["fastest_lap_time"]
+        elif behind_info.get("speed", 0) > 5.0:
+            speed = behind_info["speed"]
+        elif ahead_info.get("speed", 0) > 5.0:
+            speed = ahead_info["speed"]
+        else:
+            speed = 40.0
+
+        gap = dist_gap / speed if speed > 0 else 0.0
+        return f"+{gap:.3f}s"
+
     def log_periodic_leaderboard(self):
+        sim_now = self.get_session_time()
         grid = []
         for i in range(self.data.mNumParticipants):
             p = self.data.mParticipantInfo[i]
@@ -845,11 +1023,37 @@ class AMS2EventLogger:
                     continue
                     
                 pos = p.mRacePosition
-                grid.append((pos, name))
+                grid.append({
+                    "pos": pos,
+                    "name": name,
+                    "car": car,
+                    "class": cls,
+                    "dist": p.mCurrentLapDistance,
+                    "laps": p.mLapsCompleted,
+                    "lap": p.mCurrentLap,
+                    "speed": self.data.mSpeeds[i],
+                    "last_lap_time": self.data.mLastLapTimes[i],
+                    "fastest_lap_time": self.data.mFastestLapTimes[i],
+                    "race_state": self.data.mRaceStates[i],
+                    "idx": i
+                })
         
-        grid.sort(key=lambda x: x[0])
-        leaderboard_str = " | ".join([f"P{pos}: {name}" for pos, name in grid])
-        self.log("LEADERBOARD", f"Current Standings: {leaderboard_str}", sim_time=self.get_session_time())
+        grid.sort(key=lambda x: x["pos"])
+        
+        entries = []
+        for idx, item in enumerate(grid):
+            pos = item["pos"]
+            name = item["name"]
+            if idx == 0 or pos == 1:
+                gap_str = "Leader"
+            else:
+                ahead_item = grid[idx - 1]
+                gap_str = self._calculate_time_gap(ahead_item, item, sim_now)
+            
+            entries.append(f"P{pos}: {name} ({gap_str})")
+        
+        leaderboard_str = " | ".join(entries)
+        self.log("LEADERBOARD", f"Current Standings: {leaderboard_str}", sim_time=sim_now)
 
     def log_starting_grid(self, sim_time=None):
         grid = []

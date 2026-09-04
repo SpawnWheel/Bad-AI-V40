@@ -371,14 +371,23 @@ class AMS2CameraController:
     def _call_gemini_api(self, api_key, full_prompt, original_data_path):
         try:
             client = genai.Client(api_key=api_key)
-            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.1-pro')
+            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.8-flash')
+            max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
+            try:
+                max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
+            except ValueError:
+                max_output_tokens = 65536
             
+            is_gemini_3 = any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
+            thinking_config = types.ThinkingConfig(
+                include_thoughts=True,
+                thinking_level="HIGH"
+            ) if is_gemini_3 else None
+
             config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(
-                    include_thoughts=True,
-                    thinking_level="HIGH"
-                )
-            ) if "gemini-3" in model_name.lower() else None
+                max_output_tokens=max_output_tokens,
+                thinking_config=thinking_config
+            )
 
             response = client.models.generate_content(
                 model=model_name,

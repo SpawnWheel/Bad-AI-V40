@@ -1,0 +1,27 @@
+{
+  "track_location": "Indianapolis Motor Speedway",
+  "track_variation": "Oval",
+  "track_length": 3586.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 250.0,
+      "end": 700.0
+    },
+    {
+      "name": "Turn2",
+      "start": 930.0,
+      "end": 1380.0
+    },
+    {
+      "name": "Turn3",
+      "start": 2300.0,
+      "end": 2750.0
+    },
+    {
+      "name": "Turn4",
+      "start": 2936.0,
+      "end": 3386.0
+    }
+  ]
+}

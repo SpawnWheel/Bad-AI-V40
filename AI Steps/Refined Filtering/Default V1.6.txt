@@ -42,10 +42,10 @@ Silently read the entire race log start-to-finish before writing. Construct a co
 ```
 [ STEP 1: THE ORIGINALITY ENGINE & HIGH-CONCEPT FRAME ]
 Generate 4–6 distinct narrative concepts. Commit fully to one specific, audacious piece of paddock lore, bizarre psychological obsession, covert team sabotage, underground bet, or high-stakes conspiracy. 
-* It must be explainable in one sentence.
+* It must be explainable in one paragraph.
 * It must have one memorable anchor (an absurd modification, an illicit agreement, a cursed setup, a psychological breakdown, a stolen secret).
 * It must escalate with the track conditions and race phases.
-* The commentary treats the absurdity with deadpan, high-stakes broadcast sincerity.
+* The commentary treats the absurdity with deadpan, high-stakes broadcast sincerity. But, should be completely shocked at it too. 
 
 [ STEP 2: THE A-STORY & RADICAL INVERSION ]
 Define the central narrative. The end state MUST look completely different from the start:
@@ -55,7 +55,7 @@ Define the central narrative. The end state MUST look completely different from 
 * A clandestine paddock conspiracy detonates and backfires on its architect.
 
 [ STEP 3: B-STORIES & COLLIDING AGENDAS ]
-Select 3–5 driver subplots. Give every key driver a sharp, personal motive (protecting a contract, proving a setup dispute, revenge for an earlier round, racing with faulty equipment). 
+Select 3–5 driver subplots. Give every key driver a sharp, personal motive (protecting a contract, proving a setup dispute, revenge for an earlier round, racing with faulty equipment). These should be affected throughout the race by the narrative concept.
 
 [ STEP 4: AUDACIOUS SCHEMES & CONCRETE BEATS ]
 Never restate character traits in synonyms ("He's aggressive"). Turn traits into one concrete, evolving scheme across 4 beats:
@@ -65,7 +65,7 @@ Never restate character traits in synonyms ("He's aggressive"). Turn traits into
 4. The Twist/Complication (the track, traffic, or a rival turns it on its head)
 
 [ STEP 5: DYNAMIC CHARACTER TRAJECTORIES ]
-Map emotional trajectories with at least one sharp mid-race reversal:
+Map emotional trajectories with at least one sharp mid-race reversal: These are examples, do not copy.
 * Example: Arrogant Mastermind → Ruthless Execution → Sudden Panic → Desperate Compromise → Total Humiliation.
 * Example: Reluctant Number-Two → Frustrated Obedience → Fluke Opportunity → Cold Defiance → Paddock Hero.
 
@@ -88,6 +88,7 @@ Calculate percentages based on total log duration:
 When two or more consecutive "Commentator's ramble." lines occur with no track events between them, treat them as a single continuous scene. 
 * Line 1 introduces a narrative revelation or psychological insight.
 * Consecutive lines build, debate, or escalate that specific thought.
+* You can also have a commentator question another commentator in this section, or speak about his personal experiences.
 * The final line delivers a pivot, hook, or sharp foreshadowing beat.
 
 [ STEP 9: PAYOFF RECONCILIATION ]
@@ -114,13 +115,13 @@ Verify before writing:
 
 * **High-Paced & Evolving:** Never repeat the same thematic point across entries. Every commentary line must advance the narrative, introduce a fresh complication, or reveal a new layer.
 * **Punchy Broadcast Voice:** Deliver crisp, dramatic television commentary. Blend sharp tactical insight, dry humor, paddock gossip, and escalating urgency. Avoid dry engineering readouts (avoid endless tire telemetry percentages).
-* **Radio Snippets:** Use punchy team radio quotes sparingly to show panic, defiance, confusion, or cold calculation.
+* **Radio Snippets:** Use punchy team radio quotes to show panic, defiance, confusion, or cold calculation. Radio snippets must always add to the drama however. Also, drivers are able to communicate to each other via radio comms. These are rarely friendly.
 
 ---
 
 ### STRICT OUTPUT CONSTRAINTS
 
-* **Length Limit:** Maximum **18 words** per commentary entry.
+* **Length Limit:** Maximum **25 words** per commentary entry.
 * **Target:** ONLY replace the string `Commentator's ramble.`
 * **Preservation:** Keep all timestamps, leaderboard lines, overtake notices, flags, and accident alerts completely untouched.
 * **Return Format:** Return **ONLY** the fully processed race log file. No conversational preamble, no markdown wrap-up, and no output of the planning phase.

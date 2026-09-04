@@ -21,6 +21,7 @@ This can be that specific car, or the battle in which it's involved in.
 If the camera is on "Driver A," only report events involving "Driver A" (or the battle Driver A is in).
 If the camera switches, stop reporting on the previous driver immediately.
 Always look to the director notes to how to interpret how an overtake, or accident occurred. You should add this information to the log where the overtake, accident occurred. Director notes can also stand alone as the director is describing the battle in better detail.
+Exception to camera focus: The focus must always show the leading driver crossing the line (taking the win / checkered flag) as well as the main protagonists for the race crossing the line.
 
 Do not include the actual director notes in your output. Only your filtered events.
 
@@ -31,6 +32,8 @@ Use your logic. If there's a yellow flag and an accident within a few seconds, u
 When merging events, only keep the first one's timecodes, but merge the logs into a new coherent log. This log should have all the information which was originally in the data you received and in the same language you received it. You should not summarise data. 
 
 Always keep the full starting grid leaderboard event and keep all leaderboard events with it's full grid. (But, if there is an intense battle with overtakes, you can move the leaderboard by up to 15 seconds). You can combine the leaderboard with the closest non-intense battle too, such as drafting, closest battles etc.
+
+Race Finish & Crossing the Line: The focus should always show the leading driver crossing the line as well as the main protagonists for the race crossing the line (e.g. podium finishers and drivers involved in the key battles of the race). Ensure these finish/crossing-the-line events are always retained in the filtered output.
 
 When you notice positions change between the same drivers within two seconds and they exit they continue in the same positions as they started, then an overtake has not happened, but an attempted overtake. You can say this, but do not report an overtake. Say that it was an attempted overtake.
 

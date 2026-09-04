@@ -29,7 +29,7 @@ class GeminiService:
             with open(api_key_path, "r") as f:
                 file_key = f.read().strip()
         self.api_key = os.environ.get("GEMINI_API_KEY") or file_key or settings.get("gemini", "api_key")
-        self.model_name = settings.get("gemini", "llm_model", "gemini-3-flash-preview")
+        self.model_name = settings.get("gemini", "llm_model", "gemini-3.8-flash")
         self.thinking_level = settings.get("gemini", "thinking_level", "HIGH")
         self.tts_model = settings.get("gemini", "tts_model", "gemini-2.0-flash-exp") 
         
@@ -268,7 +268,7 @@ class GeminiService:
         try:
             config = types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_level=selected_level)
-            ) if "gemini-3" in self.model_name.lower() else None
+            ) if ("gemini-3" in self.model_name.lower() or "3.8" in self.model_name.lower()) else None
 
             response = self.client_v2.models.generate_content(
                 model=self.model_name,

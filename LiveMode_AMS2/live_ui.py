@@ -362,8 +362,10 @@ class LiveModeUI:
     def _save_settings(self):
         new_config = LiveModeConfig()
         
-        # Retain API key
+        # Retain API key and model configurations
         new_config.gemini_api_key = self.current_config.gemini_api_key
+        new_config.llm_model = self.current_config.llm_model
+        new_config.tts_model = self.current_config.tts_model
         
         # Read from UI
         new_config.commentator_voice = self.voice_var.get()

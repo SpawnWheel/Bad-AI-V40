@@ -1,0 +1,42 @@
+{
+  "track_location": "Snetterton",
+  "track_variation": "200 Circuit",
+  "track_length": 2940.0,
+  "corners": [
+    {
+      "name": "Riches",
+      "start": 295.0,
+      "end": 555.0
+    },
+    {
+      "name": "Wilson",
+      "start": 735.0,
+      "end": 950.0
+    },
+    {
+      "name": "Brundle",
+      "start": 1685.0,
+      "end": 1810.0
+    },
+    {
+      "name": "Nelson",
+      "start": 1820.0,
+      "end": 1920.0
+    },
+    {
+      "name": "Bomb Hole",
+      "start": 2010.0,
+      "end": 2200.0
+    },
+    {
+      "name": "Coram",
+      "start": 2230.0,
+      "end": 2610.0
+    },
+    {
+      "name": "Murrays",
+      "start": 2615.0,
+      "end": 2740.0
+    }
+  ]
+}

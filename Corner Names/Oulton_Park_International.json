@@ -1,0 +1,57 @@
+{
+  "track_location": "Oulton Park",
+  "track_variation": "International",
+  "track_length": 4320.0,
+  "corners": [
+    {
+      "name": "Old Hall",
+      "start": 130.0,
+      "end": 310.0
+    },
+    {
+      "name": "Dentons",
+      "start": 480.0,
+      "end": 575.0
+    },
+    {
+      "name": "Cascades",
+      "start": 615.0,
+      "end": 845.0
+    },
+    {
+      "name": "Lake Side",
+      "start": 1240.0,
+      "end": 1490.0
+    },
+    {
+      "name": "Shell Oils Corner",
+      "start": 1525.0,
+      "end": 1720.0
+    },
+    {
+      "name": "Brittens",
+      "start": 1920.0,
+      "end": 2120.0
+    },
+    {
+      "name": "Knickerbrook",
+      "start": 2675.0,
+      "end": 2790.0
+    },
+    {
+      "name": "Druids",
+      "start": 3285.0,
+      "end": 3505.0
+    },
+    {
+      "name": "Lodge",
+      "start": 3870.0,
+      "end": 3985.0
+    },
+    {
+      "name": "Deer Leap",
+      "start": 4075.0,
+      "end": 4120.0
+    }
+  ]
+}

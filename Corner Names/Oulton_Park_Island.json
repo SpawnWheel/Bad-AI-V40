@@ -1,0 +1,52 @@
+{
+  "track_location": "Oulton Park",
+  "track_variation": "Island",
+  "track_length": 3570.0,
+  "corners": [
+    {
+      "name": "Old Hall",
+      "start": 130.0,
+      "end": 310.0
+    },
+    {
+      "name": "Dentons",
+      "start": 480.0,
+      "end": 575.0
+    },
+    {
+      "name": "Cascades",
+      "start": 615.0,
+      "end": 845.0
+    },
+    {
+      "name": "Island Hairpin",
+      "start": 1209.0,
+      "end": 1320.0
+    },
+    {
+      "name": "Hislops",
+      "start": 1765.0,
+      "end": 1900.0
+    },
+    {
+      "name": "Knickerbrook",
+      "start": 1925.0,
+      "end": 2040.0
+    },
+    {
+      "name": "Druids",
+      "start": 2535.0,
+      "end": 2755.0
+    },
+    {
+      "name": "Lodge",
+      "start": 3120.0,
+      "end": 3235.0
+    },
+    {
+      "name": "Deer Leap",
+      "start": 3325.0,
+      "end": 3370.0
+    }
+  ]
+}

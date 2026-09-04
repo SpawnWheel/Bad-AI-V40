@@ -1,0 +1,47 @@
+{
+  "track_location": "Knockhill",
+  "track_variation": "International",
+  "track_length": 1915.0,
+  "corners": [
+    {
+      "name": "The Right Into Duffus Dip",
+      "start": 267.0,
+      "end": 325.0
+    },
+    {
+      "name": "The Left Out Of Duffus Dip",
+      "start": 355.0,
+      "end": 420.0
+    },
+    {
+      "name": "Mcintyre",
+      "start": 467.0,
+      "end": 565.0
+    },
+    {
+      "name": "Butchers",
+      "start": 603.0,
+      "end": 678.0
+    },
+    {
+      "name": "The Chicane",
+      "start": 704.0,
+      "end": 812.0
+    },
+    {
+      "name": "Clark",
+      "start": 1000.0,
+      "end": 1131.0
+    },
+    {
+      "name": "Railway Bend",
+      "start": 1140.0,
+      "end": 1400.0
+    },
+    {
+      "name": "Taylors Hairpin",
+      "start": 1615.0,
+      "end": 1715.0
+    }
+  ]
+}

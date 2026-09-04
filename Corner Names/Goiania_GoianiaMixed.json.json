@@ -1,0 +1,37 @@
+{
+  "track_location": "Goiania",
+  "track_variation": "GoianiaMixed",
+  "track_length": 3846.7,
+  "corners": [
+    {
+      "name": "The Main Straight",
+      "start": 279.5,
+      "end": 510.1
+    },
+    {
+      "name": "Curva Um",
+      "start": 588.8,
+      "end": 869.9
+    },
+    {
+      "name": "Miolo",
+      "start": 1358.2,
+      "end": 1570.8
+    },
+    {
+      "name": "Bico de Pato",
+      "start": 1899.0,
+      "end": 2103.7
+    },
+    {
+      "name": "The Esse",
+      "start": 2512.1,
+      "end": 2701.3
+    },
+    {
+      "name": "Curva Zero",
+      "start": 3192.1,
+      "end": 3402.4
+    }
+  ]
+}

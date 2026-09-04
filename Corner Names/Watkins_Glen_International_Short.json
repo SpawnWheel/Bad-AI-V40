@@ -1,0 +1,47 @@
+{
+  "track_location": "Watkins Glen International",
+  "track_variation": "Short",
+  "track_length": 3590.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 275.0,
+      "end": 410.0
+    },
+    {
+      "name": "Turn2",
+      "start": 580.0,
+      "end": 790.0
+    },
+    {
+      "name": "Turn3",
+      "start": 820.0,
+      "end": 990.0
+    },
+    {
+      "name": "Turn4",
+      "start": 1040.0,
+      "end": 1330.0
+    },
+    {
+      "name": "The Inner Loop",
+      "start": 1770.0,
+      "end": 1990.0
+    },
+    {
+      "name": "The Outer Loop",
+      "start": 2050.0,
+      "end": 2390.0
+    },
+    {
+      "name": "Turn8",
+      "start": 2940.0,
+      "end": 3080.0
+    },
+    {
+      "name": "Turn9",
+      "start": 3230.0,
+      "end": 3390.0
+    }
+  ]
+}

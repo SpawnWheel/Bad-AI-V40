@@ -1,0 +1,62 @@
+{
+  "track_location": "Bathurst",
+  "track_variation": "Mount Panorama",
+  "track_length": 6170.0,
+  "corners": [
+    {
+      "name": "Hell Corner",
+      "start": 210.0,
+      "end": 310.0
+    },
+    {
+      "name": "Griffins Bend",
+      "start": 1300.0,
+      "end": 1490.0
+    },
+    {
+      "name": "The Cutting",
+      "start": 1710.0,
+      "end": 1910.0
+    },
+    {
+      "name": "Quarry",
+      "start": 2110.0,
+      "end": 2230.0
+    },
+    {
+      "name": "Mcphillamy Park",
+      "start": 2750.0,
+      "end": 2950.0
+    },
+    {
+      "name": "Skyline",
+      "start": 3100.0,
+      "end": 3160.0
+    },
+    {
+      "name": "The Esses",
+      "start": 3230.0,
+      "end": 3310.0
+    },
+    {
+      "name": "The Dipper",
+      "start": 3360.0,
+      "end": 3450.0
+    },
+    {
+      "name": "Forrests Elbow",
+      "start": 3690.0,
+      "end": 3800.0
+    },
+    {
+      "name": "The Chase",
+      "start": 5030.0,
+      "end": 5510.0
+    },
+    {
+      "name": "Murrays Corner",
+      "start": 5880.0,
+      "end": 5970.0
+    }
+  ]
+}

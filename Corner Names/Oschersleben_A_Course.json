@@ -1,0 +1,57 @@
+{
+  "track_location": "Oschersleben",
+  "track_variation": "A Course",
+  "track_length": 3655.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 430.0,
+      "end": 505.0
+    },
+    {
+      "name": "Hotel",
+      "start": 510.0,
+      "end": 750.0
+    },
+    {
+      "name": "Hasseroder",
+      "start": 960.0,
+      "end": 1145.0
+    },
+    {
+      "name": "Triple",
+      "start": 1390.0,
+      "end": 1685.0
+    },
+    {
+      "name": "Turn5",
+      "start": 1690.0,
+      "end": 1925.0
+    },
+    {
+      "name": "Schikane",
+      "start": 2000.0,
+      "end": 2105.0
+    },
+    {
+      "name": "Turn7",
+      "start": 2110.0,
+      "end": 2280.0
+    },
+    {
+      "name": "Shell S",
+      "start": 2735.0,
+      "end": 2950.0
+    },
+    {
+      "name": "Turn9",
+      "start": 3100.0,
+      "end": 3210.0
+    },
+    {
+      "name": "Sachcsen-anhalt Kurve",
+      "start": 3305.0,
+      "end": 3455.0
+    }
+  ]
+}

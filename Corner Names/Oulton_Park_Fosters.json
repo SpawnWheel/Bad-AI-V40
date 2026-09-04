@@ -1,0 +1,47 @@
+{
+  "track_location": "Oulton Park",
+  "track_variation": "Fosters",
+  "track_length": 2725.0,
+  "corners": [
+    {
+      "name": "Old Hall",
+      "start": 130.0,
+      "end": 310.0
+    },
+    {
+      "name": "Dentons",
+      "start": 480.0,
+      "end": 575.0
+    },
+    {
+      "name": "Cascades",
+      "start": 615.0,
+      "end": 745.0
+    },
+    {
+      "name": "Fosters",
+      "start": 800.0,
+      "end": 860.0
+    },
+    {
+      "name": "Knickerbrook",
+      "start": 1020.0,
+      "end": 1150.0
+    },
+    {
+      "name": "Druids",
+      "start": 1650.0,
+      "end": 1870.0
+    },
+    {
+      "name": "Lodge",
+      "start": 2200.0,
+      "end": 2330.0
+    },
+    {
+      "name": "Deer Leap",
+      "start": 2400.0,
+      "end": 2525.0
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "track_location": "Daytona International Speedway",
+  "track_variation": "Road Course",
+  "track_length": 5300.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 420.0,
+      "end": 560.0
+    },
+    {
+      "name": "Turn2",
+      "start": 565.0,
+      "end": 745.0
+    },
+    {
+      "name": "International Horseshoe",
+      "start": 870.0,
+      "end": 1055.0
+    },
+    {
+      "name": "Turn4",
+      "start": 1335.0,
+      "end": 1525.0
+    },
+    {
+      "name": "Turn5",
+      "start": 1620.0,
+      "end": 1875.0
+    },
+    {
+      "name": "Turn6",
+      "start": 2080.0,
+      "end": 2250.0
+    },
+    {
+      "name": "Turn7",
+      "start": 2330.0,
+      "end": 3240.0
+    },
+    {
+      "name": "Bus Stop",
+      "start": 3735.0,
+      "end": 4115.0
+    },
+    {
+      "name": "Turn12",
+      "start": 4135.0,
+      "end": 5100.0
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "track_location": "Le Mans",
+  "track_variation": "Le Mans Bugatti Circuit",
+  "track_length": 4250.0,
+  "corners": [
+    {
+      "name": "Dunlop Curve",
+      "start": 200.0,
+      "end": 975.0
+    },
+    {
+      "name": "Dunlop Chicane",
+      "start": 770.0,
+      "end": 975.0
+    },
+    {
+      "name": "La Chapelle",
+      "start": 1130.0,
+      "end": 1500.0
+    },
+    {
+      "name": "Le Musee",
+      "start": 1660.0,
+      "end": 2020.0
+    },
+    {
+      "name": "Garage Vert",
+      "start": 2220.0,
+      "end": 2480.0
+    },
+    {
+      "name": "Chemin Aux Boeufs",
+      "start": 3020.0,
+      "end": 3280.0
+    },
+    {
+      "name": "Garage Bleu",
+      "start": 3430.0,
+      "end": 3780.0
+    },
+    {
+      "name": "Raccodement",
+      "start": 3860.0,
+      "end": 4050.0
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "track_location": "Long Beach",
+  "track_variation": "Street Circuit",
+  "track_length": 3065.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 700.0,
+      "end": 795.0
+    },
+    {
+      "name": "Turn2",
+      "start": 865.0,
+      "end": 915.0
+    },
+    {
+      "name": "Turn3",
+      "start": 935.0,
+      "end": 985.0
+    },
+    {
+      "name": "Turn4",
+      "start": 1030.0,
+      "end": 1105.0
+    },
+    {
+      "name": "Turn5",
+      "start": 1175.0,
+      "end": 1270.0
+    },
+    {
+      "name": "Turn6",
+      "start": 1585.0,
+      "end": 1665.0
+    },
+    {
+      "name": "Turn7",
+      "start": 1665.0,
+      "end": 1740.0
+    },
+    {
+      "name": "Turn8",
+      "start": 1890.0,
+      "end": 1965.0
+    },
+    {
+      "name": "Turn9",
+      "start": 2500.0,
+      "end": 2600.0
+    },
+    {
+      "name": "Turn10",
+      "start": 2640.0,
+      "end": 2775.0
+    },
+    {
+      "name": "Turn11",
+      "start": 2775.0,
+      "end": 2865.0
+    }
+  ]
+}

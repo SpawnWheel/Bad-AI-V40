@@ -265,8 +265,16 @@ class BadAILauncher:
                                        padx=12, pady=4, cursor="hand2",
                                        activebackground=THEME_SUCCESS_BG, activeforeground="#ffffff",
                                        bd=0, highlightthickness=0)
-        self.btn_live_mode.pack(side="left", padx=(0, 10))
+        self.btn_live_mode.pack(side="left", padx=(0, 6))
         self._bind_hover(self.btn_live_mode, THEME_SUCCESS, THEME_SUCCESS_BG)
+
+        self.btn_corner_mapper = tk.Button(self.live_btn_container, text="🗺️ Corner Mapper", bg=THEME_ACCENT, fg="#ffffff",
+                                           font=(FONT_FAMILY, 9, "bold"), command=self.launch_corner_mapper, relief="flat",
+                                           padx=12, pady=4, cursor="hand2",
+                                           activebackground=THEME_ACCENT_LIGHT, activeforeground="#ffffff",
+                                           bd=0, highlightthickness=0)
+        self.btn_corner_mapper.pack(side="left", padx=(0, 10))
+        self._bind_hover(self.btn_corner_mapper, THEME_ACCENT, THEME_ACCENT_LIGHT)
 
         for text, cmd in [("New Project", self.create_project), 
                           ("Open Folder", self.open_project_folder),
@@ -361,6 +369,7 @@ class BadAILauncher:
         self.status(f"Active Project: {self.pm.current_project}")
         self.refresh_state_display()
         self.refresh_run_tab()
+        self._update_live_button_visibility()
 
     def on_sim_change(self, event):
         if self.pm.current_project:
@@ -371,11 +380,13 @@ class BadAILauncher:
         self._update_live_button_visibility()
 
     def _update_live_button_visibility(self):
-        if hasattr(self, 'btn_live_mode'):
+        if hasattr(self, 'btn_live_mode') and hasattr(self, 'btn_corner_mapper'):
             if self.sim_var.get() == "AMS2":
-                self.btn_live_mode.pack(side="left", padx=(0, 10))
+                self.btn_live_mode.pack(side="left", padx=(0, 6))
+                self.btn_corner_mapper.pack(side="left", padx=(0, 10))
             else:
                 self.btn_live_mode.pack_forget()
+                self.btn_corner_mapper.pack_forget()
 
     def launch_live_mode(self):
         script_path = os.path.abspath(os.path.join('LiveMode_AMS2', 'orchestrator.py'))
@@ -398,6 +409,21 @@ class BadAILauncher:
             )
         except Exception as e:
             messagebox.showerror('Error', f'Failed to launch live mode:\n{e}')
+
+    def launch_corner_mapper(self):
+        script_path = os.path.abspath(os.path.join('CornerMapper_AMS2', 'corner_mapper.py'))
+        if not os.path.exists(script_path):
+            messagebox.showerror('Error', f'Corner Mapper script not found:\n{script_path}')
+            return
+        
+        self.status('Launching AMS2 Corner Mapper...')
+        try:
+            subprocess.Popen(
+                [sys.executable, script_path],
+                cwd=os.getcwd()
+            )
+        except Exception as e:
+            messagebox.showerror('Error', f'Failed to launch Corner Mapper:\n{e}')
 
     def scan_files(self):
         self.pm.scan_project_files()
@@ -893,6 +919,16 @@ class BadAILauncher:
         if gemini_model:
             env["GEMINI_MODEL_NAME"] = gemini_model
 
+        # Add Max Output Tokens (step override or global, default 65536)
+        max_tokens = step.get("max_output_tokens") or self.global_settings.get("gemini_max_output_tokens", 65536)
+        if max_tokens:
+            env["GEMINI_MAX_OUTPUT_TOKENS"] = str(max_tokens)
+
+        # Add Thinking Level (step override or global, default HIGH)
+        thinking_level = step.get("thinking_level") or self.global_settings.get("gemini_thinking_level", "HIGH")
+        if thinking_level:
+            env["GEMINI_THINKING_LEVEL"] = str(thinking_level)
+
         # CLI Args
         args = [sys.executable, abs_script_path]
         if input_files:
@@ -950,13 +986,35 @@ class BadAILauncher:
         # Model
         tk.Label(api_card, text="Gemini Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED,
                 font=(FONT_FAMILY, 10)).grid(row=3, column=0, sticky="w", pady=(0, 4))
-        self.model_var = tk.StringVar(value=self.global_settings.get("gemini_model", "gemini-3.1-pro-preview"))
+        self.model_var = tk.StringVar(value=self.global_settings.get("gemini_model", "gemini-3.8-flash"))
         self.model_var.trace_add("write", lambda *a: self.update_global_setting("gemini_model", self.model_var.get()))
         model_entry = tk.Entry(api_card, textvariable=self.model_var, bg=THEME_BG_INPUT, fg=THEME_FG,
                               width=60, font=(FONT_MONO, 10), relief="flat", bd=0,
                               insertbackground=THEME_FG, highlightthickness=0)
         model_entry.grid(row=4, column=0, columnspan=2, sticky="ew", ipady=4)
         
+        # Pipeline Max Output Tokens & Thinking Level
+        pipe_settings_row = tk.Frame(api_card, bg=THEME_BG_CARD)
+        pipe_settings_row.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+
+        tk.Label(pipe_settings_row, text="Pipeline Max Output Tokens", bg=THEME_BG_CARD, fg=THEME_FG_MUTED,
+                font=(FONT_FAMILY, 10)).grid(row=0, column=0, sticky="w", pady=(0, 4))
+        self.pipeline_max_tokens_var = tk.StringVar(value=str(self.global_settings.get("gemini_max_output_tokens", 65536)))
+        def _update_pipeline_max_tokens(*args):
+            try:
+                self.update_global_setting("gemini_max_output_tokens", int(self.pipeline_max_tokens_var.get()))
+            except ValueError:
+                pass
+        self.pipeline_max_tokens_var.trace_add("write", _update_pipeline_max_tokens)
+        tk.Spinbox(pipe_settings_row, from_=1000, to=65536, increment=1024, textvariable=self.pipeline_max_tokens_var,
+                   bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_MONO, 10), relief="flat", bd=0, width=15).grid(row=1, column=0, sticky="w")
+
+        tk.Label(pipe_settings_row, text="Pipeline Thinking Level", bg=THEME_BG_CARD, fg=THEME_FG_MUTED,
+                font=(FONT_FAMILY, 10)).grid(row=0, column=1, sticky="w", pady=(0, 4), padx=(24, 0))
+        self.pipeline_thinking_var = tk.StringVar(value=self.global_settings.get("gemini_thinking_level", "HIGH"))
+        self.pipeline_thinking_var.trace_add("write", lambda *a: self.update_global_setting("gemini_thinking_level", self.pipeline_thinking_var.get()))
+        ttk.Combobox(pipe_settings_row, textvariable=self.pipeline_thinking_var, values=["HIGH", "MEDIUM", "LOW", "MINIMAL", "NONE"], state="readonly", width=15).grid(row=1, column=1, sticky="w", padx=(24, 0))
+
         api_card.columnconfigure(0, weight=1)
 
         # --- Live Mode — LLM card ---
@@ -966,12 +1024,12 @@ class BadAILauncher:
         tk.Label(llm_card, text="Live Mode — LLM", bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
         
         tk.Label(llm_card, text="LLM Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
-        self.lm_llm_model_var = tk.StringVar(value=self.global_settings['live_mode'].get("llm_model", "gemini-3.6-flash"))
+        self.lm_llm_model_var = tk.StringVar(value=self.global_settings['live_mode'].get("llm_model", "gemini-3.8-flash"))
         self.lm_llm_model_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"llm_model": self.lm_llm_model_var.get()}))
         tk.Entry(llm_card, textvariable=self.lm_llm_model_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=40, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
         
         tk.Label(llm_card, text="Thinking Level", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=1, sticky="w", pady=(0, 4))
-        self.lm_thinking_var = tk.StringVar(value=self.global_settings['live_mode'].get("thinking_level", "NONE"))
+        self.lm_thinking_var = tk.StringVar(value=self.global_settings['live_mode'].get("thinking_level", "HIGH"))
         self.lm_thinking_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"thinking_level": self.lm_thinking_var.get()}))
         ttk.Combobox(llm_card, textvariable=self.lm_thinking_var, values=["NONE", "LOW", "MEDIUM", "HIGH"], state="readonly", width=15).grid(row=2, column=1, sticky="w", pady=(0, 12))
 

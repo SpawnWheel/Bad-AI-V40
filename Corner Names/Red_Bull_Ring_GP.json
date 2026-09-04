@@ -1,0 +1,47 @@
+{
+  "track_location": "Red Bull Ring",
+  "track_variation": "GP",
+  "track_length": 4140.0,
+  "corners": [
+    {
+      "name": "Turn1",
+      "start": 310.0,
+      "end": 390.0
+    },
+    {
+      "name": "Turn2",
+      "start": 1250.0,
+      "end": 1330.0
+    },
+    {
+      "name": "Turn3",
+      "start": 2060.0,
+      "end": 2190.0
+    },
+    {
+      "name": "Turn4",
+      "start": 2550.0,
+      "end": 2700.0
+    },
+    {
+      "name": "Turn5",
+      "start": 2860.0,
+      "end": 3000.0
+    },
+    {
+      "name": "Turn6",
+      "start": 3010.0,
+      "end": 3180.0
+    },
+    {
+      "name": "Turn7",
+      "start": 3600.0,
+      "end": 3730.0
+    },
+    {
+      "name": "Turn8",
+      "start": 3850.0,
+      "end": 3940.0
+    }
+  ]
+}

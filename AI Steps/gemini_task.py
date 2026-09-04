@@ -71,19 +71,34 @@ def run_ai_step():
 
     # 6. Call the Model using the google-genai SDK
     client = genai.Client(api_key=api_key)
-    model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.1-pro-preview')
+    model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.8-flash')
     
-    print(f"Using model: {model_name} (Thinking dynamic based on model)")
+    # Resolve Max Output Tokens (default 65536 to prevent truncation on long races)
+    max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
+    try:
+        max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
+    except ValueError:
+        max_output_tokens = 65536
+
+    # Resolve Thinking Config for Gemini 3 models
+    thinking_config = None
+    is_gemini_3 = any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
+    thinking_level = os.environ.get("GEMINI_THINKING_LEVEL", "HIGH").upper()
+    if is_gemini_3 and thinking_level != "NONE":
+        thinking_config = types.ThinkingConfig(
+            include_thoughts=True, 
+            thinking_level=thinking_level
+        )
+
+    print(f"Using model: {model_name} (Thinking: {thinking_level if (is_gemini_3 and thinking_level != 'NONE') else 'OFF'}, Max Output Tokens: {max_output_tokens:,})")
     print(f"Using prompt: {os.path.basename(prompt_file)}")
     print("Generating...\n")
 
     try:
         config = types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(
-                include_thoughts=True, 
-                thinking_level="HIGH"
-            )
-        ) if "gemini-3" in model_name.lower() else None
+            max_output_tokens=max_output_tokens,
+            thinking_config=thinking_config
+        )
 
         response_stream = client.models.generate_content_stream(
             model=model_name,
@@ -92,18 +107,38 @@ def run_ai_step():
         )
         
         full_content = []
+        finish_reason = None
+        usage_metadata = None
         
         for chunk in response_stream:
+            if chunk.usage_metadata:
+                usage_metadata = chunk.usage_metadata
             if not chunk.candidates:
                 continue
-            for part in chunk.candidates[0].content.parts:
-                if part.thought:
-                    print(f"\033[90m{part.text}\033[0m", end="", flush=True)
-                elif part.text:
-                    print(part.text, end="", flush=True)
-                    full_content.append(part.text)
+            cand = chunk.candidates[0]
+            if cand.finish_reason:
+                finish_reason = cand.finish_reason
+            if cand.content and cand.content.parts:
+                for part in cand.content.parts:
+                    if part.thought:
+                        print(f"\033[90m{part.text}\033[0m", end="", flush=True)
+                    elif part.text:
+                        print(part.text, end="", flush=True)
+                        full_content.append(part.text)
         
         print("\n")
+
+        if usage_metadata:
+            thoughts_tokens = getattr(usage_metadata, 'thoughts_token_count', 0) or 0
+            cand_tokens = getattr(usage_metadata, 'candidates_token_count', 0) or 0
+            prompt_tokens = getattr(usage_metadata, 'prompt_token_count', 0) or 0
+            total_tokens = getattr(usage_metadata, 'total_token_count', 0) or 0
+            print(f"Tokens: Prompt={prompt_tokens:,} | Thoughts={thoughts_tokens:,} | Output={cand_tokens:,} | Total={total_tokens:,} (Max: {max_output_tokens:,})")
+
+        if finish_reason and "MAX_TOKENS" in str(finish_reason):
+            print(f"\n[WARNING] Output generation stopped early because it hit the token limit (finish_reason={finish_reason})!")
+            print(f"[WARNING] You may need to increase GEMINI_MAX_OUTPUT_TOKENS or shorten the race log.\n")
+
         final_text = "".join(full_content)
         
         # 7. Save the Output

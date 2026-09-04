@@ -1,0 +1,57 @@
+{
+  "track_location": "Brands Hatch",
+  "track_variation": "GP",
+  "track_length": 3630.0,
+  "corners": [
+    {
+      "name": "Paddock Hill",
+      "start": 2000.0,
+      "end": 380.0
+    },
+    {
+      "name": "Druids",
+      "start": 550.0,
+      "end": 670.0
+    },
+    {
+      "name": "Graham Hill Bend",
+      "start": 820.0,
+      "end": 910.0
+    },
+    {
+      "name": "Surtees",
+      "start": 1150.0,
+      "end": 1320.0
+    },
+    {
+      "name": "Hawthorns",
+      "start": 1950.0,
+      "end": 2120.0
+    },
+    {
+      "name": "Westfield",
+      "start": 2300.0,
+      "end": 2400.0
+    },
+    {
+      "name": "Dingle Dell",
+      "start": 2500.0,
+      "end": 2650.0
+    },
+    {
+      "name": "Sheen",
+      "start": 2710.0,
+      "end": 2760.0
+    },
+    {
+      "name": "Stirlings",
+      "start": 2940.0,
+      "end": 3050.0
+    },
+    {
+      "name": "Clearways",
+      "start": 3230.0,
+      "end": 3430.0
+    }
+  ]
+}
