@@ -73,7 +73,7 @@ def main():
                     duration = total_seconds
                 break
         
-        word_count = min(int(round(duration * 2.82)), 80)
+        word_count = min(int(round(duration * 2.85)), 80)
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"

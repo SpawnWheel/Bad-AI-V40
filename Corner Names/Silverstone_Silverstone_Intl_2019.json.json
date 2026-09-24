@@ -1,0 +1,57 @@
+{
+  "track_location": "Silverstone",
+  "track_variation": "Silverstone_Intl_2019",
+  "track_length": 2976.2,
+  "corners": [
+    {
+      "name": "Hamilton Straight",
+      "start": 2865.0,
+      "end": 150.0
+    },
+    {
+      "name": "Abbey",
+      "start": 202.8,
+      "end": 387.8
+    },
+    {
+      "name": "Farm Curve",
+      "start": 450.6,
+      "end": 620.6
+    },
+    {
+      "name": "Village",
+      "start": 666.8,
+      "end": 851.8
+    },
+    {
+      "name": "Chapel",
+      "start": 1019.0,
+      "end": 1169.0
+    },
+    {
+      "name": "The Hangar Straight",
+      "start": 1267.3,
+      "end": 1687.3
+    },
+    {
+      "name": "Braking zone into Stowe",
+      "start": 1743.1,
+      "end": 1863.1
+    },
+    {
+      "name": "Stowe",
+      "start": 1912.9,
+      "end": 2137.9
+    },
+    {
+      "name": "Vale",
+      "start": 2191.2,
+      "end": 2396.2
+    },
+    {
+      "name": "Club",
+      "start": 2453.3,
+      "end": 2738.3
+    }
+  ]
+}

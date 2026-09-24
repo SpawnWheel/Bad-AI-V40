@@ -1,0 +1,32 @@
+{
+  "track_location": "Cordoba",
+  "track_variation": "Cordoba_GP",
+  "track_length": 4055.4,
+  "corners": [
+    {
+      "name": "Turn 1",
+      "start": 75.5,
+      "end": 373.0
+    },
+    {
+      "name": "Back staight",
+      "start": 469.9,
+      "end": 1128.9
+    },
+    {
+      "name": "Turn 2",
+      "start": 1246.2,
+      "end": 1397.2
+    },
+    {
+      "name": "Turn 3",
+      "start": 1528.8,
+      "end": 1692.2
+    },
+    {
+      "name": "Turn 5",
+      "start": 2493.4,
+      "end": 2562.4
+    }
+  ]
+}

@@ -76,9 +76,9 @@ def run_ai_step():
     # Resolve Max Output Tokens (default 65536 to prevent truncation on long races)
     max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
     try:
-        max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
+        max_output_tokens = int(max_tokens_env) if max_tokens_env else 180000
     except ValueError:
-        max_output_tokens = 65536
+        max_output_tokens = 180000
 
     # Resolve Thinking Config for Gemini 3 models
     thinking_config = None

@@ -1,4 +1,5 @@
 import os
+import random
 import re
 import sys
 from pydub import AudioSegment
@@ -14,17 +15,36 @@ def parse_timecode(filename):
         return hh * 3600 + mm * 60 + ss
     return None
 
-def trim_leading_silence_custom(audio, silence_threshold=-50.0, chunk_size=10, keep_silence_ms=1000):
+def parse_speaker(filename):
     """
-    Trims leading silence but keeps up to keep_silence_ms.
+    Parses speaker name from filename, e.g. '000047_Mike_Joy.mp3' -> 'Mike_Joy'.
+    Also handles suffixes like '000047_Mike_Joy_1.mp3' -> 'Mike_Joy'.
+    Returns None if no speaker name pattern is found.
     """
-    leading_silence = detect_leading_silence(audio, silence_threshold, chunk_size)
-    
-    if leading_silence > keep_silence_ms:
-        print(f"  Trimming {leading_silence - keep_silence_ms}ms of silence.")
-        return audio[leading_silence - keep_silence_ms:]
-    else:
-        return audio
+    name_without_ext = os.path.splitext(filename)[0]
+    match = re.match(r'^\d{6}_(.+)$', name_without_ext)
+    if match:
+        raw_speaker = match.group(1).strip()
+        clean_speaker = re.sub(r'_\d+$', '', raw_speaker)
+        return clean_speaker
+    return None
+
+def trim_clip_silence(audio, silence_threshold=-35.0, chunk_size=10, buffer_ms=25):
+    """
+    Trims leading and trailing silence down to spoken audio,
+    leaving a 25ms buffer around speech boundaries.
+    """
+    leading = detect_leading_silence(audio, silence_threshold, chunk_size)
+    trailing = detect_leading_silence(audio.reverse(), silence_threshold, chunk_size)
+
+    start_ms = max(0, leading - buffer_ms)
+    end_ms = max(start_ms + 100, len(audio) - max(0, trailing - buffer_ms))
+
+    trimmed_lead = start_ms
+    trimmed_trail = len(audio) - end_ms
+    if trimmed_lead > 50 or trimmed_trail > 50:
+        print(f"  Trimming silence: {trimmed_lead}ms leading, {trimmed_trail}ms trailing.")
+    return audio[start_ms:end_ms]
 
 def main(input_folder, output_file):
     if not os.path.exists(input_folder):
@@ -58,8 +78,8 @@ def main(input_folder, output_file):
         # Use from_file to support both wav and mp3
         audio = AudioSegment.from_file(filepath)
         
-        # Trim leading silence
-        audio = trim_leading_silence_custom(audio)
+        # Trim leading and trailing silence to clean speech boundaries
+        audio = trim_clip_silence(audio)
         
         scheduled_start_sec = parse_timecode(filename)
         scheduled_start_ms = scheduled_start_sec * 1000
@@ -72,68 +92,117 @@ def main(input_folder, output_file):
             'actual_start': scheduled_start_ms
         })
 
-    # Apply shifting and truncation logic
-    GAP_MS = 500              # Gap between clips that are too close together
+    # Timeline layout constants
+    MIN_GAP_MS = 10           # Minimum natural gap between clips (10ms)
+    MAX_GAP_MS = 800          # Maximum natural gap between clips (800ms)
+    MAX_SHIFT_MS = 4000       # Maximum allowed delay (4s) from scheduled timecode
+    MAX_OVERLAP_MS = 800      # Maximum allowed overlap between different speakers (up to 800ms)
     FADE_OUT_MS = 100         # Fade-out duration when truncating a clip
-    MAX_SHIFT_MS = 5000       # Maximum allowed shift forward for a new event
     MIN_CLIP_DURATION = 1500  # Minimum duration a clip must play if truncated
-    
-    print("Applying timeline logic (shifts and truncations)...")
+
+    print("Applying timeline logic (shifts, overlaps, and truncations)...")
     for i in range(len(timeline_items)):
         item = timeline_items[i]
         
-        if i > 0:
-            prev_item = timeline_items[i-1]
-            prev_end = prev_item['actual_start'] + prev_item['duration']
-            earliest_natural_start = prev_end + GAP_MS
-            
-            if item['scheduled_start'] == prev_item['scheduled_start']:
-                # Same timecode: play sequentially after previous clip with a short gap
-                new_start = max(item['scheduled_start'], earliest_natural_start)
-                item['actual_start'] = new_start
-            else:
-                # Different timecodes: apply shift limit
-                max_allowed_start = item['scheduled_start'] + MAX_SHIFT_MS
-                
-                if earliest_natural_start <= max_allowed_start:
-                    # Previous clip finishes within acceptable shift window
-                    new_start = max(item['scheduled_start'], earliest_natural_start)
-                    item['actual_start'] = new_start
-                else:
-                    # Waiting for previous clip would delay current clip beyond MAX_SHIFT_MS.
-                    # Attempt to truncate previous clip so current clip starts at max_allowed_start.
-                    target_prev_end = max_allowed_start - GAP_MS
-                    truncate_at = target_prev_end - prev_item['actual_start']
-                    min_prev_dur = min(prev_item['duration'], MIN_CLIP_DURATION)
+        if i == 0:
+            item['actual_start'] = item['scheduled_start']
+            continue
 
-                    if truncate_at >= min_prev_dur:
-                        # Safe to truncate previous clip
-                        truncate_ms = prev_item['duration'] - truncate_at
-                        print(f"  Truncating {prev_item['filename']} by {truncate_ms}ms to fit.")
-                        fade_len = min(FADE_OUT_MS, truncate_at)
+        prev_item = timeline_items[i-1]
+        prev_end = prev_item['actual_start'] + prev_item['duration']
+        
+        # Natural gap between sequential clips
+        gap_ms = random.randint(MIN_GAP_MS, MAX_GAP_MS)
+        natural_start = prev_end + gap_ms
+        
+        if item['scheduled_start'] == prev_item['scheduled_start']:
+            # Same timecode: play sequentially after previous clip
+            item['actual_start'] = max(item['scheduled_start'], natural_start)
+        else:
+            # Different timecodes: apply 4-second maximum delay limit
+            max_allowed_start = item['scheduled_start'] + MAX_SHIFT_MS
+            
+            if natural_start <= max_allowed_start:
+                # Natural start is within allowed 4s window - no overlap or truncation needed
+                item['actual_start'] = max(item['scheduled_start'], natural_start)
+            elif prev_end <= max_allowed_start:
+                # Previous clip has already finished playing before the 4s deadline;
+                # only the random gap was pushing it past. Start immediately after prev_end.
+                item['actual_start'] = max(item['scheduled_start'], prev_end)
+            else:
+                # Previous clip is still playing at the 4s deadline (prev_end > max_allowed_start).
+                # Check if different speakers can overlap.
+                prev_speaker = parse_speaker(prev_item['filename'])
+                curr_speaker = parse_speaker(item['filename'])
+                different_speakers = (
+                    prev_speaker is not None and 
+                    curr_speaker is not None and 
+                    prev_speaker.lower() != curr_speaker.lower()
+                )
+                
+                if different_speakers:
+                    # Allow overlap up to 800ms, ensuring previous clip has played for at least 200ms
+                    allowed_overlap = min(MAX_OVERLAP_MS, max(0, prev_item['duration'] - 200))
+                else:
+                    # Same speakers can never overlap
+                    allowed_overlap = 0
+                
+                overhang = prev_end - max_allowed_start
+                
+                if overhang <= allowed_overlap:
+                    # Overlap alone is enough! Previous clip plays in full, overlapping next clip.
+                    item['actual_start'] = max_allowed_start
+                else:
+                    # Overlap alone isn't enough (or no overlap allowed).
+                    # Truncate previous clip to end at max_allowed_start + allowed_overlap.
+                    target_prev_end = max_allowed_start + allowed_overlap
+                    target_prev_duration = target_prev_end - prev_item['actual_start']
+                    min_prev_dur = min(prev_item['duration'], MIN_CLIP_DURATION)
+                    
+                    if target_prev_duration >= min_prev_dur:
+                        # Safe to truncate to target duration
+                        truncate_ms = prev_item['duration'] - target_prev_duration
+                        fade_len = min(FADE_OUT_MS, target_prev_duration)
                         if fade_len > 0:
-                            prev_item['audio'] = prev_item['audio'][:truncate_at].fade_out(fade_len)
+                            prev_item['audio'] = prev_item['audio'][:target_prev_duration].fade_out(fade_len)
                         else:
-                            prev_item['audio'] = prev_item['audio'][:truncate_at]
+                            prev_item['audio'] = prev_item['audio'][:target_prev_duration]
                         prev_item['duration'] = len(prev_item['audio'])
+                        print(f"  Truncating {prev_item['filename']} by {truncate_ms}ms to fit (new duration: {prev_item['duration']}ms).")
                         item['actual_start'] = max_allowed_start
                     else:
-                        # Truncating to max_allowed_start would make previous clip too short or negative.
-                        # Preserve at least min_prev_dur (or full length if already shorter) and shift current item after it.
+                        # Truncating to target would fall below MIN_CLIP_DURATION.
+                        # Preserve minimum clip duration.
                         if prev_item['duration'] > min_prev_dur:
                             truncate_ms = prev_item['duration'] - min_prev_dur
-                            print(f"  Truncating {prev_item['filename']} by {truncate_ms}ms to minimum duration ({min_prev_dur}ms).")
                             fade_len = min(FADE_OUT_MS, min_prev_dur)
                             if fade_len > 0:
                                 prev_item['audio'] = prev_item['audio'][:min_prev_dur].fade_out(fade_len)
                             else:
                                 prev_item['audio'] = prev_item['audio'][:min_prev_dur]
                             prev_item['duration'] = len(prev_item['audio'])
-                        item['actual_start'] = prev_item['actual_start'] + prev_item['duration'] + GAP_MS
+                            print(f"  Truncating {prev_item['filename']} by {truncate_ms}ms to minimum duration ({min_prev_dur}ms).")
+                        
+                        # Place item with allowed overlap after the preserved minimum duration
+                        if allowed_overlap > 0:
+                            item['actual_start'] = max(
+                                item['scheduled_start'],
+                                prev_item['actual_start'] + prev_item['duration'] - allowed_overlap
+                            )
+                        else:
+                            item['actual_start'] = max(
+                                item['scheduled_start'],
+                                prev_item['actual_start'] + prev_item['duration'] + MIN_GAP_MS
+                            )
 
-            if item['actual_start'] > item['scheduled_start']:
-                shift = item['actual_start'] - item['scheduled_start']
-                print(f"  Shifted {item['filename']} by {shift}ms")
+        effective_prev_end = prev_item['actual_start'] + prev_item['duration']
+        if item['actual_start'] < effective_prev_end:
+            overlap_ms = effective_prev_end - item['actual_start']
+            print(f"  Overlapped {item['filename']} with previous speaker by {overlap_ms}ms")
+
+        if item['actual_start'] > item['scheduled_start']:
+            shift = item['actual_start'] - item['scheduled_start']
+            print(f"  Shifted {item['filename']} by {shift}ms")
 
     # Build final timeline
     print("Building final WAV...")
