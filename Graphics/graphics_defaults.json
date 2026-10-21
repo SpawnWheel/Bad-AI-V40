@@ -1,0 +1,169 @@
+{
+  "version": 1,
+  "enabled": true,
+  "base_resolution": [
+    1920,
+    1080
+  ],
+  "championship": {
+    "name": "Caterham Academy",
+    "short_name": "",
+    "season": "Season 15",
+    "round": "1",
+    "event_name": "Interlagos",
+    "logo": "Graphics/Logos/RCVWhite.png",
+    "logo_tint_white": false
+  },
+  "theme": {
+    "accent": "#E10600",
+    "accent2": "#FFC400",
+    "panel": "#0B0E14",
+    "panel_alpha": 0.62,
+    "text": "#FFFFFF",
+    "muted": "#9AA3B2"
+  },
+  "layout": {
+    "leaderboard": {
+      "enabled": true,
+      "x": 10,
+      "y": 110,
+      "w": 420,
+      "row_h": 25,
+      "pad": 15,
+      "rows": 0,
+      "header": true,
+      "footer": true
+    },
+    "map": {
+      "enabled": true,
+      "x": 1597,
+      "y": 113,
+      "w": 306,
+      "h": 299,
+      "header": true
+    },
+    "logo": {
+      "enabled": true,
+      "x": 1903,
+      "y": 14,
+      "h": 58,
+      "anchor": "right"
+    },
+    "extra_logos": [],
+    "ticker": {
+      "enabled": true,
+      "y": 1018,
+      "h": 46,
+      "speed": 150,
+      "max_duration": 40
+    },
+    "popups": {
+      "x": 40,
+      "bottom": 1000,
+      "max_w": 780
+    }
+  },
+  "auto_graphics": {
+    "title_card": true,
+    "commentators": true,
+    "start_ticker": true,
+    "standings_ticker": true,
+    "chequered": true,
+    "results": true
+  },
+  "popup_types": {
+    "driver_card": true,
+    "battle": true,
+    "overtake": true,
+    "race_control": true,
+    "pit_stop": true,
+    "stat": true,
+    "movers": true,
+    "headline": true
+  },
+  "popup_density": "medium",
+  "popup_duration": 7.0,
+  "drivers": {
+    "[RCV]Dom.Payne": {
+      "display": "Dom Payne",
+      "short": "PAYNE",
+      "number": "1",
+      "country": "GBR",
+      "team": "Itchy & Scratchy Racing",
+      "color": "#E11D48",
+      "car_image": "Graphics/CarPreviews/Dom Payne.dds"
+    },
+    "[RCV]ATIBoy69": {
+      "display": "ATI Boy",
+      "short": "ATIBOY",
+      "number": "",
+      "country": "GBR",
+      "team": "Cheech and Chong",
+      "color": "#10B981",
+      "car_image": "Graphics/CarPreviews/ATIBoy69.dds"
+    },
+    "[RCV]Neworder": {
+      "display": "New Order",
+      "short": "NEWORDER",
+      "number": "",
+      "country": "GBR",
+      "team": "Foxy Stoat Racing",
+      "color": "#F97316",
+      "car_image": "Graphics/CarPreviews/NewOrder.dds"
+    },
+    "Daniel Born": {
+      "display": "Daniel Born",
+      "short": "BORN",
+      "number": "",
+      "country": "RSA",
+      "team": "Red Bull Caterham",
+      "color": "#1E40AF",
+      "car_image": "Graphics/CarPreviews/Daniel Born.dds"
+    },
+    "[RCV]thommo": {
+      "display": "Thommo",
+      "short": "THOMMO",
+      "number": "58",
+      "country": "GBR",
+      "team": "White with Red Pinstripes",
+      "color": "#EF4444",
+      "car_image": "Graphics/CarPreviews/Thommo.dds"
+    },
+    "kf.MTG": {
+      "display": "MTG",
+      "short": "MTG",
+      "number": "",
+      "country": "USA",
+      "team": "Silent Assassin",
+      "color": "#6B7280",
+      "car_image": "Graphics/CarPreviews/MTG.dds"
+    },
+    "AlfaQuadSA": {
+      "display": "AlfaQuadSA",
+      "short": "ALFAQUAD",
+      "number": "12",
+      "country": "RSA",
+      "team": "Alfa Racing",
+      "color": "#047857",
+      "car_image": ""
+    },
+    "clinton.nortje": {
+      "display": "Clinton Nortje",
+      "short": "NORTJE",
+      "number": "",
+      "country": "RSA",
+      "team": "Back to the Future",
+      "color": "#8B5CF6",
+      "car_image": "Graphics/CarPreviews/clinton.nortje.dds"
+    },
+    "inthebagbud": {
+      "display": "InTheBagBud",
+      "short": "BAGBUD",
+      "number": "",
+      "country": "GBR",
+      "team": "Beavertown Neck Oil",
+      "color": "#F59E0B",
+      "car_image": "Graphics/CarPreviews/InTheBagBud.dds"
+    }
+  }
+}

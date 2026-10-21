@@ -207,6 +207,49 @@
             "output_extension": ".wav"
         },
         {
+            "name": "Graphics Setup",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "GraphicsOverlay/graphics_setup.py",
+            "working_dir": "GraphicsOverlay",
+            "description": "Place the broadcast graphics, logos and driver car images",
+            "input_slots": [
+                "video_file",
+                "raw_log"
+            ],
+            "input_labels": [
+                "Video File",
+                "Race Log"
+            ],
+            "output_slot": "graphics_config",
+            "output_folder": "",
+            "output_extension": "graphics_config.json"
+        },
+        {
+            "name": "Graphic Creator",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "AI Steps/graphic_creator.py",
+            "working_dir": "AI Steps",
+            "prompt_folder": "Graphics",
+            "description": "AI plans the pop-up graphics",
+            "input_slots": [
+                "graphics_config",
+                "commentary_text"
+            ],
+            "input_labels": [
+                "Graphics Config",
+                "Commentary Text"
+            ],
+            "output_slot": "graphics_plan",
+            "output_folder": "",
+            "output_extension": "graphics_plan.json"
+        },
+        {
             "name": "Combine Video and Commentary",
             "sims": [
                 "Raceroom",

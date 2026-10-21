@@ -778,6 +778,8 @@ class BadAILauncher:
                 filetypes = [("Video files", "*.mp4 *.mkv *.mov *.avi"), ("All files", "*.*")]
             elif slot_name == "final_audio":
                 filetypes = [("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
+            elif slot_name.startswith("graphics_"):
+                filetypes = [("JSON files", "*.json"), ("All files", "*.*")]
             else:
                 filetypes = [("Text files", "*.txt"), ("All files", "*.*")]
             selected_path = filedialog.askopenfilename(initialdir=initial_dir, filetypes=filetypes)

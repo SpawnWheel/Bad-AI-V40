@@ -132,3 +132,22 @@ Then click combine audio
 
 Now you’ll have your audio and video, take this into an editor and stick them on the timeline (They will  be synced up), and export. 
 
+
+
+Broadcast Graphics (optional):
+
+Scan again, then click Graphics Setup.
+
+This opens a preview of your race video. Move the slider to a moment where the in-game leaderboard and track map are showing.
+
+Layout tab: pick a region (leaderboard, map, logo, pop-ups, ticker) and drag a box over the video to place it. Leave Rows on 0 and the leaderboard frame grows/shrinks with the number of drivers.
+
+Branding tab: championship name, season, round, logo (from Graphics/Logos) and colours. Add sponsor/manufacturer logos here too. Tick "Recolour logo white" for dark logos.
+
+Drivers tab: links each name in the race log to a display name and a car preview image from Graphics/CarPreviews (matched automatically by name). "AI fill from project notes" reads your spotter guide for numbers, countries and liveries.
+
+Leave "Also use as the default for future races" ticked and the next race starts with the same branding, layout and drivers (saved in Graphics/graphics_defaults.json).
+
+Save & Close, scan again, then run Graphic Creator. The AI picks the moments for the pop-up graphics (driver cards, battles, overtakes, race control, pit stops, stats, positions gained, paddock news) and writes the text; every number on screen comes from the race data. Review them in Graphics Setup > Planned Graphics, and use "Render 30s test clip" to check a section.
+
+Combine Video and Commentary then adds the graphics automatically. Untick "Add graphics to the final video" in Graphics Setup to export without them.
