@@ -93,26 +93,38 @@ def trim_clip_silence(
     return trimmed
 
 
-def boost_soft_clip(audio, target_dbfs=-27.0, max_peak_dbfs=-6.0, max_gain_db=12.0, min_boost_db=1.5):
+def level_clip(audio, target_dbfs=-27.0, max_peak_dbfs=-6.0, max_gain_db=12.0, min_change_db=1.5):
     """
-    Applies a gentle gain boost to abnormally soft clips so they match normal
-    commentary loudness without peak clipping or over-amplifying room tone.
+    Pulls each clip's average loudness toward a common target so every
+    commentator voice enters the mix at a similar level. Soft clips are boosted
+    (limited by peak headroom so they never clip) and loud clips are attenuated.
     """
     if len(audio) == 0 or audio.dBFS == float('-inf'):
         return audio
 
-    if audio.dBFS < target_dbfs:
-        desired_gain = target_dbfs - audio.dBFS
+    orig_dbfs = audio.dBFS
+    if orig_dbfs < target_dbfs:
         headroom = max_peak_dbfs - audio.max_dBFS
-        gain_db = min(desired_gain, headroom, max_gain_db)
-        if gain_db >= min_boost_db:
-            orig_dbfs = audio.dBFS
-            audio = audio.apply_gain(gain_db)
-            print(
-                f"  Boosting soft clip by +{gain_db:.1f}dB "
-                f"({orig_dbfs:.1f} dBFS -> {audio.dBFS:.1f} dBFS, peak {audio.max_dBFS:.1f} dBFS)."
-            )
+        gain_db = min(target_dbfs - orig_dbfs, headroom, max_gain_db)
+    else:
+        gain_db = max(target_dbfs - orig_dbfs, -max_gain_db)
+
+    if abs(gain_db) >= min_change_db:
+        audio = audio.apply_gain(gain_db)
+        action = "Boosting soft" if gain_db > 0 else "Attenuating loud"
+        print(
+            f"  {action} clip by {gain_db:+.1f}dB "
+            f"({orig_dbfs:.1f} dBFS -> {audio.dBFS:.1f} dBFS, peak {audio.max_dBFS:.1f} dBFS)."
+        )
     return audio
+
+
+# Bus compressor + limiter applied (via ffmpeg) to the stitched timeline so the
+# different commentators' voices sit at a consistent level in the final mix.
+COMPRESSOR_FILTER = (
+    "acompressor=threshold=-30dB:ratio=3:attack=5:release=150:knee=4:makeup=6dB,"
+    "alimiter=limit=-1dB:attack=5:release=50:level=disabled"
+)
 
 
 def main(input_folder, output_file):
@@ -149,8 +161,8 @@ def main(input_folder, output_file):
         
         # Trim leading and trailing silence to clean speech boundaries
         audio = trim_clip_silence(audio)
-        # Boost abnormally soft clips so they sit consistently on the timeline
-        audio = boost_soft_clip(audio)
+        # Level each clip toward a common loudness so speakers sit consistently on the timeline
+        audio = level_clip(audio)
         
         scheduled_start_sec = parse_timecode(filename)
         scheduled_start_ms = scheduled_start_sec * 1000
@@ -291,8 +303,8 @@ def main(input_folder, output_file):
     for item in timeline_items:
         combined = combined.overlay(item['audio'], position=item['actual_start'])
     
-    print(f"Exporting to {output_file}...")
-    combined.export(output_file, format="wav")
+    print(f"Exporting to {output_file} (applying compressor)...")
+    combined.export(output_file, format="wav", parameters=["-af", COMPRESSOR_FILTER])
     print("Done!")
 
 if __name__ == "__main__":
