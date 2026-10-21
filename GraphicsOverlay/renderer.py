@@ -21,6 +21,7 @@ POPUP_IN = 0.45
 POPUP_OUT = 0.35
 TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
+CENTRED_TYPES = ('battle',)
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
 
@@ -99,6 +100,8 @@ class OverlayRenderer:
         # Hold, then crawl until every driver has passed through once more
         dur = TICKER_SLIDE * 2 + TICKER_HOLD + (strip.width + Templates.TICKER_GAP) / max(1, tk['speed'])
         dur = max(12.0, min(float(tk.get('max_duration', 40)), dur))
+        # Then keep it up (still crawling) so viewers have time to read the gaps
+        dur += float(tk.get('extra_hold', 10))
         return {'id': item_id, 'type': 'ticker', 'time': t, 'duration': dur, 'lane': 'ticker',
                 'auto': True, 'title': title, 'subtitle': subtitle}
 
@@ -213,6 +216,15 @@ class OverlayRenderer:
             y = (H - img.height) / 2 - 30 + (1 - p_in) * 30 - p_out * 20
             alpha = p_in * (1 - p_out)
             src = img
+        elif it['type'] in CENTRED_TYPES:
+            # Head-to-head cards sit centred above the ticker and open out from the middle
+            pz = self.cfg['layout']['popups']
+            y = pz['bottom'] - (img.height - margin) + p_out * 20
+            alpha = min(1.0, p_in * 1.4) * (1 - p_out)
+            vis = max(2, int(img.width * p_in)) if phase == 'in' else img.width
+            left = (img.width - vis) // 2
+            src = img.crop((left, 0, left + vis, img.height))
+            x = (W - img.width) / 2 + left
         else:
             pz = self.cfg['layout']['popups']
             x = pz['x'] - margin - (1 - p_in) * 40 - p_out * 30

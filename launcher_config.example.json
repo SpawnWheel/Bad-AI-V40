@@ -207,7 +207,7 @@
             "output_extension": ".wav"
         },
         {
-            "name": "Graphics Setup",
+            "name": "Graphics 1 - Setup (run first)",
             "sims": [
                 "Raceroom",
                 "AMS2"
@@ -228,7 +228,7 @@
             "output_extension": "graphics_config.json"
         },
         {
-            "name": "Graphic Creator",
+            "name": "Graphics 2 - AI Graphic Creator",
             "sims": [
                 "Raceroom",
                 "AMS2"

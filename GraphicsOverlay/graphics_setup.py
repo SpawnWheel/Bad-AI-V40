@@ -56,7 +56,8 @@ REGION_FIELDS = {
              ('h', 'Height', int)],
     'popups': [('x', 'Left (x)', int), ('bottom', 'Bottom (y)', int)],
     'ticker': [('enabled', 'Show tickers', bool), ('y', 'Top (y)', int), ('h', 'Height', int),
-               ('speed', 'Scroll speed (px/s)', int), ('max_duration', 'Max seconds on screen', int)],
+               ('speed', 'Scroll speed (px/s)', int), ('max_duration', 'Max crawl seconds', int),
+               ('extra_hold', 'Extra seconds held on screen', int)],
 }
 
 DRIVER_COLS = [('log', 'Log name', 150), ('display', 'Display name', 140), ('short', 'Short', 90),

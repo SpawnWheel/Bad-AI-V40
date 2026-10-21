@@ -136,7 +136,7 @@ Now you’ll have your audio and video, take this into an editor and stick them 
 
 Broadcast Graphics (optional):
 
-Scan again, then click Graphics Setup.
+Scan again, then click "Graphics 1 - Setup (run first)".
 
 This opens a preview of your race video. Move the slider to a moment where the in-game leaderboard and track map are showing.
 
@@ -148,6 +148,6 @@ Drivers tab: links each name in the race log to a display name and a car preview
 
 Leave "Also use as the default for future races" ticked and the next race starts with the same branding, layout and drivers (saved in Graphics/graphics_defaults.json).
 
-Save & Close, scan again, then run Graphic Creator. The AI picks the moments for the pop-up graphics (driver cards, battles, overtakes, race control, pit stops, stats, positions gained, paddock news) and writes the text; every number on screen comes from the race data. Review them in Graphics Setup > Planned Graphics, and use "Render 30s test clip" to check a section.
+Save & Close, scan again, then run "Graphics 2 - AI Graphic Creator". The AI picks the moments for the pop-up graphics (driver cards, battles, overtakes, race control, pit stops, stats, positions gained, paddock news) and writes the text; every number on screen comes from the race data. Review them in Graphics Setup > Planned Graphics, and use "Render 30s test clip" to check a section.
 
 Combine Video and Commentary then adds the graphics automatically. Untick "Add graphics to the final video" in Graphics Setup to export without them.
