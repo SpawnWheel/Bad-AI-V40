@@ -774,7 +774,13 @@ class BadAILauncher:
         if slot_name.lower().endswith("_folder") or slot_name.lower().endswith("_dir"):
             selected_path = filedialog.askdirectory(initialdir=initial_dir)
         else:
-            selected_path = filedialog.askopenfilename(initialdir=initial_dir, filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+            if slot_name == "video_file":
+                filetypes = [("Video files", "*.mp4 *.mkv *.mov *.avi"), ("All files", "*.*")]
+            elif slot_name == "final_audio":
+                filetypes = [("Audio files", "*.wav *.mp3"), ("All files", "*.*")]
+            else:
+                filetypes = [("Text files", "*.txt"), ("All files", "*.*")]
+            selected_path = filedialog.askopenfilename(initialdir=initial_dir, filetypes=filetypes)
             
         if selected_path:
             var.set(os.path.abspath(selected_path))

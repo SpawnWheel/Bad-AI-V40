@@ -205,6 +205,27 @@
             "output_slot": "final_audio",
             "output_folder": "",
             "output_extension": ".wav"
+        },
+        {
+            "name": "Combine Video and Commentary",
+            "sims": [
+                "Raceroom",
+                "AMS2"
+            ],
+            "script_path": "VideoCombiner/combine_video.py",
+            "working_dir": "VideoCombiner",
+            "description": "Clip the race video to the commentary and export an MP4",
+            "input_slots": [
+                "video_file",
+                "final_audio"
+            ],
+            "input_labels": [
+                "Video File",
+                "Commentary Audio"
+            ],
+            "output_slot": "final_video",
+            "output_folder": "",
+            "output_extension": "_final.mp4"
         }
     ]
 }
