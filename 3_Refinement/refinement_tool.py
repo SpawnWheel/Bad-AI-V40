@@ -667,10 +667,19 @@ class RefinementApp(QMainWindow):
         self.btn_prev_event.setEnabled(has_events)
         self.btn_next_event.setEnabled(has_events)
 
+    def _event_nav_reference_seconds(self):
+        """Returns the time to navigate from. While the video is still in the 5-second
+        lead-in before the last jumped-to event, use that event's time instead of the
+        playhead, so Next/Previous don't land on the same event again."""
+        current_seconds = self.media_player.position() / 1000.0
+        last = getattr(self, "_last_event_jump_seconds", None)
+        if last is not None and max(0, last - 5) - 0.5 <= current_seconds < last:
+            return last
+        return current_seconds
+
     def go_to_next_event(self):
         """Navigate to the next overtake or accident after the current video position and autoplay."""
-        current_ms = self.media_player.position()
-        current_seconds = current_ms / 1000.0
+        current_seconds = self._event_nav_reference_seconds()
 
         for row in range(self.table.rowCount()):
             if not self._is_event_row(row):
@@ -694,8 +703,7 @@ class RefinementApp(QMainWindow):
 
     def go_to_previous_event(self):
         """Navigate to the previous overtake or accident before the current video position and autoplay."""
-        current_ms = self.media_player.position()
-        current_seconds = current_ms / 1000.0
+        current_seconds = self._event_nav_reference_seconds()
 
         # Walk backwards looking for the first event before current position
         for row in range(self.table.rowCount() - 1, -1, -1):
@@ -721,6 +729,7 @@ class RefinementApp(QMainWindow):
     def _jump_to_event_row(self, row, seconds):
         """Seek the video to 5 seconds before the event, select the row, and autoplay."""
         seek_seconds = max(0, seconds - 5)
+        self._last_event_jump_seconds = seconds
         self.media_player.setPosition(int(seek_seconds * 1000))
         self.table.blockSignals(True)
         self.table.selectRow(row)
