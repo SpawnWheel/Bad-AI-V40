@@ -2,7 +2,7 @@
     "settings": {
         "hold_time": 0.01,
         "step_gap": 0.01,
-        "max_participants": 13,
+        "max_participants": 11,
         "api_key": ""
     }
 }

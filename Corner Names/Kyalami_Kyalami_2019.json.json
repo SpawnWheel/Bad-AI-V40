@@ -1,0 +1,62 @@
+{
+  "track_location": "Kyalami",
+  "track_variation": "Kyalami_2019",
+  "track_length": 4555.1,
+  "corners": [
+    {
+      "name": "Crowthorne",
+      "start": 633.4,
+      "end": 718.4
+    },
+    {
+      "name": "Jukskei Sweep",
+      "start": 760.8,
+      "end": 935.8
+    },
+    {
+      "name": "Barbeque",
+      "start": 989.6,
+      "end": 1089.6
+    },
+    {
+      "name": "Sunset Bend",
+      "start": 1546.2,
+      "end": 1771.2
+    },
+    {
+      "name": "Clubhouse Bend",
+      "start": 1924.7,
+      "end": 2044.7
+    },
+    {
+      "name": "The Esses",
+      "start": 2249.3,
+      "end": 2509.3
+    },
+    {
+      "name": "Leeukop",
+      "start": 2854.3,
+      "end": 2974.3
+    },
+    {
+      "name": "Mineshaft",
+      "start": 3015.0,
+      "end": 3445.0
+    },
+    {
+      "name": "Crocodiles",
+      "start": 3684.1,
+      "end": 3804.1
+    },
+    {
+      "name": "Cheetah Corner",
+      "start": 4003.8,
+      "end": 4123.8
+    },
+    {
+      "name": "Ingwe",
+      "start": 4252.4,
+      "end": 4327.4
+    }
+  ]
+}

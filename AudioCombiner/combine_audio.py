@@ -29,22 +29,91 @@ def parse_speaker(filename):
         return clean_speaker
     return None
 
-def trim_clip_silence(audio, silence_threshold=-35.0, chunk_size=10, buffer_ms=25):
+def detect_speech_offset(audio, silence_threshold, chunk_size=10, min_sustained_ms=60, lookahead_ms=250):
     """
-    Trims leading and trailing silence down to spoken audio,
-    leaving a 25ms buffer around speech boundaries.
+    Finds the millisecond offset where sustained speech begins, ignoring
+    isolated brief TTS clicks/pops (< min_sustained_ms) followed by silence.
     """
-    leading = detect_leading_silence(audio, silence_threshold, chunk_size)
-    trailing = detect_leading_silence(audio.reverse(), silence_threshold, chunk_size)
+    length = len(audio)
+    if length == 0 or audio.dBFS == float('-inf'):
+        return 0
 
-    start_ms = max(0, leading - buffer_ms)
-    end_ms = max(start_ms + 100, len(audio) - max(0, trailing - buffer_ms))
+    for t in range(0, length, chunk_size):
+        if audio[t:t + chunk_size].dBFS >= silence_threshold:
+            window_end = min(length, t + lookahead_ms)
+            active_ms = sum(
+                chunk_size for k in range(t, window_end, chunk_size)
+                if audio[k:k + chunk_size].dBFS >= silence_threshold
+            )
+            if active_ms >= min_sustained_ms:
+                return t
+    return 0
+
+
+def trim_clip_silence(
+    audio,
+    silence_threshold=-50.0,
+    chunk_size=10,
+    leading_buffer_ms=100,
+    trailing_buffer_ms=150,
+):
+    """
+    Trims leading and trailing dead air down to spoken audio using an adaptive
+    clip-relative silence threshold and generous leading/trailing buffers so
+    soft opening and closing words are never truncated.
+    """
+    if len(audio) == 0 or audio.dBFS == float('-inf'):
+        return audio
+
+    effective_threshold = max(
+        -65.0,
+        min(silence_threshold, audio.dBFS - 16.0, audio.max_dBFS - 32.0)
+    )
+
+    leading = detect_speech_offset(audio, effective_threshold, chunk_size)
+    trailing = detect_speech_offset(audio.reverse(), effective_threshold, chunk_size)
+
+    start_ms = max(0, leading - leading_buffer_ms)
+    end_ms = min(len(audio), max(start_ms + 100, len(audio) - max(0, trailing - trailing_buffer_ms)))
 
     trimmed_lead = start_ms
     trimmed_trail = len(audio) - end_ms
+    trimmed = audio[start_ms:end_ms]
+
+    if trimmed_lead > 0 and len(trimmed) > 30:
+        trimmed = trimmed.fade_in(15)
+    if trimmed_trail > 0 and len(trimmed) > 30:
+        trimmed = trimmed.fade_out(15)
+
     if trimmed_lead > 50 or trimmed_trail > 50:
-        print(f"  Trimming silence: {trimmed_lead}ms leading, {trimmed_trail}ms trailing.")
-    return audio[start_ms:end_ms]
+        print(
+            f"  Trimming silence (thresh {effective_threshold:.1f} dBFS): "
+            f"{trimmed_lead}ms leading, {trimmed_trail}ms trailing."
+        )
+    return trimmed
+
+
+def boost_soft_clip(audio, target_dbfs=-27.0, max_peak_dbfs=-6.0, max_gain_db=12.0, min_boost_db=1.5):
+    """
+    Applies a gentle gain boost to abnormally soft clips so they match normal
+    commentary loudness without peak clipping or over-amplifying room tone.
+    """
+    if len(audio) == 0 or audio.dBFS == float('-inf'):
+        return audio
+
+    if audio.dBFS < target_dbfs:
+        desired_gain = target_dbfs - audio.dBFS
+        headroom = max_peak_dbfs - audio.max_dBFS
+        gain_db = min(desired_gain, headroom, max_gain_db)
+        if gain_db >= min_boost_db:
+            orig_dbfs = audio.dBFS
+            audio = audio.apply_gain(gain_db)
+            print(
+                f"  Boosting soft clip by +{gain_db:.1f}dB "
+                f"({orig_dbfs:.1f} dBFS -> {audio.dBFS:.1f} dBFS, peak {audio.max_dBFS:.1f} dBFS)."
+            )
+    return audio
+
 
 def main(input_folder, output_file):
     if not os.path.exists(input_folder):
@@ -80,6 +149,8 @@ def main(input_folder, output_file):
         
         # Trim leading and trailing silence to clean speech boundaries
         audio = trim_clip_silence(audio)
+        # Boost abnormally soft clips so they sit consistently on the timeline
+        audio = boost_soft_clip(audio)
         
         scheduled_start_sec = parse_timecode(filename)
         scheduled_start_ms = scheduled_start_sec * 1000

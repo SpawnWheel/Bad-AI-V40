@@ -1,0 +1,62 @@
+{
+  "track_location": "Watkins_Glen",
+  "track_variation": "Watkins_Glen_GP",
+  "track_length": 5440.3,
+  "corners": [
+    {
+      "name": "The Main Straightaway",
+      "start": 5254.5,
+      "end": 134.2
+    },
+    {
+      "name": "Turn 1 (The 90)",
+      "start": 299.6,
+      "end": 439.6
+    },
+    {
+      "name": "The Esses",
+      "start": 750.3,
+      "end": 1205.3
+    },
+    {
+      "name": "The Back Straight",
+      "start": 1487.1,
+      "end": 1962.1
+    },
+    {
+      "name": "The Outer Loop",
+      "start": 2195.3,
+      "end": 2425.3
+    },
+    {
+      "name": "The Chute",
+      "start": 2532.0,
+      "end": 2652.0
+    },
+    {
+      "name": "Turn 6",
+      "start": 2748.1,
+      "end": 2923.1
+    },
+    {
+      "name": "The Toe",
+      "start": 3221.1,
+      "end": 3376.1
+    },
+    {
+      "name": "The Heel",
+      "start": 3942.8,
+      "end": 4062.8
+    },
+    {
+      "name": "Turn 9",
+      "start": 4265.0,
+      "end": 4385.0
+    },
+    {
+      "name": "Turn 10",
+      "start": 4674.7,
+      "end": 4794.7
+    }
+  ]
+}

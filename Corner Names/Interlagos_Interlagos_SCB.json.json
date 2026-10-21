@@ -1,0 +1,47 @@
+{
+  "track_location": "Interlagos",
+  "track_variation": "Interlagos_SCB",
+  "track_length": 4294.9,
+  "corners": [
+    {
+      "name": "The Senna Curves (T1)",
+      "start": 331.3,
+      "end": 451.3
+    },
+    {
+      "name": "The Back Straight",
+      "start": 890.3,
+      "end": 1205.3
+    },
+    {
+      "name": "T4",
+      "start": 1346.6,
+      "end": 1566.6
+    },
+    {
+      "name": "T6",
+      "start": 2009.6,
+      "end": 2229.6
+    },
+    {
+      "name": "The technical infield section",
+      "start": 2316.0,
+      "end": 2846.0
+    },
+    {
+      "name": "T12 leading onto the straight",
+      "start": 3239.4,
+      "end": 3334.4
+    },
+    {
+      "name": "The Main Straight",
+      "start": 3585.2,
+      "end": 4270.2
+    },
+    {
+      "name": "Braking zone into T1",
+      "start": 185.3,
+      "end": 305.3
+    }
+  ]
+}

@@ -39,6 +39,9 @@ When you notice positions change between the same drivers within two seconds and
 
 Only report the overtake if the driver behind wins the battle, and keeps it for over 3 seconds. Then the overtake should be at the timecode of the last overtake in the battle. If the battle had multiple overtakes and one came out the winner, say that XXX goes for the move, YYY is not making it easy, but XXX makes it stick.
 
+You should always include when a competitor has gone into the pits. These can just be added to the closest nearby event. They should not be the main event.
+Same for crossing the finish line, each must be reported, but can be added to other events if needed.
+
 So for example battles can be interpreted like this:
 Here's the data.
 00:02:55 - [OVERTAKE] James Small overtook Afred Smith for P1 in Hypercars.
