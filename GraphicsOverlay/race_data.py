@@ -25,6 +25,12 @@ R3E_FINISH_RE = re.compile(r'^(.+?) has finished the race in P(\d+)')
 CLASS_PREFIX_RE = re.compile(r'^\[[^\]]*\]\s*(?=P\d)')
 VEHICLE_SUFFIX_RE = re.compile(r'\s*\[[^\]]*\]\s*$')
 WATCH_RE = re.compile(r'Watching (.+?) \(P(\d+)\)')
+FASTEST_LAP_RE = re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest lap of the race: ([\d:.]+)'
+                            r'(?: on lap (\d+))?(?:, ([\d.]+)s quicker than (.+?) ([\d:.]+))?\.\s*$')
+# Radio messages written by the Refinement step: (Radio) Thommo to engineer: "..." Engineer: "..."
+RADIO_RE = re.compile(r'\(Radio\)\s*(.*)$', re.I)
+RADIO_SEGMENT_RE = re.compile(r'([^"“”:]{1,60}?):\s*["“]([^"“”]+)["”]')
+WORD_COUNT_RE = re.compile(r'\s*Commentate in \d+ words\.?\s*$', re.I)
 
 
 def hms_to_sec(h, m, s):
@@ -244,6 +250,19 @@ class RaceData:
             if cat == 'FLAG':
                 flag = msg.split(':', 1)[1].strip() if ':' in msg else msg
                 self.events.append({'t': t, 'type': 'flag', 'flag': flag})
+                continue
+
+            if cat == 'FASTEST_LAP':
+                m = FASTEST_LAP_RE.match(msg)
+                if m:
+                    name = self._match_driver(m.group(1).strip())
+                    # "X's 1:24.000" or "their own 1:24.000"
+                    prev = (m.group(6) or '').strip()
+                    prev = name if prev == 'their own' else (self._match_driver(prev[:-2]) if prev.endswith("'s")
+                                                             else prev) or None
+                    self.events.append({'t': t, 'type': 'fastest_lap', 'driver': name, 'pos': int(m.group(2)),
+                                        'lap_time': m.group(3), 'lap': int(m.group(4)) if m.group(4) else None,
+                                        'gain': m.group(5), 'prev_driver': prev, 'prev_time': m.group(7)})
                 continue
 
             if cat == 'FINISH':
@@ -487,6 +506,26 @@ def read_commentary(path):
             if m:
                 out.append((hms_to_sec(*m.group(1, 2, 3)), m.group(4).strip(), m.group(5).strip()))
     return out
+
+
+def read_radio_calls(paths):
+    """[{'t', 'speaker', 'segments': [(label, quote)]}] from the first video-timed log with (Radio) entries.
+
+    The refined/filtered logs are already in video time.
+    """
+    for path in paths:
+        calls = []
+        for t, _, msg in read_raw_lines(path):
+            m = RADIO_RE.search(msg)
+            if not m:
+                continue
+            body = WORD_COUNT_RE.sub('', m.group(1))
+            segments = [(lab.strip(' .,;-'), q.strip()) for lab, q in RADIO_SEGMENT_RE.findall(body)]
+            if segments:
+                calls.append({'t': t, 'speaker': segments[0][0], 'segments': segments})
+        if calls:
+            return calls
+    return []
 
 
 def commentator_names(commentary):

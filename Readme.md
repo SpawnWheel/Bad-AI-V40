@@ -140,7 +140,7 @@ Scan again, then click "Graphics 1 - Setup (run first)".
 
 This opens a preview of your race video. Move the slider to a moment where the in-game leaderboard and track map are showing.
 
-Layout tab: pick a region (leaderboard, map, logo, pop-ups, ticker) and drag a box over the video to place it. Leave Rows on 0 and the leaderboard frame grows/shrinks with the number of drivers.
+Layout tab: pick a region (leaderboard, map, logo, pop-ups, ticker, team radio) and drag a box over the video to place it. Leave Rows on 0 and the leaderboard frame grows/shrinks with the number of drivers.
 
 Branding tab: championship name, season, round, logo (from Graphics/Logos) and colours. Add sponsor/manufacturer logos here too. Tick "Recolour logo white" for dark logos.
 
@@ -149,5 +149,7 @@ Drivers tab: links each name in the race log to a display name and a car preview
 Leave "Also use as the default for future races" ticked and the next race starts with the same branding, layout and drivers (saved in Graphics/graphics_defaults.json).
 
 Save & Close, scan again, then run "Graphics 2 - AI Graphic Creator". The AI picks the moments for the pop-up graphics (driver cards, battles, overtakes, race control, pit stops, stats, positions gained, paddock news) and writes the text; every number on screen comes from the race data. Review them in Graphics Setup > Planned Graphics, and use "Render 30s test clip" to check a section.
+
+Three graphics are added automatically from the logs: the biggest gainer and biggest loser since the grid, one minute after the green flag; a purple Fastest Lap card whenever the AMS2 logger records a new fastest lap of the race (logged from lap 5 onwards), and F1-style team radio quotes on the middle right for every (Radio) message in the refined log. Both can be switched off under Automatic graphics.
 
 Combine Video and Commentary then adds the graphics automatically. Untick "Add graphics to the final video" in Graphics Setup to export without them.

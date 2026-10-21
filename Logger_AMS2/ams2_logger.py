@@ -272,6 +272,9 @@ class SharedMemory(ctypes.Structure):
 # Windows Virtual Key Code for F12
 VK_F12 = 0x7B
 
+# Fastest lap events are only announced once the leader has completed this many laps
+FASTEST_LAP_MIN_RACE_LAPS = 5
+
 class AMS2EventLogger:
     def __init__(self):
         self.shm = None
@@ -307,6 +310,8 @@ class AMS2EventLogger:
         self.sc_vehicle_on_track = False # Whether the SC vehicle is on track (not in pits)
         self.participant_pit_schedules = {} # name -> pit_schedule (for penalty detection)
         self.distance_history = {} # name -> list of (sim_time, total_distance)
+        self.fastest_lap = None # {"name", "time", "lap"} - best valid lap of the race so far
+        self.fastest_lap_announced = False # True once the race has reached FASTEST_LAP_MIN_RACE_LAPS
         self.last_track_key = ""
         self.current_track_corners = []
         self.corner_names_dir = self._find_corner_names_dir()
@@ -500,6 +505,8 @@ class AMS2EventLogger:
             self.sc_vehicle_on_track = False
             self.participant_pit_schedules.clear()
             self.distance_history.clear()
+            self.fastest_lap = None
+            self.fastest_lap_announced = False
 
         # Phase Updates
         if self.data.mPitMode != self.last_pit_mode:
@@ -812,6 +819,9 @@ class AMS2EventLogger:
                             for o_name in overtaken:
                                 self.last_overtake_time[o_name] = sim_now
 
+        # Fastest Lap
+        self.check_fastest_lap(new_positions, new_laps_completed, sim_now)
+
         # Accidents
         # COOLDOWN: No accidents for the first 20 seconds of the race
         green_flag_sim_time = self.starting_grid_pending_sim_time if self.starting_grid_pending_sim_time is not None else 0
@@ -935,6 +945,59 @@ class AMS2EventLogger:
         self.last_lap_distances = new_lap_distances
         self.last_laps_completed = new_laps_completed
         self.last_laps = new_laps
+
+    @staticmethod
+    def format_lap_time(seconds):
+        minutes, secs = divmod(seconds, 60)
+        return f"{int(minutes)}:{secs:06.3f}"
+
+    def check_fastest_lap(self, positions, laps_completed, sim_now):
+        """Tracks the race's fastest lap and logs it once the leader has done enough laps."""
+        if self.data.mSessionState != 5 or not self.green_flag_fired or not laps_completed:
+            return
+
+        # Best valid lap of each driver this race (AMS2 reports <= 0 until they have one)
+        best = None
+        for i in range(self.data.mNumParticipants):
+            p = self.data.mParticipantInfo[i]
+            if not p.mIsActive:
+                continue
+            name = self.decode(p.mName)
+            if name not in positions:
+                continue  # Safety car or not yet tracked
+            lap_time = self.data.mFastestLapTimes[i]
+            if lap_time > 10.0 and (best is None or lap_time < best[1]):
+                best = (name, lap_time)
+
+        if best is None:
+            return
+
+        previous = self.fastest_lap
+        improved = previous is None or best[1] < previous["time"] - 0.0005
+        if improved:
+            # The lap that was just completed is the one that set the time
+            self.fastest_lap = {"name": best[0], "time": best[1], "lap": laps_completed.get(best[0], 0)}
+
+        leader_laps = max(laps_completed.values())
+        if leader_laps < FASTEST_LAP_MIN_RACE_LAPS:
+            return
+
+        current = self.fastest_lap
+        name = current["name"]
+        lap_str = self.format_lap_time(current["time"])
+        lap_no = f" on lap {current['lap']}" if current["lap"] > 0 else ""
+        pos = positions.get(name, 0)
+        if not self.fastest_lap_announced:
+            # First announcement: the best lap set during the opening laps
+            self.fastest_lap_announced = True
+            self.log("FASTEST_LAP", f"{name} (P{pos}) holds the fastest lap of the race: {lap_str}{lap_no}.", sim_time=sim_now)
+        elif improved:
+            prev_str = ""
+            if previous:
+                gain = previous["time"] - current["time"]
+                prev_holder = "their own" if previous["name"] == name else f"{previous['name']}'s"
+                prev_str = f", {gain:.3f}s quicker than {prev_holder} {self.format_lap_time(previous['time'])}"
+            self.log("FASTEST_LAP", f"{name} (P{pos}) sets a new fastest lap of the race: {lap_str}{lap_no}{prev_str}.", sim_time=sim_now)
 
     def _record_distance_history(self, name, sim_time, total_distance):
         if name not in self.distance_history:

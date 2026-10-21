@@ -43,6 +43,7 @@ REGIONS = {
     'logo': ('Championship logo', '#f59e0b'),
     'popups': ('Pop-up graphics anchor', '#ec4899'),
     'ticker': ('Bottom ticker', '#a78bfa'),
+    'radio': ('Team radio (middle right)', '#f43f5e'),
 }
 
 REGION_FIELDS = {
@@ -58,6 +59,7 @@ REGION_FIELDS = {
     'ticker': [('enabled', 'Show tickers', bool), ('y', 'Top (y)', int), ('h', 'Height', int),
                ('speed', 'Scroll speed (px/s)', int), ('max_duration', 'Max crawl seconds', int),
                ('extra_hold', 'Extra seconds held on screen', int)],
+    'radio': [('right', 'Right edge (x)', int), ('cy', 'Vertical centre (y)', int), ('w', 'Width', int)],
 }
 
 DRIVER_COLS = [('log', 'Log name', 150), ('display', 'Display name', 140), ('short', 'Short', 90),
@@ -784,6 +786,9 @@ class GraphicsSetup:
         if key == 'ticker':
             tk_ = lay['ticker']
             return 0, tk_['y'], 1920, tk_['y'] + tk_['h']
+        if key == 'radio':
+            r = lay['radio']
+            return r['right'] - r['w'], r['cy'] - 100, r['right'], r['cy'] + 100
 
     def draw_guides(self):
         self.canvas.delete('guide')
@@ -834,6 +839,8 @@ class GraphicsSetup:
             lay['popups'].update(x=bx0, bottom=by1)
         elif key == 'ticker':
             lay['ticker'].update(y=by0, h=max(30, by1 - by0))
+        elif key == 'radio':
+            lay['radio'].update(right=bx1, cy=(by0 + by1) // 2, w=max(320, bx1 - bx0))
         self.sync_region_vars()
         self.refresh_preview()
 

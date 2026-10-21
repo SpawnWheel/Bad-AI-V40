@@ -7,6 +7,7 @@ from .drawing import (add_shadow, ellipsize, fit_font, fit_image, font, h_gradie
 from .race_data import fmt_clock
 
 LABEL_H = 30
+FASTEST_PURPLE = '#A239FF'
 PODIUM = {1: '#E8B923', 2: '#C3CBD6', 3: '#C9844A'}
 FLAG_COLORS = {
     'green': '#19C463', 'yellow': '#FFD200', 'double yellow': '#FFD200',
@@ -624,6 +625,143 @@ class Templates:
             round_rect(img, (24, y + 10, 32, y + 26), 2, th.accent2)
             ImageDraw.Draw(img).text((44, y + 2), r, font=f, fill=th.text)
             y += 38
+        return img
+
+    def card_start_movers(self, g):
+        """Biggest gainer and biggest loser since the grid, side by side."""
+        th = self.th
+        d = g.get('data', {})
+        cols = [(k, d[k]) for k in ('gainer', 'loser') if d.get(k)]
+        if not cols:
+            return None
+        col_w = 330
+        W = col_w * len(cols) + 8
+        panel_h = 128
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'AFTER THE START').upper(), stripe=th.accent)
+        for i, (key, r) in enumerate(cols):
+            x = 8 + i * col_w
+            if i:
+                round_rect(img, (x - 1, top + 16, x, top + panel_h - 16), 0, (255, 255, 255, 40))
+            good = key == 'gainer'
+            colr = th.green if good else th.red
+            text_vcenter(img, x + 18, top + 24, 'BIGGEST GAINER' if good else 'BIGGEST LOSER',
+                         font(17, 'bold_cond'), colr)
+            # Places gained/lost badge
+            round_rect(img, (x + 18, top + 42, x + 106, top + 110), 6, colr)
+            self.delta(img, x + 62, top + 76, r['gained'], 34, contrast_text(colr))
+            name = r['driver']
+            round_rect(img, (x + 120, top + 46, x + 123, top + 106), 0, self.driver_color(name))
+            f = fit_font(self.meta(name)['short'].upper(), col_w - 150, 32, 'bold_cond')
+            text_vcenter(img, x + 134, top + 62, self.meta(name)['short'].upper(), f, th.text)
+            text_vcenter(img, x + 134, top + 94, f"P{r['grid']} › P{r['pos']}", font(22, 'semibold_cond'), th.muted)
+        return img
+
+    def card_fastest_lap(self, g):
+        th = self.th
+        name, d = g['driver'], g.get('data', {})
+        purple = rgba(FASTEST_PURPLE)
+        car = self.car(name, 260, 110)
+        W = 600 + (car.width + 10 if car else 0)
+        panel_h = 112
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'FASTEST LAP').upper(), label_bg=purple,
+                                    top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
+                                    stripe=self.driver_color(name))
+        # Lap time in the purple block, stopwatch-style
+        lap_time = d.get('lap_time', '')
+        round_rect(img, (16, top + 14, 196, top + panel_h - 14), 6, purple)
+        text_vcenter(img, 106, top + 38, 'LAP TIME', font(15, 'semibold_cond'), (255, 255, 255, 200), 'm')
+        text_vcenter(img, 106, top + 68, lap_time, fit_font(lap_time, 164, 36, 'bold'), (255, 255, 255, 255), 'm')
+        self.name_block(img, 214, top + 10, name, 360, 36, 20)
+        sub = []
+        if d.get('lap'):
+            sub.append(f"LAP {d['lap']}")
+        if d.get('gain') and d.get('prev_driver'):
+            prev = 'OWN BEST' if d['prev_driver'] == name else self.meta(d['prev_driver'])['short'].upper()
+            sub.append(f"-{d['gain']}s ON {prev}")
+        line = g.get('text') or '  ·  '.join(sub)
+        f = font(19, 'semibold_cond')
+        text_vcenter(img, 214, top + 92, ellipsize(line, f, 370), f, th.muted)
+        if car:
+            img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        return img
+
+    @staticmethod
+    def _readable(color):
+        """Lifts dark livery colours so they still read on the dark panel."""
+        # Brighten to full value first (keeps reds red), then mix in white only if still too dark
+        scale = 255 / max(1, *color[:3])
+        r, g, b = (min(255, int(c * scale)) for c in color[:3])
+        lum = 0.299 * r + 0.587 * g + 0.114 * b
+        if lum < 80:
+            k = (80 - lum) / 160
+            r, g, b = (int(c + (255 - c) * k) for c in (r, g, b))
+        return (r, g, b, 255)
+
+    def card_radio(self, g):
+        """Team radio in the style of the F1 radio posts: SURNAME / RADIO header with the car number,
+        then the exchange as quoted lines - the driver's in their colour on the right, replies on the left."""
+        th = self.th
+        name = g.get('driver')
+        d = g.get('data', {})
+        segments = d.get('segments', [])[:4]
+        if not segments:
+            return None
+        W = int(self.cfg['layout']['radio'].get('w', 400))
+        col = self.driver_color(name) if name else th.accent
+        if max(col[:3]) - min(col[:3]) < 60:
+            # Grey/white/black liveries would blend with the white replies
+            col = th.accent
+        col = self._readable(col)
+        white = th.text
+        pad = 24
+        meta = self.meta(name) if name else {}
+        surname = (meta['display'].split()[-1] if name else d.get('speaker', 'TEAM')).upper()
+        number = str(meta.get('number') or '')
+
+        # Header: big number on the left, SURNAME over RADIO on the right
+        f_num = font(78, 'bold')
+        num_w = int(text_w(f_num, number)) + 18 if number else 0
+        f_head = fit_font(surname, W - pad * 2 - num_w, 44, 'bold')
+        f_radio = font(44, 'bold')
+        base_name, base_radio = 66, 112  # text baselines
+        head_h = base_radio + 22
+
+        f_line = font(23, 'bold_cond')
+        line_h = 27
+        text_max = W - pad * 2
+        blocks = []
+        for seg in segments:
+            lines = wrap(f"“{seg['quote'].upper()}”", f_line, text_max - 20, 3)
+            blocks.append((seg.get('is_driver'), lines))
+        body_h = sum(len(ls) * line_h for _, ls in blocks) + 12 * (len(blocks) - 1) + 30
+        H = head_h + body_h
+
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 3, rgba('#16171C', 0.88))
+        # Faint speed lines behind the header, fading out to the right
+        dr = ImageDraw.Draw(img)
+        for i, y in enumerate(range(base_name - 30, base_radio + 4, 6)):
+            x1 = int(W * (0.30 + 0.25 * ((i * 7) % 5) / 5))
+            dr.line((0, y, x1, y), fill=(255, 255, 255, 7 + (i % 2) * 4), width=2)
+        # Thin colour rule along the top
+        round_rect(img, (0, 0, W, 4), 0, col)
+
+        right = W - pad
+        ImageDraw.Draw(img).text((right, base_name), surname, font=f_head, fill=col, anchor='rs')
+        ImageDraw.Draw(img).text((right, base_radio), 'RADIO', font=f_radio, fill=white, anchor='rs')
+        if number:
+            ImageDraw.Draw(img).text((pad - 4, base_radio), number, font=f_num, fill=col, anchor='ls')
+
+        # Body: driver lines right-aligned in their colour, replies left-aligned in white
+        y = head_h + 12
+        for is_driver, lines in blocks:
+            for ln in lines:
+                if is_driver:
+                    ImageDraw.Draw(img).text((right, y), ln, font=f_line, fill=col, anchor='ra')
+                else:
+                    ImageDraw.Draw(img).text((pad, y), ln, font=f_line, fill=white, anchor='la')
+                y += line_h
+            y += 12
         return img
 
     def card_chequered(self, g):

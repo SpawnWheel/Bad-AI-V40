@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config as gcfg
 from .drawing import ease_in, ease_out
-from .race_data import commentator_names, read_commentary
+from .race_data import commentator_names, read_commentary, read_radio_calls
 from .templates import Templates, race_time_label
 
 POPUP_IN = 0.45
@@ -22,8 +22,11 @@ POPUP_OUT = 0.35
 TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
 CENTRED_TYPES = ('battle',)
+START_MOVERS_AFTER = 60.0  # seconds after the green flag
+RADIO_SPLIT = (' to ', ' over ', ' on ')
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
+AUTO_MAX_SHIFT = 30.0
 
 
 class OverlayRenderer:
@@ -75,6 +78,28 @@ class OverlayRenderer:
                         trows.append((pos, name, gap))
                     sub = f"INTERVAL  ·  {race_time_label(race, t)}"
                     items.append(self._ticker_item(f'auto_stand_{i}', t, 'LIVE STANDINGS', sub, trows))
+        if gf is not None and auto.get('start_movers'):
+            t = gf + START_MOVERS_AFTER
+            movers = race.movers_at(t)
+            if movers and (movers[0][1] > 0 or movers[-1][1] < 0):
+                rows = {}
+                for key, (name, gained) in (('gainer', movers[0]), ('loser', movers[-1])):
+                    if (gained > 0) if key == 'gainer' else (gained < 0):
+                        rows[key] = {'driver': name, 'grid': race.grid_position(name),
+                                     'pos': race.position_at(name, t), 'gained': gained}
+                items.append({'id': 'auto_start_movers', 'type': 'start_movers', 'time': t, 'duration': 8.0,
+                              'lane': 'popup', 'auto': True, 'shift': True, 'data': rows})
+        if auto.get('fastest_lap'):
+            for i, e in enumerate(race.events_video()):
+                if e['type'] != 'fastest_lap' or (gf is not None and e['t'] < gf):
+                    continue
+                if lf is not None and e['t'] > lf + 5:
+                    continue
+                items.append({'id': f'auto_fl_{i}', 'type': 'fastest_lap', 'time': e['t'] + 1.0, 'duration': 7.0,
+                              'lane': 'popup', 'auto': True, 'shift': True, 'driver': e['driver'],
+                              'data': {k: e.get(k) for k in ('lap_time', 'lap', 'gain', 'prev_driver')}})
+        if auto.get('radio'):
+            items.extend(self._radio_items())
         if lf is not None and auto.get('chequered'):
             winner = race.finish[0][1]
             items.append({'id': 'auto_cheq', 'type': 'chequered', 'time': lf + 0.5, 'duration': 7.0,
@@ -91,6 +116,32 @@ class OverlayRenderer:
             # Long duration: it stays up until the video ends
             items.append({'id': 'auto_results', 'type': 'results', 'time': start, 'duration': 90.0,
                           'lane': 'center', 'auto': True, 'data': {'rows': rows}})
+        return items
+
+    def _radio_items(self):
+        from .creator import NameResolver  # creator imports this module
+        resolve = NameResolver(self.cfg, self.race.drivers)
+        items = []
+        files = gcfg.project_files(self.project_path)
+        for i, call in enumerate(read_radio_calls(files['video_timed'])):
+            # "Thommo to engineer" / "Engineer to Payne" / "Payne over team radio"
+            parts = [call['speaker']]
+            for sep in RADIO_SPLIT:
+                parts = [p for chunk in parts for p in chunk.split(sep)]
+            driver = next((resolve(p) for p in parts if resolve(p)), None)
+            segments = []
+            for label, quote in call['segments']:
+                head = label
+                for sep in RADIO_SPLIT:
+                    head = head.split(sep)[0]
+                is_driver = bool(driver) and resolve(head) == driver
+                shown = self.tpl.meta(driver)['short'] if is_driver else head
+                segments.append({'label': shown, 'quote': quote, 'is_driver': is_driver})
+            words = sum(len(s['quote'].split()) for s in segments[:3])
+            dur = max(6.0, min(12.0, 3.0 + words * 0.32))
+            items.append({'id': f'auto_radio_{i}', 'type': 'radio', 'time': float(call['t']), 'duration': dur,
+                          'lane': 'radio', 'auto': True, 'driver': driver,
+                          'data': {'speaker': parts[0], 'segments': segments}})
         return items
 
     def _ticker_item(self, item_id, t, title, subtitle, rows):
@@ -120,26 +171,40 @@ class OverlayRenderer:
 
         placed = [it for it in auto if it['lane'] == 'ticker']
         blocking = []  # popup + centre lane intervals
-        for it in sorted([a for a in auto if a['lane'] != 'ticker'], key=lambda x: x['time']):
+        for it in sorted([a for a in auto if a['lane'] in ('popup', 'center') and not a.get('shift')],
+                         key=lambda x: x['time']):
             blocking.append((it['time'], it['time'] + it['duration']))
             placed.append(it)
-        for it in sorted(planned, key=lambda x: float(x['time'])):
-            t = float(it['time'])
-            start = t
-            for _ in range(20):
-                clash = next(((s, e) for s, e in blocking
-                              if t < e + LANE_GAP and t + it['duration'] + LANE_GAP > s), None)
-                if not clash:
-                    break
-                t = clash[1] + LANE_GAP
-            if t - start > MAX_SHIFT:
-                print(f"  Skipping {it['type']} at {start:.0f}s (no free slot nearby)")
-                continue
-            it['time'] = t
-            blocking.append((t, t + it['duration']))
-            placed.append(it)
+        # Automatic pop-ups that may move a little (fastest lap) get first pick of the free slots
+        shiftable = sorted([a for a in auto if a.get('shift')], key=lambda x: x['time'])
+        for it in shiftable + sorted(planned, key=lambda x: float(x['time'])):
+            if self._place(it, blocking, AUTO_MAX_SHIFT if it.get('auto') else MAX_SHIFT):
+                placed.append(it)
+        # Team radio has its own slot on the right, one message at a time
+        radio_blocking = []
+        for it in sorted([a for a in auto if a['lane'] == 'radio'], key=lambda x: x['time']):
+            if self._place(it, radio_blocking, AUTO_MAX_SHIFT):
+                placed.append(it)
         placed.sort(key=lambda x: x['time'])
         return placed
+
+    @staticmethod
+    def _place(it, blocking, max_shift):
+        """Moves it to the first free slot at or after its time; False if that is too far away."""
+        t = float(it['time'])
+        start = t
+        for _ in range(20):
+            clash = next(((s, e) for s, e in blocking
+                          if t < e + LANE_GAP and t + it['duration'] + LANE_GAP > s), None)
+            if not clash:
+                break
+            t = clash[1] + LANE_GAP
+        if t - start > max_shift:
+            print(f"  Skipping {it['type']} at {start:.0f}s (no free slot nearby)")
+            return False
+        it['time'] = t
+        blocking.append((t, t + it['duration']))
+        return True
 
     # ------------------------------------------------------------------ per-frame state
     def _active(self, t):
@@ -216,6 +281,17 @@ class OverlayRenderer:
             y = (H - img.height) / 2 - 30 + (1 - p_in) * 30 - p_out * 20
             alpha = p_in * (1 - p_out)
             src = img
+        elif it['lane'] == 'radio':
+            # Middle right: slides in from the right edge, wiping open right-to-left
+            rz = self.cfg['layout']['radio']
+            x = rz['right'] + margin - img.width + (1 - p_in) * 60 + p_out * 30
+            y = rz['cy'] - img.height / 2
+            alpha = min(1.0, p_in * 1.4) * (1 - p_out)
+            src = img
+            if phase == 'in':
+                vis = max(1, int(img.width * p_in))
+                src = img.crop((img.width - vis, 0, img.width, img.height))
+                x += img.width - vis
         elif it['type'] in CENTRED_TYPES:
             # Head-to-head cards sit centred above the ticker and open out from the middle
             pz = self.cfg['layout']['popups']

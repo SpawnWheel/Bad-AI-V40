@@ -38,6 +38,9 @@ AUTO_TYPES = {
     'commentators': 'Commentator names',
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
+    'start_movers': 'Biggest gainer and loser a minute after the start',
+    'fastest_lap': 'Fastest lap of the race (from lap 5)',
+    'radio': 'Team radio quotes (middle right)',
     'chequered': 'Chequered flag banner',
     'results': 'Final classification panel',
 }
@@ -74,6 +77,8 @@ DEFAULT_CONFIG = {
         'ticker': {'enabled': True, 'y': 1018, 'h': 46, 'speed': 150, 'max_duration': 40,
                    'extra_hold': 10},
         'popups': {'x': 40, 'bottom': 1000, 'max_w': 780},
+        # Team radio quotes, F1 style: anchored by their right edge and vertical centre
+        'radio': {'right': 1880, 'cy': 640, 'w': 400},
     },
     'auto_graphics': {k: True for k in AUTO_TYPES},
     'popup_types': {k: True for k in POPUP_TYPES},

@@ -165,6 +165,9 @@ def build_brief(project_path, cfg, race, renderer):
             timeline.append((t, f"STANDINGS {rows}"))
         elif typ == 'finish':
             timeline.append((t, f"FINISH {e['driver']} P{e['pos']}"))
+        elif typ == 'fastest_lap':
+            lap = f" on lap {e['lap']}" if e.get('lap') else ''
+            timeline.append((t, f"FASTEST LAP {e['driver']} {e['lap_time']}{lap}"))
         elif typ == 'green':
             timeline.append((t, 'GREEN FLAG - race start'))
     for b in battles:
@@ -189,6 +192,11 @@ def build_brief(project_path, cfg, race, renderer):
     for it in renderer.items:
         if it['lane'] in ('popup', 'center'):
             lines.append(f"{fmt_clock(it['time'])}-{fmt_clock(it['time'] + min(it['duration'], 40))} {it['type']}")
+    radio = [it for it in renderer.items if it['lane'] == 'radio']
+    if radio:
+        lines.append('(Team radio quotes are shown automatically on the right at: '
+                     + ', '.join(fmt_clock(it['time']) for it in radio)
+                     + ' - popups may coexist with them; do not repeat a radio quote as a headline.)')
     lines.append('(A standings ticker also runs along the bottom at: '
                  + ', '.join(fmt_clock(it['time']) for it in renderer.items if it['lane'] == 'ticker')
                  + ' - popups may coexist with it.)')
@@ -418,7 +426,8 @@ def build_plan(project_path, cfg, race, raw_entries, source):
             dropped += 1
             print(f"  - dropped {raw.get('type')} @ {raw.get('time')}: {reason}")
     # Keep clear of the automatic graphics
-    reserved = [(it['time'], it['time'] + it['duration']) for it in renderer.items if it['lane'] != 'ticker']
+    reserved = [(it['time'], it['time'] + it['duration']) for it in renderer.items
+                if it['lane'] in ('popup', 'center')]
     good = [g for g in good if not any(s - 2 < g['time'] < e + 1 for s, e in reserved)] if reserved else good
     plan = {'source': source, 'offset_sec': race.offset, 'graphics': finalize(good, cfg)}
     print(f"  {len(plan['graphics'])} graphics kept, {dropped} dropped")
