@@ -213,6 +213,8 @@ def settings_block(cfg, race):
             f"Allowed types: {', '.join(types)}\n"
             f"Window: {fmt_clock(gf + 15)} to {fmt_clock(lf)}\n"
             f"Target number of graphics: about {target} (at least {max(8, gap // 3)} seconds between graphics)\n"
+            f"Overtake cards: at most {gcfg.OVERTAKE_MAX}, at least {int(gcfg.OVERTAKE_MIN_GAP // 60)} minutes apart"
+            f"{'; lead changes are covered automatically, never use overtake for P1' if cfg['auto_graphics'].get('new_leader') else ''}\n"
             f"Default duration: {cfg.get('popup_duration', 7)} seconds\n")
 
 
@@ -282,9 +284,11 @@ def resolve_entry(raw, cfg, race, resolve, facts):
         ev = _nearest(events, t, lambda e: e['type'] == 'overtake' and e['driver'] == d1, 25)
         if not ev:
             return None, f"no overtake by {d1} near {fmt_clock(t)}"
+        if ev['pos'] == 1 and cfg['auto_graphics'].get('new_leader'):
+            return None, 'lead changes get the automatic new leader banner'
         g['driver'], g['driver2'] = d1, ev['victim']
         g['time'] = max(t, ev['t'] + 1.0)
-        data = {'pos': ev['pos'], 'victim': ev['victim'], 'corner': ev['corner']}
+        data = {'pos': ev['pos'], 'victim': ev['victim'], 'victims': ev['victims'], 'corner': ev['corner']}
 
     elif typ == 'race_control':
         if not g['title']:
@@ -370,7 +374,7 @@ def rule_based(cfg, race):
         t = e['t']
         if t < gf + 20 or t > lf:
             continue
-        if e['type'] == 'overtake' and e['pos'] <= 2 and enabled.get('overtake'):
+        if e['type'] == 'overtake' and 2 <= e['pos'] <= 3 and enabled.get('overtake'):
             picks.append((2, {'type': 'overtake', 'time': t + 1, 'driver': e['driver']}))
         elif e['type'] == 'incident' and enabled.get('race_control'):
             where = f" - {e['where'].upper()}" if e['where'] else ''
@@ -412,7 +416,8 @@ def build_plan(project_path, cfg, race, raw_entries, source):
     reserved = [(it['time'], it['time'] + it['duration']) for it in renderer.items
                 if it['lane'] in ('popup', 'center')]
     good = [g for g in good if not any(s - 2 < g['time'] < e + 1 for s, e in reserved)] if reserved else good
-    plan = {'source': source, 'offset_sec': race.offset, 'graphics': finalize(good, cfg)}
+    good = gcfg.thin_overtakes(good)
+    plan ={'source': source, 'offset_sec': race.offset, 'graphics': finalize(good, cfg)}
     print(f"  {len(plan['graphics'])} graphics kept, {dropped} dropped")
     return plan
 

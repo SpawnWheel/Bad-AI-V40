@@ -22,7 +22,11 @@ POPUP_OUT = 0.35
 TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
 CENTRED_TYPES = ('battle',)
+# type -> (start after pop-in begins, duration) of the held animation
+ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1)}
 START_MOVERS_AFTER = 60.0  # seconds after the green flag
+LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening seconds
+LEADER_SETTLE = 8.0        # if the lead swaps again this soon, only the later change gets a banner
 RADIO_SPLIT = (' to ', ' over ', ' on ')
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
@@ -100,6 +104,15 @@ class OverlayRenderer:
                 items.append({'id': f'auto_fl_{i}', 'type': 'fastest_lap', 'time': e['t'] + 1.0, 'duration': 7.0,
                               'lane': 'popup', 'auto': True, 'shift': True, 'driver': e['driver'],
                               'data': {k: e.get(k) for k in ('lap_time', 'lap', 'gain', 'prev_driver')}})
+        if gf is not None and auto.get('new_leader'):
+            passes = [e for e in race.events_video() if e['type'] == 'overtake' and e['pos'] == 1
+                      and e['t'] >= gf + LEADER_AFTER and (lf is None or e['t'] <= lf)]
+            for i, e in enumerate(passes):
+                if i + 1 < len(passes) and passes[i + 1]['t'] - e['t'] < LEADER_SETTLE:
+                    continue
+                items.append({'id': f'auto_leader_{i}', 'type': 'new_leader', 'time': e['t'] + 1.0,
+                              'duration': 6.5, 'lane': 'top', 'auto': True, 'driver': e['driver'],
+                              'driver2': e['victim'], 'data': {'victims': e['victims'], 'corner': e['corner']}})
         if auto.get('pit_stops'):
             items.extend(self._pit_items())
         if auto.get('radio'):
@@ -192,7 +205,10 @@ class OverlayRenderer:
             g.setdefault('id', f'plan_{i}')
             g.setdefault('duration', self.cfg.get('popup_duration', 7.0))
             g['lane'] = 'popup'
+            if g['type'] == 'overtake' and not self._refresh_overtake(g):
+                continue
             planned.append(g)
+        planned = gcfg.thin_overtakes(planned)
 
         placed = [it for it in auto if it['lane'] == 'ticker']
         blocking = []  # popup + centre lane intervals
@@ -205,13 +221,30 @@ class OverlayRenderer:
         for it in shiftable + sorted(planned, key=lambda x: float(x['time'])):
             if self._place(it, blocking, AUTO_MAX_SHIFT if it.get('auto') else MAX_SHIFT):
                 placed.append(it)
-        # Team radio has its own slot on the right, one message at a time
-        radio_blocking = []
-        for it in sorted([a for a in auto if a['lane'] == 'radio'], key=lambda x: x['time']):
-            if self._place(it, radio_blocking, AUTO_MAX_SHIFT):
-                placed.append(it)
+        # Team radio and the leader banner have their own slots, one at a time
+        for lane in ('radio', 'top'):
+            lane_blocking = []
+            for it in sorted([a for a in auto if a['lane'] == lane], key=lambda x: x['time']):
+                if self._place(it, lane_blocking, AUTO_MAX_SHIFT):
+                    placed.append(it)
         placed.sort(key=lambda x: x['time'])
         return placed
+
+    def _refresh_overtake(self, g):
+        """Re-reads a planned overtake from the race data (plans made before passes on pitting or
+        stopped cars were filtered out, or before multi-car passes were stored). False = drop it."""
+        evs = [e for e in self.race.events_video() if e['type'] == 'overtake' and e['driver'] == g.get('driver')
+               and abs(e['t'] - float(g['time'])) <= 25]
+        if not evs:
+            print(f"  Skipping overtake at {float(g['time']):.0f}s (not a real on-track pass)")
+            return False
+        ev = min(evs, key=lambda e: abs(e['t'] - float(g['time'])))
+        if ev['pos'] == 1 and self.cfg['auto_graphics'].get('new_leader'):
+            return False  # the leader banner covers it
+        g['driver2'] = ev['victim']
+        g['data'] = {**(g.get('data') or {}), 'pos': ev['pos'], 'victim': ev['victim'],
+                     'victims': ev['victims'], 'corner': ev['corner']}
+        return True
 
     @staticmethod
     def _place(it, blocking, max_shift):
@@ -252,8 +285,23 @@ class OverlayRenderer:
                 scroll = int(self._ticker_scroll(it, t))
                 key.append((it['id'], phase, idx, scroll))
             else:
-                key.append((it['id'],) + self._phase(it, t, POPUP_IN, POPUP_OUT))
+                key.append((it['id'],) + self._phase(it, t, POPUP_IN, POPUP_OUT) + (self._anim_step(it, t),))
         return tuple(key)
+
+    def _anim_timing(self, it):
+        """(start, duration, frame count) of a card's held animation."""
+        start, dur = ANIMATED[it['type']]
+        if it['type'] == 'overtake':
+            # Passing several cars at once takes a little longer to play out
+            dur += 0.3 * (len(Templates.overtake_victims(it)) - 1)
+        return start, dur, max(1, int(dur * self.fps))
+
+    def _anim_step(self, it, t):
+        """Frame index of a card's held animation (None for static cards)."""
+        if it['type'] not in ANIMATED:
+            return None
+        start, dur, steps = self._anim_timing(it)
+        return int(max(0, min(steps, (t - it['time'] - start) / dur * steps)))
 
     def _ticker_scroll(self, it, t):
         strip = self._strips[it['id']]
@@ -261,14 +309,19 @@ class OverlayRenderer:
         local = t - it['time'] - TICKER_SLIDE - TICKER_HOLD
         return max(0.0, local) * tk['speed']
 
-    def _card(self, it):
-        if it['id'] not in self._cards:
+    def _card(self, it, t):
+        step = self._anim_step(it, t)
+        key = (it['id'], step)
+        if key not in self._cards:
+            anim = None
+            if step is not None:
+                anim = step / self._anim_timing(it)[2]
             try:
-                self._cards[it['id']] = self.tpl.build(it)
+                self._cards[key] = self.tpl.build(it, anim)
             except Exception as e:
                 print(f"  Could not draw {it.get('type')} graphic at {it.get('time', 0):.0f}s: {e}")
-                self._cards[it['id']] = None
-        return self._cards[it['id']]
+                self._cards[key] = None
+        return self._cards[key]
 
     def render_frame(self, t):
         frame = self.static.copy()
@@ -288,7 +341,7 @@ class OverlayRenderer:
                                              self._strips[it['id']], self._ticker_scroll(it, t), slide)
                 frame.alpha_composite(band)
                 continue
-            built = self._card(it)
+            built = self._card(it, t)
             if not built:
                 continue
             img, margin = built
@@ -317,6 +370,15 @@ class OverlayRenderer:
                 vis = max(1, int(img.width * p_in))
                 src = img.crop((img.width - vis, 0, img.width, img.height))
                 x += img.width - vis
+        elif it['lane'] == 'top':
+            # Top centre: drops in from above while opening out from the middle
+            lz = self.cfg['layout']['leader']
+            y = lz['y'] - margin - (1 - p_in) * 24 - p_out * 24
+            alpha = min(1.0, p_in * 1.4) * (1 - p_out)
+            vis = max(2, int(img.width * p_in)) if phase == 'in' else img.width
+            left = (img.width - vis) // 2
+            src = img.crop((left, 0, left + vis, img.height))
+            x = (W - img.width) / 2 + left
         elif it['type'] in CENTRED_TYPES:
             # Head-to-head cards sit centred above the ticker and open out from the middle
             pz = self.cfg['layout']['popups']

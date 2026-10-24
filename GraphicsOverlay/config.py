@@ -39,6 +39,7 @@ AUTO_TYPES = {
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',
     'fastest_lap': 'Fastest lap of the race (from lap 5)',
+    'new_leader': 'New race leader banner (top centre, from 20 seconds into the race)',
     'pit_stops': 'Pit stop pop-up when a car pits (cars pitting together share one)',
     'radio': 'Team radio quotes (middle right)',
     'chequered': 'Chequered flag banner',
@@ -79,6 +80,8 @@ DEFAULT_CONFIG = {
         'popups': {'x': 40, 'bottom': 1000, 'max_w': 780},
         # Team radio quotes, F1 style: anchored by their right edge and vertical centre
         'radio': {'right': 1880, 'cy': 640, 'w': 400},
+        # New race leader banner, centred at the top
+        'leader': {'y': 24},
     },
     'auto_graphics': {k: True for k in AUTO_TYPES},
     'popup_types': {k: True for k in POPUP_TYPES},
@@ -88,6 +91,23 @@ DEFAULT_CONFIG = {
 }
 
 DENSITY_GAP = {'low': 75, 'medium': 45, 'high': 28}
+
+# Position-change cards are shown now and then, not for every pass
+OVERTAKE_MAX = 8
+OVERTAKE_MIN_GAP = 120.0  # seconds between two of them
+
+
+def thin_overtakes(graphics):
+    """Keeps the few overtake cards worth showing: front-runners first, well spread out."""
+    ranked = sorted([g for g in graphics if g.get('type') == 'overtake'],
+                    key=lambda g: ((g.get('data') or {}).get('pos') or 99, float(g['time'])))
+    keep = []
+    for g in ranked:
+        if len(keep) < OVERTAKE_MAX and all(abs(float(g['time']) - float(k['time'])) >= OVERTAKE_MIN_GAP
+                                            for k in keep):
+            keep.append(g)
+    kept = {id(g) for g in keep}
+    return [g for g in graphics if g.get('type') != 'overtake' or id(g) in kept]
 
 
 def deep_merge(base, override):

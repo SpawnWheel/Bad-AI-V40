@@ -1,5 +1,5 @@
 """Broadcast graphic templates, drawn with Pillow in 1920x1080 space."""
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from . import config as gcfg
 from .drawing import (add_shadow, ellipsize, fit_font, fit_image, font, h_gradient, load_image, polygon,
@@ -7,6 +7,7 @@ from .drawing import (add_shadow, ellipsize, fit_font, fit_image, font, h_gradie
 from .race_data import fmt_clock
 
 LABEL_H = 30
+MAX_PASSED = 4  # most passed drivers one position-change card stacks
 FASTEST_PURPLE = '#A239FF'
 PODIUM = {1: '#E8B923', 2: '#C3CBD6', 3: '#C9844A'}
 FLAG_COLORS = {
@@ -338,11 +339,12 @@ class Templates:
         return frame
 
     # ------------------------------------------------------------------ popup cards
-    def build(self, g):
+    def build(self, g, anim=None):
+        """anim: 0..1 progress for cards that animate while held (see renderer.ANIMATED)."""
         fn = getattr(self, f"card_{g['type']}", None)
         if fn is None:
             return None
-        img = fn(g)
+        img = fn(g) if anim is None else fn(g, anim)
         if img is None:
             return None
         return self.finish(img)
@@ -436,7 +438,88 @@ class Templates:
             self.text_lines(img, cx, top + 116, lines, f_text, th.muted, 24, 'ma')
         return img
 
-    def card_overtake(self, g):
+    @staticmethod
+    def overtake_victims(g):
+        """Passed drivers, top of the order first (multi-car passes list several)."""
+        d = g.get('data', {})
+        victims = list(d.get('victims') or [])
+        if not victims and (g.get('driver2') or d.get('victim')):
+            victims = [g.get('driver2') or d.get('victim')]
+        return victims[:MAX_PASSED]
+
+    def card_overtake(self, g, swap=1.0):
+        """Mini leaderboard: the overtaker's row slides up over each passed driver's row in turn.
+
+        swap 0..1 = before..after the pass (the renderer animates it)."""
+        th = self.th
+        name, d = g['driver'], g.get('data', {})
+        victims = self.overtake_victims(g)
+        pos = d.get('pos')
+        if not victims or not pos:
+            return self._overtake_single(g)
+        n = len(victims)
+        smooth = lambda p: p * p * (3 - 2 * p)
+        e = smooth(swap)
+        car = self.car(name, 260, 110)
+        row_w, row_h, gap, pad = 430, (58 if n <= 2 else 50), 6, 12
+        f = font(19, 'semibold_cond')
+        lines = wrap(g.get('text') or (d.get('corner') or '').upper(), f, row_w + 80, 2)
+        rows_h = row_h * (n + 1) + gap * n
+        panel_h = pad * 2 + rows_h + (len(lines) * 24 + 4 if lines else 0)
+        W = 92 + row_w + 20 + (car.width + 10 if car else 0)  # 20 leaves room for the row lifting out
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'POSITION CHANGE').upper(),
+                                    top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0))
+        slot_y = lambda s: top + pad + s * (row_h + gap)
+        # Fixed position slots; the top one turns green as the overtaker arrives
+        top_col = tuple(int(a + (b - a) * smooth(max(0.0, min(1.0, 1 - n * (1 - e))))) for a, b in zip(th.text, th.green))
+        f_pos = font(30 if row_h > 52 else 26, 'bold')
+        for s in range(n + 1):
+            y = slot_y(s)
+            round_rect(img, (pad, y, 84, y + row_h), 6, top_col if s == 0 else th.text)
+            text_vcenter(img, (pad + 84) / 2, y + row_h / 2 + 1, f"P{pos + s}", f_pos, th.dark_text, 'm')
+        arrows = max(0.0, min(1.0, (swap - 0.8) / 0.2))
+        x0 = 92
+        # The overtaker climbs from the bottom slot to the top; each passed driver drops one slot
+        # as it goes by, and the overtaker lifts out to the right while it passes over them
+        ov_slot = n * (1 - e)
+        for i, victim in enumerate(victims):
+            drop = smooth(max(0.0, min(1.0, i + 1 - ov_slot)))
+            row = self._overtake_row(victim, row_w, row_h, False, -1, arrows)
+            img.alpha_composite(row, (x0, int(round(slot_y(i + drop)))))
+        lift = int(round(16 * min(1.0, 4 * e * (1 - e) * 1.5)))
+        ovr = self._overtake_row(name, row_w, row_h, True, n, arrows)
+        img.alpha_composite(ovr, (x0 + lift, int(round(slot_y(ov_slot)))))
+        if lines:
+            self.text_lines(img, pad + 2, top + pad + rows_h + 8, lines, f, th.muted, 24)
+        if car:
+            img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        return img
+
+    def _overtake_row(self, name, w, h, highlight, delta, arrow_alpha):
+        th = self.th
+        row = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        bg = th.panel_hi[:3] + (255,) if highlight else tuple(int(c * 0.85) for c in th.panel_hi[:3]) + (255,)
+        round_rect(row, (0, 0, w, h), 6, bg)
+        round_rect(row, (0, 0, 6, h), 0, self.driver_color(name))
+        if highlight:
+            round_outline(row, (0, 0, w, h), 6, th.green[:3] + (150,), 2)
+        display = self.meta(name)['display']
+        parts = display.split()
+        first, last = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', display)
+        x, cy = 20, h / 2 + 1
+        avail = w - x - 60
+        if first:
+            f1 = font(20, 'regular')
+            text_vcenter(row, x, cy, ellipsize(first, f1, avail * 0.4), f1, th.text if highlight else th.muted)
+            x += min(text_w(f1, first), avail * 0.4) + 10
+        f2 = fit_font(last.upper(), w - x - 60, 32, 'bold')
+        text_vcenter(row, x, cy, last.upper(), f2, th.text if highlight else th.muted)
+        if arrow_alpha > 0:
+            col = th.green if delta > 0 else th.red
+            self.delta(row, w - 30, cy, delta, 22, col[:3] + (int(255 * arrow_alpha),))
+        return row
+
+    def _overtake_single(self, g):
         th = self.th
         name, d = g['driver'], g.get('data', {})
         victim = g.get('driver2') or d.get('victim')
@@ -460,6 +543,67 @@ class Templates:
         self.text_lines(img, 110, top + 80, lines, f, th.muted, 24)
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        return img
+
+    def card_new_leader(self, g, shine=1.0):
+        """Top-centre banner for a change of race leader. shine 0..1 sweeps a highlight across it."""
+        th = self.th
+        name, d = g['driver'], g.get('data', {})
+        gold = rgba(PODIUM[1])
+        dark_gold = tuple(int(c * 0.62) for c in gold[:3]) + (255,)
+        W, band_h, body_h = 880, 42, 118
+        H = band_h + body_h
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 8, th.panel)
+        # Gold header band, brightest in the middle
+        half = h_gradient(W // 2, band_h, gold, dark_gold)
+        band = Image.new('RGBA', (W, band_h), (0, 0, 0, 0))
+        band.paste(half, (0, 0))
+        band.paste(half.transpose(Image.FLIP_LEFT_RIGHT), (W // 2, 0))
+        shape = Image.new('RGBA', (W, band_h), (0, 0, 0, 0))
+        round_rect(shape, (0, 0, W, band_h), 8, (255, 255, 255, 255), corners=(True, True, False, False))
+        band.putalpha(shape.getchannel('A'))
+        img.alpha_composite(band)
+        f_head = font(26, 'bold_cond')
+        head = 'NEW RACE LEADER'
+        text_vcenter(img, W / 2, band_h / 2 + 1, head, f_head, th.dark_text, 'm')
+        hw = text_w(f_head, head) / 2 + 22
+        for side in (-1, 1):
+            # Chevrons pointing in at the title
+            for k in range(3):
+                x = W / 2 + side * (hw + k * 16)
+                pts = [(x, band_h / 2 - 9), (x + side * 8, band_h / 2 - 9), (x, band_h / 2 + 9), (x - side * 8, band_h / 2 + 9)]
+                polygon(img, pts, th.dark_text[:3] + (230 - k * 70,))
+        top = band_h
+        round_rect(img, (0, top, 8, H), 0, self.driver_color(name))
+        round_rect(img, (24, top + 14, 118, top + body_h - 14), 8, gold)
+        text_vcenter(img, 71, top + body_h / 2 + 1, 'P1', font(48, 'bold'), th.dark_text, 'm')
+        car = self.car(name, 300, 104)
+        car_w = car.width + 16 if car else 0
+        text_max = W - 140 - car_w - 16
+        y = self.name_block(img, 140, top + 10, name, text_max, 44, 22)
+        victims = d.get('victims') or ([g['driver2']] if g.get('driver2') else [])
+        sub = []
+        if victims:
+            sub.append('PASSES ' + ' & '.join(self.meta(v)['short'].upper() for v in victims[:2]))
+        if d.get('corner'):
+            sub.append(d['corner'].upper())
+        if sub:
+            f = font(19, 'semibold_cond')
+            text_vcenter(img, 140, min(y + 18, H - 16), ellipsize('  ·  '.join(sub), f, text_max), f, th.muted)
+        else:
+            self.meta_row(img, 140, min(y + 18, H - 16), name, text_max)
+        if car:
+            img.alpha_composite(car, (int(W - car.width - 14), int(H - car.height - 6)))
+        round_outline(img, (0, 0, W, H), 8, gold[:3] + (200,), 2)
+        if 0 < shine < 1:
+            x = -160 + shine * (W + 320)
+            mask = Image.new('L', (W, H), 0)
+            ImageDraw.Draw(mask).polygon([(x, 0), (x + 70, 0), (x + 20, H), (x - 50, H)], fill=110)
+            mask = ImageChops.multiply(mask.filter(ImageFilter.GaussianBlur(8)), img.getchannel('A'))
+            light = Image.new('RGBA', (W, H), (255, 255, 255, 255))
+            light.putalpha(mask)
+            img.alpha_composite(light)
         return img
 
     def card_race_control(self, g):

@@ -25,7 +25,9 @@ R3E_FINISH_RE = re.compile(r'^(.+?) has finished the race in P(\d+)')
 CLASS_PREFIX_RE = re.compile(r'^\[[^\]]*\]\s*(?=P\d)')
 VEHICLE_SUFFIX_RE = re.compile(r'\s*\[[^\]]*\]\s*$')
 WATCH_RE = re.compile(r'Watching (.+?) \(P(\d+)\)')
-FASTEST_LAP_RE = re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest lap of the race: ([\d:.]+)'
+PASSIVE_LEAD = 8.0      # stopped/pit alerts can be logged a few seconds after cars start passing
+PIT_EXIT_GRACE = 3.0
+FASTEST_LAP_RE =re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest lap of the race: ([\d:.]+)'
                             r'(?: on lap (\d+))?(?:, ([\d.]+)s quicker than (.+?) ([\d:.]+))?\.\s*$')
 # Radio messages written by the Refinement step: (Radio) Thommo to engineer: "..." Engineer: "..."
 RADIO_RE = re.compile(r'\(Radio\)\s*(.*)$', re.I)
@@ -194,6 +196,8 @@ class RaceData:
                 self._add_driver(a)
                 for v in victims:
                     self._add_driver(v)
+                # Running order before the pass, so graphics can stack the passed cars correctly
+                victims = sorted(victims, key=lambda v: order.index(v) if v in order else len(order))
                 if a in order:
                     order.remove(a)
                 order.insert(min(pos - 1, len(order)), a)
@@ -277,6 +281,37 @@ class RaceData:
 
         self.order_change_times = [c[0] for c in self.order_changes]
         self.events.sort(key=lambda e: e['t'])
+        self._drop_passive_passes()
+
+    def _drop_passive_passes(self):
+        """Passes on cars in the pit lane or stopped on track are not real overtakes.
+
+        The passed cars are removed from each overtake; one with nobody left becomes 'pass_off'
+        (ignored by graphics and stats). The running order already reflects the change."""
+        out_of_race = []  # (driver, from, until) in log time
+        for s in self.pits:
+            out_of_race.append((s['driver'], s['enter'] - PASSIVE_LEAD, (s['leave'] or 10 ** 9) + PIT_EXIT_GRACE))
+        stopped = {}
+        for e in self.events:
+            if e['type'] == 'incident':
+                stopped[e['driver']] = e['t']
+            elif e['type'] == 'recover' and e['driver'] in stopped:
+                out_of_race.append((e['driver'], stopped.pop(e['driver']) - PASSIVE_LEAD, e['t']))
+        out_of_race += [(name, t - PASSIVE_LEAD, 10 ** 9) for name, t in stopped.items()]
+
+        def racing(name, t):
+            return not any(n == name and a <= t <= b for n, a, b in out_of_race)
+
+        for e in self.events:
+            if e['type'] != 'overtake':
+                continue
+            victims = [v for v in e['victims'] if racing(v, e['t'])]
+            if not victims or not racing(e['driver'], e['t']):
+                e['type'] = 'pass_off'
+            elif victims != e['victims']:
+                e['victims'] = victims
+                if e['victim'] not in victims:
+                    e['victim'] = victims[0]
 
     def _parse_director(self, lines):
         for t, cat, msg in lines:
