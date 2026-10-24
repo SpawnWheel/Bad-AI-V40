@@ -6,7 +6,7 @@
     1080
   ],
   "championship": {
-    "name": "Caterham Academy",
+    "name": "JCW Mini",
     "short_name": "",
     "season": "Season 15",
     "round": "1",
@@ -55,12 +55,18 @@
       "y": 1018,
       "h": 46,
       "speed": 150,
-      "max_duration": 40
+      "max_duration": 40,
+      "extra_hold": 10
     },
     "popups": {
-      "x": 40,
-      "bottom": 1000,
+      "x": 88,
+      "bottom": 992,
       "max_w": 780
+    },
+    "radio": {
+      "right": 1902,
+      "cy": 559,
+      "w": 420
     }
   },
   "auto_graphics": {
@@ -68,6 +74,10 @@
     "commentators": true,
     "start_ticker": true,
     "standings_ticker": true,
+    "start_movers": true,
+    "fastest_lap": true,
+    "pit_stops": true,
+    "radio": true,
     "chequered": true,
     "results": true
   },
@@ -76,7 +86,6 @@
     "battle": true,
     "overtake": true,
     "race_control": true,
-    "pit_stop": true,
     "stat": true,
     "movers": true,
     "headline": true
@@ -91,34 +100,34 @@
       "country": "GBR",
       "team": "Itchy & Scratchy Racing",
       "color": "#E11D48",
-      "car_image": "Graphics/CarPreviews/Dom Payne.dds"
+      "car_image": "Graphics/CarPreviews/PayneMini.dds"
     },
     "[RCV]ATIBoy69": {
       "display": "ATI Boy",
       "short": "ATIBOY",
-      "number": "",
+      "number": "420",
       "country": "GBR",
       "team": "Cheech and Chong",
       "color": "#10B981",
-      "car_image": "Graphics/CarPreviews/ATIBoy69.dds"
+      "car_image": "Graphics/CarPreviews/ATIBoy_mini.dds"
     },
     "[RCV]Neworder": {
       "display": "New Order",
       "short": "NEWORDER",
-      "number": "",
+      "number": "26",
       "country": "GBR",
       "team": "Foxy Stoat Racing",
       "color": "#F97316",
-      "car_image": "Graphics/CarPreviews/NewOrder.dds"
+      "car_image": "Graphics/CarPreviews/NewOrder_mini.dds"
     },
     "Daniel Born": {
       "display": "Daniel Born",
       "short": "BORN",
-      "number": "",
+      "number": "12",
       "country": "RSA",
       "team": "Red Bull Caterham",
       "color": "#1E40AF",
-      "car_image": "Graphics/CarPreviews/Daniel Born.dds"
+      "car_image": "Graphics/CarPreviews/DanielBorn_Mini.dds"
     },
     "[RCV]thommo": {
       "display": "Thommo",
@@ -127,16 +136,16 @@
       "country": "GBR",
       "team": "White with Red Pinstripes",
       "color": "#EF4444",
-      "car_image": "Graphics/CarPreviews/Thommo.dds"
+      "car_image": "Graphics/CarPreviews/Thommo_Mini.dds"
     },
     "kf.MTG": {
-      "display": "MTG",
-      "short": "MTG",
-      "number": "",
+      "display": "kf.MTG",
+      "short": "KF.MTG",
+      "number": "00",
       "country": "USA",
       "team": "Silent Assassin",
       "color": "#6B7280",
-      "car_image": "Graphics/CarPreviews/MTG.dds"
+      "car_image": "Graphics/CarPreviews/MTG_Mini.dds"
     },
     "AlfaQuadSA": {
       "display": "AlfaQuadSA",
@@ -145,7 +154,7 @@
       "country": "RSA",
       "team": "Alfa Racing",
       "color": "#047857",
-      "car_image": ""
+      "car_image": "Graphics/CarPreviews/AlfaQuadSA_Mini.dds"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
@@ -164,6 +173,60 @@
       "team": "Beavertown Neck Oil",
       "color": "#F59E0B",
       "car_image": "Graphics/CarPreviews/InTheBagBud.dds"
+    },
+    "mattikake": {
+      "display": "mattikake",
+      "short": "MATTIKAKE",
+      "number": "77",
+      "country": "GBR",
+      "team": "McLaren Team",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/Mattikake_Mini.dds"
+    },
+    "Lucas Degen": {
+      "display": "Lucan Degen",
+      "short": "DEGEN",
+      "number": "28",
+      "country": "NLD",
+      "team": "Metallic Green Team",
+      "color": "#008000",
+      "car_image": ""
+    },
+    "[RCV]muzzer82": {
+      "display": "Liam Murray",
+      "short": "MURRAY",
+      "number": "",
+      "country": "GBR",
+      "team": "Rick and Morty Team",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/Muzzer_Mini.dds"
+    },
+    "grizzlycliff1": {
+      "display": "GrizzlyCliff",
+      "short": "GRIZZLYCLIFF",
+      "number": "71",
+      "country": "GBR",
+      "team": "Team Gulf",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/Grizzly_Mini.dds"
+    },
+    "jaavib": {
+      "display": "Jaavib",
+      "short": "JAAVIB",
+      "number": "85",
+      "country": "ESP",
+      "team": "Lotus",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/Jaavib_Mini.dds"
+    },
+    "Holdany": {
+      "display": "Holdany",
+      "short": "HOLDANY",
+      "number": "",
+      "country": "",
+      "team": "",
+      "color": "",
+      "car_image": ""
     }
   }
 }

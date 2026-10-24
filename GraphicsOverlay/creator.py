@@ -147,12 +147,9 @@ def build_brief(project_path, cfg, race, renderer):
             extra = f" at {e['corner']}" if e['corner'] else ''
             timeline.append((t, f"OVERTAKE {e['driver']} passes {', '.join(e['victims'])} for P{e['pos']}{extra}"))
         elif typ == 'pit_in':
-            timeline.append((t, f"PIT IN {e['driver']} (was P{e['pos']})"))
+            timeline.append((t, f"PIT IN {e['driver']}"))
         elif typ == 'pit_out':
-            s = e['stop']
-            out_pos = race.position_at(e['driver'], t + 5)
-            timeline.append((t, f"PIT OUT {e['driver']} stationary {race.stop_stationary(s) or '?'}s, "
-                                f"pit lane {race.stop_lane_time(s) or '?'}s, rejoins P{out_pos}"))
+            timeline.append((t, f"PIT OUT {e['driver']}"))
         elif typ == 'incident':
             where = f" at {e['where']}" if e['where'] else ''
             timeline.append((t, f"INCIDENT {e['driver']} (P{e['pos']}) slow/stopped on track{where}"))
@@ -289,18 +286,6 @@ def resolve_entry(raw, cfg, race, resolve, facts):
         g['time'] = max(t, ev['t'] + 1.0)
         data = {'pos': ev['pos'], 'victim': ev['victim'], 'corner': ev['corner']}
 
-    elif typ == 'pit_stop':
-        if not d1:
-            return None, 'pit_stop needs a driver'
-        ev = _nearest(events, t, lambda e: e['type'] == 'pit_out' and e['driver'] == d1, 60)
-        if not ev:
-            return None, f"no pit exit for {d1} near {fmt_clock(t)}"
-        stop = ev['stop']
-        g['driver'] = d1
-        g['time'] = max(t, ev['t'] + 2.0)
-        data = {'stationary': race.stop_stationary(stop), 'lane': race.stop_lane_time(stop),
-                'pos_in': stop.get('pos_before'), 'pos_out': race.position_at(d1, ev['t'] + 5)}
-
     elif typ == 'race_control':
         if not g['title']:
             return None, 'race_control needs a message title'
@@ -387,8 +372,6 @@ def rule_based(cfg, race):
             continue
         if e['type'] == 'overtake' and e['pos'] <= 2 and enabled.get('overtake'):
             picks.append((2, {'type': 'overtake', 'time': t + 1, 'driver': e['driver']}))
-        elif e['type'] == 'pit_out' and enabled.get('pit_stop'):
-            picks.append((3, {'type': 'pit_stop', 'time': t + 2, 'driver': e['driver']}))
         elif e['type'] == 'incident' and enabled.get('race_control'):
             where = f" - {e['where'].upper()}" if e['where'] else ''
             name = gcfg.driver_meta(cfg, e['driver'])['display'].upper()

@@ -27,6 +27,8 @@ RADIO_SPLIT = (' to ', ' over ', ' on ')
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
 AUTO_MAX_SHIFT = 30.0
+PIT_GROUP_GAP = 12.0  # pit entries this close together share one pop-up
+PIT_GROUP_MAX = 5
 
 
 class OverlayRenderer:
@@ -98,6 +100,8 @@ class OverlayRenderer:
                 items.append({'id': f'auto_fl_{i}', 'type': 'fastest_lap', 'time': e['t'] + 1.0, 'duration': 7.0,
                               'lane': 'popup', 'auto': True, 'shift': True, 'driver': e['driver'],
                               'data': {k: e.get(k) for k in ('lap_time', 'lap', 'gain', 'prev_driver')}})
+        if auto.get('pit_stops'):
+            items.extend(self._pit_items())
         if auto.get('radio'):
             items.extend(self._radio_items())
         if lf is not None and auto.get('chequered'):
@@ -116,6 +120,26 @@ class OverlayRenderer:
             # Long duration: it stays up until the video ends
             items.append({'id': 'auto_results', 'type': 'results', 'time': start, 'duration': 90.0,
                           'lane': 'center', 'auto': True, 'data': {'rows': rows}})
+        return items
+
+    def _pit_items(self):
+        """One pop-up per pit entry; cars entering within a few seconds of each other share a card."""
+        race = self.race
+        gf, lf = race.green_flag_video, race.leader_finish_video
+        groups = []
+        for e in race.events_video():
+            if e['type'] != 'pit_in' or (gf is not None and e['t'] < gf) or (lf is not None and e['t'] > lf):
+                continue
+            if groups and e['t'] - groups[-1][-1]['t'] <= PIT_GROUP_GAP and len(groups[-1]) < PIT_GROUP_MAX:
+                if e['driver'] not in [x['driver'] for x in groups[-1]]:
+                    groups[-1].append(e)
+            else:
+                groups.append([e])
+        items = []
+        for i, grp in enumerate(groups):
+            items.append({'id': f'auto_pit_{i}', 'type': 'pit_stop', 'time': grp[-1]['t'] + 1.0,
+                          'duration': 6.0 + 0.5 * (len(grp) - 1), 'lane': 'popup', 'auto': True, 'shift': True,
+                          'driver': grp[0]['driver'], 'data': {'drivers': [x['driver'] for x in grp]}})
         return items
 
     def _radio_items(self):
@@ -161,7 +185,8 @@ class OverlayRenderer:
         enabled = self.cfg['popup_types']
         planned = []
         for i, g in enumerate(self.plan.get('graphics', [])):
-            if not enabled.get(g.get('type'), True) or g.get('disabled'):
+            # Types no longer offered to the AI (e.g. pit stops, now automatic) are skipped in old plans
+            if g.get('type') not in gcfg.POPUP_TYPES or not enabled.get(g.get('type'), True) or g.get('disabled'):
                 continue
             g = dict(g)
             g.setdefault('id', f'plan_{i}')
@@ -317,6 +342,9 @@ class OverlayRenderer:
             src = src.copy()
             src.putalpha(src.getchannel('A').point(lambda v: int(v * alpha)))
         x, y = int(round(x)), int(round(y))
+        # Entirely off-frame (e.g. the radio card sliding in from past the right edge)
+        if x >= W or y >= H or x + src.width <= 0 or y + src.height <= 0:
+            return
         # Clip to the frame
         cx0, cy0 = max(0, -x), max(0, -y)
         if cx0 or cy0 or x + src.width > W or y + src.height > H:
