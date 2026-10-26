@@ -30,6 +30,7 @@ MUTED = "#9ca3af"
 ACCENT = "#6366f1"
 ACCENT_LIGHT = "#818cf8"
 SUCCESS = "#22c55e"
+WARN = "#f59e0b"
 BORDER = "#2d3142"
 FONT = "Segoe UI"
 MONO = "Consolas"
@@ -108,6 +109,7 @@ class GraphicsSetup:
         self.drag_rect = None
         self.region_vars = {}
         self.preview_job = None
+        self._read_saved_championship()
 
         root.title("Graphics Setup — BAD AI Commentary Suite")
         root.configure(bg=BG)
@@ -117,6 +119,7 @@ class GraphicsSetup:
         start = (self.race.green_flag_video or 0) + 4
         self.time_var.set(round(min(start, max(0, self.video_duration - 1)), 1))
         self.refresh_preview()
+        self._poll_championship_dirty()
 
     # ------------------------------------------------------------------ setup
     def _first_run_defaults(self):
@@ -158,13 +161,15 @@ class GraphicsSetup:
         tk.Label(header, text=os.path.basename(self.project_path), bg=CARD, fg=DIM, font=(FONT, 10)).pack(side='left')
         styled_button(header, "Save & Close", self.save_and_close, primary=True).pack(side='right', padx=(6, 16), pady=8)
         styled_button(header, "Save", self.save).pack(side='right', pady=8)
-        self.save_default_var = tk.BooleanVar(value=True)
+        if not hasattr(self, 'save_default_var'):
+            self.save_default_var = tk.BooleanVar(value=True)
         tk.Checkbutton(header, text="Also use as the default for future races", variable=self.save_default_var,
                        bg=CARD, fg=MUTED, selectcolor=INPUT, activebackground=CARD, activeforeground=FG,
                        font=(FONT, 9)).pack(side='right', padx=12)
         if self.first_run and os.path.exists(gcfg.DEFAULTS_PATH):
             tk.Label(header, text="Loaded your saved graphics defaults", bg=CARD, fg=SUCCESS,
                      font=(FONT, 9)).pack(side='left', padx=16)
+        self._build_championship_bar()
 
         body = tk.Frame(self.root, bg=BG)
         body.pack(fill='both', expand=True, padx=12, pady=10)
@@ -218,6 +223,155 @@ class GraphicsSetup:
         self._build_drivers_tab()
         self._build_graphics_tab()
         self._build_plan_tab()
+
+    # ------------------------------------------------------------------ championships
+    def _build_championship_bar(self):
+        bar = tk.Frame(self.root, bg=BG)
+        bar.pack(fill='x', pady=(1, 0))
+        tk.Label(bar, text="WORKING IN", bg=BG, fg=MUTED, font=(FONT, 9, "bold")).pack(side='left',
+                                                                                    padx=(16, 8), pady=8)
+        self.champ_name_label = tk.Label(bar, text="", bg=BG, font=(FONT, 13, "bold"))
+        self.champ_name_label.pack(side='left')
+        self.champ_dirty_label = tk.Label(bar, text="", bg=BG, fg=WARN, font=(FONT, 9, "bold"))
+        self.champ_dirty_label.pack(side='left', padx=12)
+
+        styled_button(bar, "Delete", self.delete_championship).pack(side='right', padx=(4, 16))
+        styled_button(bar, "Save as new championship…", self.save_championship_as).pack(side='right', padx=4)
+        self.champ_save_btn = styled_button(bar, "Save championship", self.save_championship, primary=True)
+        self.champ_save_btn.pack(side='right', padx=4)
+        self.champ_switch_var = tk.StringVar()
+        self.champ_box = ttk.Combobox(bar, textvariable=self.champ_switch_var, state='readonly', width=36)
+        self.champ_box.pack(side='right', padx=(4, 12))
+        self.champ_box.bind("<<ComboboxSelected>>", lambda e: self.load_championship(self.champ_switch_var.get()))
+        tk.Label(bar, text="Switch to", bg=BG, fg=MUTED, font=(FONT, 9)).pack(side='right')
+        self.refresh_championship_bar()
+
+    def _read_saved_championship(self):
+        """Snapshot of the active championship as saved on disk, to spot unsaved changes."""
+        name = self.cfg.get(gcfg.PRESET_KEY)
+        champ = gcfg.load_championship(name) if name else None
+        self.champ_saved = gcfg.championship_snapshot(champ) if champ else None
+
+    def championship_dirty(self):
+        if not self.cfg.get(gcfg.PRESET_KEY):
+            return False
+        return self.champ_saved is None or gcfg.championship_snapshot(self.cfg) != self.champ_saved
+
+    def refresh_championship_bar(self):
+        name = self.cfg.get(gcfg.PRESET_KEY)
+        self.champ_name_label.config(text=name or "No championship (this race only)", fg=ACCENT_LIGHT if name else DIM)
+        self.champ_box.config(values=[n for n in gcfg.list_championships() if n != name])
+        self.champ_switch_var.set('')
+        self.champ_save_btn.config(text=f"Save to \"{name}\"" if name else "Save championship")
+        self.update_championship_dirty()
+        self.root.title(f"Graphics Setup — {name or 'no championship'} — BAD AI Commentary Suite")
+
+    def update_championship_dirty(self):
+        if self.cfg.get(gcfg.PRESET_KEY) and self.champ_saved is None:
+            text = "● Not saved yet"
+        else:
+            text = "● Unsaved changes" if self.championship_dirty() else ""
+        self.champ_dirty_label.config(text=text)
+
+    def _poll_championship_dirty(self):
+        try:
+            self.update_championship_dirty()
+        except tk.TclError:
+            return
+        self.root.after(800, self._poll_championship_dirty)
+
+    def ask_save_championship_changes(self, action):
+        """Yes saves the active championship, No leaves it as it was; False means Cancel."""
+        name = self.cfg.get(gcfg.PRESET_KEY)
+        if not self.championship_dirty():
+            return True
+        answer = messagebox.askyesnocancel(
+            "Unsaved championship changes",
+            f"You changed the branding, layout or drivers of\n\n    {name}\n\n"
+            f"Save those changes to \"{name}\" before {action}?\n\n"
+            "Yes = update that championship\nNo = leave the championship as it was", parent=self.root)
+        if answer:
+            self.save_championship()
+        return answer is not None
+
+    def load_championship(self, name):
+        current = self.cfg.get(gcfg.PRESET_KEY, '')
+        if not name or name == current:
+            return
+        if not self.ask_save_championship_changes(f"switching to \"{name}\""):
+            self.champ_switch_var.set('')
+            return
+        champ = gcfg.load_championship(name)
+        if champ is None:
+            messagebox.showerror("Switch championship", f"Could not find \"{name}\".", parent=self.root)
+            self.champ_switch_var.set('')
+            return
+        self.cfg = gcfg.apply_championship(self.cfg, champ)
+        self.cfg[gcfg.PRESET_KEY] = name
+        gcfg.ensure_drivers(self.cfg, self.race.drivers)
+        self.champ_saved = gcfg.championship_snapshot(champ)
+        self.rebuild()
+        self.set_status(f"Switched to \"{name}\". Click Save to use it for this race.")
+
+    def save_championship(self):
+        name = self.cfg.get(gcfg.PRESET_KEY)
+        if not name:
+            return self.save_championship_as()
+        gcfg.save_championship(name, self.cfg)
+        self._read_saved_championship()
+        self.refresh_championship_bar()
+        self.set_status(f"Saved championship \"{name}\" ({len(self.cfg['drivers'])} drivers). "
+                        "The previous version is in Graphics/Championships/Backups.")
+
+    def save_championship_as(self):
+        from tkinter import simpledialog
+        c = self.cfg['championship']
+        suggestion = ' '.join(x for x in (c.get('name'), c.get('season')) if x)
+        name = simpledialog.askstring("Save as new championship",
+                                      "Name for the new championship (branding, layout and drivers as they are now):",
+                                      initialvalue=suggestion, parent=self.root)
+        name = (name or '').strip()
+        if not name:
+            return
+        existing = next((n for n in gcfg.list_championships() if n.lower() == name.lower()), None)
+        if existing is None and gcfg.championship_exists(name):
+            existing = name
+        if existing and not messagebox.askyesno(
+                "Championship already exists",
+                f"There is already a championship called\n\n    {existing}\n\nReplace it with what you have now? "
+                "(The old version is kept in Graphics/Championships/Backups.)", icon='warning', default='no',
+                parent=self.root):
+            return
+        self.cfg[gcfg.PRESET_KEY] = name
+        self.save_championship()
+
+    def delete_championship(self):
+        name = self.cfg.get(gcfg.PRESET_KEY)
+        if not name:
+            return
+        if not messagebox.askyesno("Delete championship", f"Delete the saved championship \"{name}\"?\n\n"
+                                   "This race keeps its current settings. A copy is kept in "
+                                   "Graphics/Championships/Backups.", icon='warning', default='no',
+                                   parent=self.root):
+            return
+        gcfg.delete_championship(name)
+        self.cfg.pop(gcfg.PRESET_KEY, None)
+        self.champ_saved = None
+        self.refresh_championship_bar()
+        self.set_status(f"Deleted championship \"{name}\".")
+
+    def rebuild(self):
+        """Redraws every tab from self.cfg (after switching championship)."""
+        if self.preview_job:
+            self.root.after_cancel(self.preview_job)
+            self.preview_job = None
+        t = float(self.time_var.get())
+        for w in self.root.winfo_children():
+            w.destroy()
+        self.region_vars = {}
+        self._build()
+        self.time_var.set(t)
+        self.refresh_preview()
 
     def _tab(self, nb, title):
         f = tk.Frame(nb, bg=CARD, padx=14, pady=12)
@@ -854,7 +1008,7 @@ class GraphicsSetup:
             messagebox.showwarning("Missing files", "The test clip needs the video file and the combined "
                                    "commentary audio (run Combine Audio first).")
             return
-        self.save()
+        self.save(ask_championship=False)
         start = max(0.0, float(self.time_var.get()) - 2)
         script = os.path.join(gcfg.APP_ROOT, "VideoCombiner", "combine_video.py")
         env = os.environ.copy()
@@ -880,7 +1034,10 @@ class GraphicsSetup:
                 self.set_status("Test clip failed - see the console window.")
         self.root.after(1000, poll)
 
-    def save(self):
+    def save(self, ask_championship=True):
+        """Saves this race. The championship is only updated after asking (or with its own button)."""
+        if ask_championship and not self.ask_save_championship_changes("saving this race"):
+            return None
         self.cfg['sync']['auto'] = self.auto_sync.get()
         path = gcfg.save_config(self.project_path, self.cfg)
         msg = f"Saved {os.path.basename(path)}"
@@ -891,8 +1048,8 @@ class GraphicsSetup:
         return path
 
     def save_and_close(self):
-        self.save()
-        self.root.destroy()
+        if self.save():
+            self.root.destroy()
 
 
 def main():

@@ -11,9 +11,9 @@
             "sims": [
                 "Raceroom"
             ],
-            "script_path": "1_Logger/gui_app.py",
-            "working_dir": "1_Logger",
-            "description": "Launch the main logging GUI",
+            "script_path": "Logger_Raceroom/raceroom_logger.py",
+            "working_dir": "Logger_Raceroom",
+            "description": "Launch the RaceRoom logging script",
             "input_slots": [],
             "output_slot": "raw_log",
             "output_folder": "Logs",
@@ -37,15 +37,18 @@
             "sims": [
                 "Raceroom"
             ],
-            "script_path": "CameraController\\main.py",
-            "working_dir": "CameraController",
+            "script_path": "CameraController_Raceroom/main_raceroom.py",
+            "working_dir": "CameraController_Raceroom",
             "input_slots": [
-                "race_events"
+                "raw_log"
             ],
             "output_slot": "director_notes",
             "output_folder": "",
             "output_prefix": "director_notes",
-            "output_extension": ".txt"
+            "output_extension": ".txt",
+            "input_labels": [
+                "Race Log"
+            ]
         },
         {
             "name": "Control Camera (AMS2)",
@@ -209,7 +212,6 @@
         {
             "name": "Graphics 1 - Setup (run first)",
             "sims": [
-                "Raceroom",
                 "AMS2"
             ],
             "script_path": "GraphicsOverlay/graphics_setup.py",
@@ -230,7 +232,6 @@
         {
             "name": "Graphics 2 - AI Graphic Creator",
             "sims": [
-                "Raceroom",
                 "AMS2"
             ],
             "script_path": "AI Steps/graphic_creator.py",

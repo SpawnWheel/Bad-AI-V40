@@ -15,6 +15,9 @@ venv.bak/
 Logs/
 Logger_AMS2/Race_*.txt
 Logger_AMS2/Backup/
+Logger_Raceroom/Race_*.txt
+CameraController_Raceroom/director_notes_*.txt
+CameraController_Raceroom/camera_sequence_*.json
 Projects/
 TTS/TTSFast/Output*/
 AudioCombiner/*.wav

@@ -3,6 +3,8 @@ import copy
 import json
 import os
 import re
+import shutil
+import time
 
 from . import race_data
 
@@ -191,14 +193,118 @@ def load_defaults():
 def save_defaults(cfg):
     """Stores this project's setup as the starting point for future races."""
     data = {k: v for k, v in cfg.items() if k not in PROJECT_ONLY_KEYS}
-    # Keep drivers from earlier races too, so the whole league builds up over time
-    drivers = dict(load_defaults().get('drivers', {}))
+    # Keep drivers from earlier races too, so the whole league builds up over time.
+    # A championship's roster is complete already, so it replaces them (no mixing between leagues).
+    drivers = {} if cfg.get(PRESET_KEY) else dict(load_defaults().get('drivers', {}))
     drivers.update(cfg.get('drivers', {}))
     data['drivers'] = drivers
     os.makedirs(GRAPHICS_DIR, exist_ok=True)
     with open(DEFAULTS_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return DEFAULTS_PATH
+
+
+# ---------------------------------------------------------------- championships
+# Saved branding, layout and drivers per championship, so you can swap between leagues
+CHAMPIONSHIP_DIR = os.path.join(GRAPHICS_DIR, 'Championships')
+CHAMPIONSHIP_BACKUP_DIR = os.path.join(CHAMPIONSHIP_DIR, 'Backups')
+CHAMPIONSHIP_BACKUPS_KEPT = 10
+# The project remembers which championship it was set up from
+PRESET_KEY = 'championship_preset'
+RACE_ONLY_CHAMPIONSHIP_KEYS = ('round', 'event_name')
+
+
+def championship_file(name):
+    slug = re.sub(r'[^A-Za-z0-9]+', '_', name).strip('_') or 'championship'
+    return os.path.join(CHAMPIONSHIP_DIR, f"{slug}.json")
+
+
+def list_championships():
+    """Saved championship names, sorted."""
+    if not os.path.isdir(CHAMPIONSHIP_DIR):
+        return []
+    names = []
+    for f in os.listdir(CHAMPIONSHIP_DIR):
+        if f.lower().endswith('.json'):
+            try:
+                with open(os.path.join(CHAMPIONSHIP_DIR, f), 'r', encoding='utf-8') as fh:
+                    names.append(json.load(fh).get(PRESET_KEY) or os.path.splitext(f)[0])
+            except Exception as e:
+                print(f"  Could not read championship {f}: {e}")
+    return sorted(names, key=str.lower)
+
+
+def championship_exists(name):
+    return os.path.exists(championship_file(name))
+
+
+def backup_championship(name):
+    """Copies the saved file to Championships/Backups before it is overwritten (keeps the last few)."""
+    path = championship_file(name)
+    if not os.path.exists(path):
+        return None
+    os.makedirs(CHAMPIONSHIP_BACKUP_DIR, exist_ok=True)
+    slug = os.path.splitext(os.path.basename(path))[0]
+    dest = os.path.join(CHAMPIONSHIP_BACKUP_DIR, f"{slug}_{time.strftime('%Y%m%d_%H%M%S')}.json")
+    shutil.copy2(path, dest)
+    pattern = re.compile(rf"{re.escape(slug)}_\d{{8}}_\d{{6}}\.json")
+    old = sorted(f for f in os.listdir(CHAMPIONSHIP_BACKUP_DIR) if pattern.fullmatch(f))
+    for f in old[:-CHAMPIONSHIP_BACKUPS_KEPT]:
+        os.remove(os.path.join(CHAMPIONSHIP_BACKUP_DIR, f))
+    return dest
+
+
+def championship_snapshot(data):
+    """The part of a config a championship stores, normalised so a race config and a saved file compare equal."""
+    out = deep_merge(DEFAULT_CONFIG, {k: v for k, v in data.items() if k not in PROJECT_ONLY_KEYS})
+    out.pop('sync', None)
+    out.pop(PRESET_KEY, None)
+    for k in RACE_ONLY_CHAMPIONSHIP_KEYS:
+        out['championship'].pop(k, None)
+    out['layout']['leaderboard'].pop('rows', None)
+    out['drivers'] = copy.deepcopy(data.get('drivers', {}))
+    return out
+
+
+def save_championship(name, cfg):
+    """Stores everything but the race-specific sync as a named championship (backing up the old file)."""
+    data = {k: v for k, v in cfg.items() if k not in PROJECT_ONLY_KEYS}
+    data[PRESET_KEY] = name
+    # The field size changes every race, so a championship always stores rows = 0 (one per driver)
+    data['layout'] = copy.deepcopy(data.get('layout', {}))
+    data['layout'].setdefault('leaderboard', {})['rows'] = 0
+    os.makedirs(CHAMPIONSHIP_DIR, exist_ok=True)
+    backup_championship(name)
+    path = championship_file(name)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    return path
+
+
+def load_championship(name):
+    path = championship_file(name)
+    if not os.path.exists(path):
+        return None
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def apply_championship(cfg, champ):
+    """New config from a saved championship; keeps this race's sync and uses only that championship's drivers."""
+    data = {k: v for k, v in champ.items() if k not in PROJECT_ONLY_KEYS}
+    out = deep_merge(DEFAULT_CONFIG, data)
+    out['sync'] = copy.deepcopy(cfg['sync'])
+    # Round and event title belong to this race, not the championship
+    for k in RACE_ONLY_CHAMPIONSHIP_KEYS:
+        out['championship'][k] = cfg['championship'].get(k, '')
+    out['layout']['leaderboard']['rows'] = cfg['layout']['leaderboard'].get('rows') or 0
+    out['drivers'] = copy.deepcopy(data.get('drivers', {}))
+    return out
+
+
+def delete_championship(name):
+    if backup_championship(name):
+        os.remove(championship_file(name))
 
 
 def load_config(project_path):

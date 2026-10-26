@@ -14,7 +14,7 @@ This will give you a bunch of steps:
 
 
 
-Start a new project, select AMS2 in the dropdown (The focus has been AMS2, should work with Raceroom too, but haven’t played with it in months).
+Start a new project, select AMS2 or Raceroom in the dropdown. Raceroom uses its own logger (Logger_Raceroom) and camera controller (CameraController_Raceroom, see README_RACEROOM.md there); everything after that is shared. Broadcast graphics are AMS2 only for now.
 
 
 
@@ -147,6 +147,8 @@ Branding tab: championship name, season, round, logo (from Graphics/Logos) and c
 Drivers tab: links each name in the race log to a display name and a car preview image from Graphics/CarPreviews (matched automatically by name). "AI fill from project notes" reads your spotter guide for numbers, countries and liveries.
 
 Leave "Also use as the default for future races" ticked and the next race starts with the same branding, layout and drivers (saved in Graphics/graphics_defaults.json).
+
+Championships: the bar under the header shows which championship you are WORKING IN, and "● Unsaved changes" when the branding, layout or drivers differ from the saved version. "Save to <name>" updates that championship; "Save as new championship…" stores what you have now under a new name (it warns before replacing an existing one). Championships hold the branding, logos, colours, layout and every driver (names, numbers, teams, colours, car images) and live in Graphics/Championships. Use "Switch to" to move a race over to another championship (the race keeps its own round, event title and sync). The main Save button only saves the race; if the championship has unsaved changes it asks first, naming the championship. Every time a championship is overwritten or deleted, the old version is copied to Graphics/Championships/Backups (the last 10 are kept).
 
 Save & Close, scan again, then run "Graphics 2 - AI Graphic Creator". The AI picks the moments for the pop-up graphics (driver cards, battles, overtakes, race control, pit stops, stats, positions gained, paddock news) and writes the text; every number on screen comes from the race data. Review them in Graphics Setup > Planned Graphics, and use "Render 30s test clip" to check a section.
 
