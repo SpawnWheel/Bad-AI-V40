@@ -856,14 +856,14 @@
                 },
                 {
                     "landmarkName": "the_first_chicane",
-                    "distanceRoundLapStart": 1720,
-                    "distanceRoundLapEnd": 1800,
+                    "distanceRoundLapStart": 1710,
+                    "distanceRoundLapEnd": 1825,
                     "isCommonOvertakingSpot": true
                 },
                 {
                     "landmarkName": "the_second_chicane",
                     "distanceRoundLapStart": 2280,
-                    "distanceRoundLapEnd": 2350,
+                    "distanceRoundLapEnd": 2360,
                     "isCommonOvertakingSpot": true
                 },
                 {
@@ -884,7 +884,8 @@
                     "distanceRoundLapEnd": 3700,
                     "isCommonOvertakingSpot": true
                 }
-            ]
+            ],
+            "raceroomTrackName": "Circuit Zolder - Grand Prix"
         },
         {
             "rf1TrackNames": [
@@ -1213,7 +1214,7 @@
             ]
         },
         {
-            "pcarsTrackName": "N\u00fcrburgring:Grand Prix",
+            "pcarsTrackName": "Nürburgring:Grand Prix",
             "pcars2TrackName": "Nurburgring:GP",
             "raceroomLayoutId": 1691,
             "raceroomRollingStartLapDistance": 4591,
