@@ -9,8 +9,9 @@ from datetime import datetime, timedelta
 from pynput.keyboard import Controller, Key, Listener
 import pydirectinput
 import pygetwindow as gw
-from google import genai
-from google.genai import types
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) # camera_gemini.py
+import camera_gemini
 import winsound
 import wave
 import struct
@@ -97,6 +98,8 @@ class AMS2CameraController:
                 "hold_time": 0.05,
                 "step_gap": 0.05,
                 "max_participants": 32,
+                "gemini_model": camera_gemini.DEFAULT_MODEL,
+                "gemini_thinking_level": camera_gemini.DEFAULT_THINKING,
                 "api_key": ""
             }
         }
@@ -201,7 +204,9 @@ class AMS2CameraController:
         # Sequence Controls
         seq_f = ttk.LabelFrame(self.main_frame, text="Sequence")
         seq_f.pack(fill=tk.X, pady=5)
-        
+
+        camera_gemini.add_model_settings(seq_f, self.data["settings"], self.save_config)
+
         btn_f = ttk.Frame(seq_f); btn_f.pack(fill=tk.X, pady=2)
         ttk.Button(btn_f, text="Load JSON", command=self.load_sequence_file).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         ttk.Button(btn_f, text="Generate (Gemini)", command=self.generate_sequence_with_gemini).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
@@ -348,10 +353,37 @@ class AMS2CameraController:
                     self.log_message(f"Loaded project notes from: {os.path.basename(notes_path)}")
                 except Exception as e:
                     self.log_message(f"Warning: Failed to read project notes: {e}")
+            extra_context += self._director_instructions(project_path)
 
-        self.status_msg.set("Generating sequence with Gemini...")
+        settings = self.data["settings"]
+        try:
+            max_tokens = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS") or 65536)
+        except ValueError:
+            max_tokens = 65536
+        model, level = settings["gemini_model"], settings["gemini_thinking_level"]
+        self.status_msg.set(f"Generating with {model} (thinking {level})...")
+        self.log_message(f"Gemini: {model}, thinking {level}")
         full_prompt = f"{prompt_text}{extra_context}\n\nRace Data:\n{data_content}"
-        threading.Thread(target=self._call_gemini_api, args=(api_key, full_prompt, data_path), daemon=True).start()
+        camera_gemini.generate(self.root, api_key, full_prompt, model, level, max_tokens,
+                               self._on_gemini_answer, self._on_gemini_error)
+
+    def _director_instructions(self, project_path):
+        """Director Notes from the launcher (camera_instructions.txt); # lines are comments."""
+        path = os.path.join(project_path, "camera_instructions.txt")
+        if not os.path.exists(path):
+            return ""
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = [l.rstrip() for l in f if not l.lstrip().startswith("#")]
+        except Exception as e:
+            self.log_message(f"Warning: Failed to read director notes: {e}")
+            return ""
+        text = "\n".join(lines).strip()
+        if not text:
+            return ""
+        self.log_message("Loaded director notes for the camera AI")
+        return ("\n\nDirector Instructions (from the user - follow these closely, "
+                f"they take priority over the general guidance above):\n{text}")
 
     def _get_gemini_api_key(self):
         # 0. Check Environment Variable (passed from launcher)
@@ -368,67 +400,26 @@ class AMS2CameraController:
                 with open(p, "r") as f: return f.read().strip()
         return None
 
-    def _call_gemini_api(self, api_key, full_prompt, original_data_path):
+    def _on_gemini_error(self, e):
+        messagebox.showerror("Generation Error", f"An error occurred: {e}")
+        self.status_msg.set("Generation failed")
+
+    def _on_gemini_answer(self, result_text):
         try:
-            client = genai.Client(api_key=api_key)
-            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.8-flash')
-            max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
-            try:
-                max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
-            except ValueError:
-                max_output_tokens = 65536
-            
-            is_gemini_3 = any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
-            thinking_config = types.ThinkingConfig(
-                include_thoughts=True,
-                thinking_level="HIGH"
-            ) if is_gemini_3 else None
+            json_data = camera_gemini.extract_json(result_text)
 
-            config = types.GenerateContentConfig(
-                max_output_tokens=max_output_tokens,
-                thinking_config=thinking_config
-            )
-
-            response = client.models.generate_content(
-                model=model_name,
-                contents=full_prompt,
-                config=config
-            )
-            
-            # Print thinking to console
-            if response.candidates:
-                for part in response.candidates[0].content.parts:
-                    if part.thought:
-                        print("\n" + "="*60)
-                        print("GEMINI THINKING:")
-                        print("="*60)
-                        print(part.text)
-                        print("="*60 + "\n")
-                        self.log_message("Gemini thinking printed to console")
-            
-            result_text = response.text
-            if "```json" in result_text:
-                result_text = result_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in result_text:
-                 result_text = result_text.split("```")[1].split("```")[0].strip()
-
-            json_data = json.loads(result_text)
-            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = f"camera_sequence_ams2_{timestamp}.json"
-            
+
             project_path = os.environ.get("R3E_PROJECT_PATH")
             if project_path:
                 output_filename = os.path.join(project_path, output_filename)
-            
+
             with open(output_filename, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, indent=4)
-                
-            self.root.after(0, lambda: self._on_generation_success(output_filename))
-            
+            self._on_generation_success(output_filename)
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Generation Error", f"An error occurred: {e}"))
-            self.root.after(0, lambda: self.status_msg.set("Generation failed"))
+            self._on_gemini_error(e)
 
     def _generate_director_notes_from_sequence(self, sequence_data, json_filename):
         """Generate the director notes .txt file directly from the sequence data,

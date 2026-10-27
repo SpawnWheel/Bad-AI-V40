@@ -20,6 +20,9 @@ VK_F12 = 0x7B
 
 POLL_INTERVAL = 0.25
 
+# The running order must hold this long before overtakes are counted (side-by-side cars flicker)
+ORDER_SETTLE_TIME = 1.0
+
 # Fastest lap events are only announced once the leader has completed this many laps
 FASTEST_LAP_MIN_RACE_LAPS = 5
 
@@ -94,11 +97,23 @@ class R3ELookup:
         except Exception as e:
             print(f"Warning: could not load car names from {path}: {e}")
 
+        self.learned_cars = {} # model_id -> name, for content newer than r3e-data.json
+        self.learned_classes = {} # class_id -> name
+
+    def learn(self, info):
+        """The focused car's info carries its full car name, which covers cars missing from r3e-data.json."""
+        name = decode(info.name)
+        if name and str(info.model_id) not in self.cars:
+            self.learned_cars[info.model_id] = name
+            if str(info.class_id) not in self.classes:
+                self.learned_classes[info.class_id] = name
+
     def car_name(self, model_id):
-        return self.cars.get(str(model_id), {}).get("Name", "Unknown Car")
+        return self.cars.get(str(model_id), {}).get("Name") or self.learned_cars.get(model_id, "Unknown Car")
 
     def class_name(self, class_id):
-        return self.classes.get(str(class_id), {}).get("Name", "Unknown Class")
+        """Class name, or "" when RaceRoom's data doesn't know it."""
+        return self.classes.get(str(class_id), {}).get("Name") or self.learned_classes.get(class_id, "")
 
     def team_name(self, team_id, livery_id):
         """Team from the team id, else the livery's team, or "" when unknown."""
@@ -142,6 +157,8 @@ class RaceroomEventLogger:
     def reset_driver_state(self):
         self.drivers = {} # slot_id -> latest driver dict
         self.last_positions = {} # name -> pos
+        self.confirmed_positions = {} # name -> pos, once the order has held for ORDER_SETTLE_TIME
+        self.pending_order = None # (positions, sim_time first seen)
         self.last_laps_completed = {} # name -> completed laps
         self.last_lap_valid = {} # name -> current_lap_valid on the previous tick
         self.last_finish_status = {} # name -> finish_status
@@ -275,6 +292,7 @@ class RaceroomEventLogger:
             self.log("SYSTEM", f"Warning: RaceRoom shared memory version {header.version_major}.{header.version_minor} "
                                f"is newer than this logger expects ({VERSION_MAJOR}.x). Data may be wrong.")
 
+        self.lookup.learn(header.vehicle_info)
         drivers = self.read_drivers(raw_drivers)
         cars_moving = any(d["speed"] > 1.0 for d in drivers)
         sim_now = self.clock.tick(header.player.game_simulation_time, header.game_paused == 1, cars_moving)
@@ -472,6 +490,10 @@ class RaceroomEventLogger:
             self.check_pits(d)
             self.check_penalties(d)
 
+    @staticmethod
+    def class_suffix(d):
+        return f" in {d['class']}" if d["class"] else ""
+
     def log_finish(self, name, pos):
         if pos == 1:
             self.log("FINISH", f"Checkered Flag! {name} took P1!")
@@ -521,8 +543,15 @@ class RaceroomEventLogger:
         return d["laps"] * length + d["dist"]
 
     def check_overtakes(self, drivers, sim_now):
-        if not self.last_positions:
+        order = {d["name"]: d["pos"] for d in drivers}
+        if not self.confirmed_positions:
+            self.confirmed_positions = order
             return
+        if self.pending_order is None or self.pending_order[0] != order:
+            self.pending_order = (order, sim_now)
+        if order == self.confirmed_positions or sim_now - self.pending_order[1] < ORDER_SETTLE_TIME:
+            return
+        previous, self.confirmed_positions = self.confirmed_positions, order
         new_positions = {d["name"]: d for d in drivers}
 
         def ignored(name):
@@ -530,13 +559,13 @@ class RaceroomEventLogger:
             return name in self.finished_participants or (d is not None and d["pit"])
 
         for name, d in new_positions.items():
-            if ignored(name) or name not in self.last_positions:
+            if ignored(name) or name not in previous:
                 continue
-            old_pos, pos = self.last_positions[name], d["pos"]
+            old_pos, pos = previous[name], d["pos"]
             if pos >= old_pos or old_pos == 0:
                 continue
             overtaken = []
-            for other, other_old_pos in self.last_positions.items():
+            for other, other_old_pos in previous.items():
                 if other == name or ignored(other):
                     continue
                 other_new = new_positions.get(other)
@@ -545,7 +574,7 @@ class RaceroomEventLogger:
             if overtaken:
                 corner = self.get_corner_at_distance(d["dist"])
                 location_str = f" at {corner}" if corner else ""
-                self.log("OVERTAKE", f"{name} overtook {', '.join(overtaken)} for P{pos} in {d['class']}{location_str}.")
+                self.log("OVERTAKE", f"{name} overtook {', '.join(overtaken)} for P{pos}{self.class_suffix(d)}{location_str}.")
                 self.last_overtake_time[name] = sim_now
                 for o_name in overtaken:
                     self.last_overtake_time[o_name] = sim_now
@@ -604,7 +633,7 @@ class RaceroomEventLogger:
                     self.accidents[name] = sim_now
                     corner = self.get_corner_at_distance(d["dist"])
                     location_str = f" at {corner}" if corner else ""
-                    self.log("ACCIDENT", f"Alert: {name} (P{d['pos']} in {d['class']}) is slow/stopped on track{location_str}! Potential accident.")
+                    self.log("ACCIDENT", f"Alert: {name} (P{d['pos']}{self.class_suffix(d)}) is slow/stopped on track{location_str}! Potential accident.")
             elif name in self.accidents and d["speed"] > 5.0:
                 del self.accidents[name]
                 self.log("ACCIDENT", f"Notice: {name} is back on the move.")
@@ -746,10 +775,12 @@ class RaceroomEventLogger:
         while not self.shm.read()[0]:
             time.sleep(1.0)
         header = self.shm.read()[0]
-        print(f"Connected to RaceRoom shared memory (version {header.version_major}.{header.version_minor})")
         print("Press F12 on the final lap if the race end isn't detected automatically. Ctrl+C to stop.")
 
         self.start_logging()
+        self.log("SYSTEM", f"Connected to RaceRoom shared memory (version {header.version_major}.{header.version_minor})")
+        if header.game_in_replay == 1:
+            self.log("SYSTEM", "Warning: RaceRoom does not share driver data during replays. Log the race live instead.")
         try:
             while True:
                 if not self.update():

@@ -10,6 +10,7 @@ from ctypes import wintypes
 SHARED_MEMORY_NAME = "$R3E"
 VERSION_MAJOR = 3
 NUM_DRIVERS_MAX = 128
+DRIVERS_OFFSET = 2012 # Start of the driver array in the official layout (num_cars is the int before it)
 
 i32 = ctypes.c_int32
 f32 = ctypes.c_float
@@ -177,7 +178,8 @@ class DriverData(ctypes.Structure):
 
 
 class SharedHeader(ctypes.Structure):
-    """Everything up to (and including) num_cars. The driver array follows at all_drivers_offset."""
+    """Fixed part of the header, up to player_name. Then come the player's vehicle data, num_cars at
+    DRIVERS_OFFSET - 4, and the driver array."""
     _pack_ = 1
     _fields_ = [
         ("version_major", i32),
@@ -231,8 +233,6 @@ class SharedHeader(ctypes.Structure):
         ("scoring", u8 * 208),           # position .. unused3 (player scoring & timings)
         ("vehicle_info", DriverInfo),    # the car currently in focus (player, or the watched car in replays)
         ("player_name", u8 * 64),
-        ("vehicle_rest", u8 * 620),     # control_type .. car_damage
-        ("num_cars", i32),
     ]
 
 
@@ -286,10 +286,14 @@ class R3ESharedMemory:
         header = SharedHeader.from_buffer_copy(ctypes.string_at(self._view, ctypes.sizeof(SharedHeader)))
         if header.version_major <= 0:
             return None, []
-        offset = header.all_drivers_offset or SharedHeader.num_cars.offset + 4
-        size = header.driver_data_size or ctypes.sizeof(DriverData)
-        count = max(0, min(header.num_cars, NUM_DRIVERS_MAX))
-        if size < ctypes.sizeof(DriverData) or count == 0:
+        # RaceRoom 3.6 reports all_drivers_offset as 2008, which is num_cars: the drivers really start at 2012
+        offset = max(header.all_drivers_offset, DRIVERS_OFFSET)
+        size = header.driver_data_size
+        if size < ctypes.sizeof(DriverData):
+            return header, []
+        num_cars = ctypes.c_int32.from_address(self._view + offset - 4).value
+        count = max(0, min(num_cars, NUM_DRIVERS_MAX))
+        if count == 0:
             return header, []
         block = ctypes.string_at(self._view + offset, size * count)
         drivers = [DriverData.from_buffer_copy(block, i * size) for i in range(count)]
@@ -305,5 +309,4 @@ class R3ESharedMemory:
 
 # Layout guard: these must match the official header or every field read is garbage.
 assert ctypes.sizeof(DriverData) == 328, ctypes.sizeof(DriverData)
-assert SharedHeader.num_cars.offset == 2008, SharedHeader.num_cars.offset
 assert SharedHeader.flags.offset == 932 and SharedHeader.vehicle_info.offset == 1196
