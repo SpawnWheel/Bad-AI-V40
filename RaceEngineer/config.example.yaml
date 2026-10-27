@@ -1,0 +1,285 @@
+gemini:
+  # Paste your Google Gemini API key below, or leave empty and set GEMINI_API_KEY environment variable.
+  # Get a free API key at: https://aistudio.google.com/app/apikey
+  api_key: ""
+  thinking_model: gemini-3.8-flash
+  thinking_level: LOW
+  thinking_budget: 4000        # legacy; ignored while thinking_level is set
+  max_output_tokens: 8192
+  # Creativity of the engineer's wording. Gemini 3.x is tuned for 1.0 -- lower values make him
+  # repeat himself. Strategy numbers are pre-computed, so this doesn't affect their accuracy.
+  temperature: 1.0
+  # report_temperature: 0.8   # optional: separate value for SitReps / debriefs
+  structured_output: true       # JSON replies (reliable parsing, intent, notebook). false = old text format
+  request_timeout_sec: 20       # give up on a hung LLM call instead of holding the radio
+  scoped_system_prompt: true    # send only the current session's rules (setup guide only in practice)
+  # Optional cheaper/faster model for routine proactive calls (time/lap warnings, leader pitted,
+  # pit-exit traffic). Leave "" to use thinking_model for everything.
+  fast_model: ""                # e.g. gemini-3.5-flash-lite
+  fast_thinking_level: MINIMAL  # thinking for fast_model / fallback_model (3.8 Flash itself only supports LOW+)
+  # Optional model to retry on if the main one is rate-limited / overloaded. "" = none.
+  fallback_model: ""            # e.g. gemini-3.5-flash
+
+tts:
+  model: gemini-3.8-flash-tts                  # Gemini 3.8 Flash TTS (Interactions API)
+  fallback_models: [gemini-3.8-flash-lite-tts] # used for the rest of the session if the main model hits quota
+  legacy_fallback_model: gemini-3.1-flash-tts-preview  # last resort; set to "" to disable
+  radio_context: true                          # tell the voice actor he's on pit-to-car team radio
+
+streaming:
+  # Speak while Gemini is still working: the reply text streams from the thinking model, the voice
+  # streams from Gemini 3.8 TTS, and playback starts on the first audio chunk. Same words, same
+  # model, same thinking level -- he just starts talking sooner. false = old wait-for-everything mode.
+  enabled: true
+  # Start speaking once the first full sentence (and its emotion) is written; the rest of the reply
+  # follows as one piece. false = wait for the whole reply, then stream the voice (one TTS request,
+  # slightly slower on long SitReps).
+  split_first_sentence: true
+  min_first_sentence_words: 5  # never split off a tiny fragment like "Copy." on its own
+  prebuffer_ms: 150            # MINIMUM audio buffered before he starts talking. The player adds more
+  #                              automatically when the voice streams slower than real time, so it never stutters.
+  first_audio_timeout_sec: 6   # if the voice stream sends nothing this long, fall back (never go silent)
+  stall_timeout_sec: 4         # if the voice stream stalls mid-line this long, stop waiting
+
+push_to_talk:
+  mode: auto
+  joystick_index: 0
+  button_index: 5
+  keyboard_key: caps_lock
+  beep_feedback: true
+
+incidents:
+  enabled: true
+  speed_threshold_kmh: 20.0     # Under 20 km/h on track = stopped/spun
+  duration_sec: 1.0            # Below threshold for 1+ seconds
+  cooldown_per_car_sec: 60.0   # Don't re-alert same car within 60s
+  memory_retention_sec: 120.0  # Remember incidents for 2 minutes
+
+strategy:
+  estimated_pit_loss_sec: 45.0 # Fallback total pit loss until a pit-lane pass has been measured at this track.
+                               # After that the loss is learned as drive-through loss + service time (fuel / refuel rate).
+  fuel_margin_liters: 1.0      # Safety net: litres left in the tank at the flag when the stop's fuel is calculated
+  fuel_margin_laps: 0.0        # Optional extra safety in laps of fuel (the larger of the two is used; 0 = litres only)
+  pit_arrival_reserve_laps: 0.6  # The planned pit lap must leave at least this much fuel in the tank at pit entry
+  pit_lap_preference: latest   # latest | middle | earliest lap of the fuel window to plan the stop on
+  box_reminder_before_pit_entry_sec: 20  # short "box box" this many seconds before pit entry on the pit lap (0 = off)
+  timed_race_extra_laps: auto  # AMS2 timed races: laps after the lap in which the clock hits zero.
+                               # auto = read mSessionAdditionalLaps (0 = no extra lap, 1 = "+1 lap" race setting).
+                               # Set 0 or 1 to force it. The log line "[SESSION] Timed race: leader took the flag N
+                               # lap(s) after the clock ran out" shows what actually happened.
+  predict_leader_pit_stop: true  # Timed races: if the leader hasn't pitted yet and the race can't be done on one
+                               # tank, include his stop when working out the final lap (single-class racing).
+
+engineer:
+  # ---- WHO IS YOUR ENGINEER? -------------------------------------------------------------
+  # Pick one of the presets in the `personas:` section below (or add your own).
+  persona: gp_british
+  # Optional one-off tweaks on top of the chosen preset, e.g.
+  #   persona_overrides:
+  #     address_terms: ["Daniel", "mate"]
+  #     expressiveness: expressive
+  persona_overrides: {}
+
+  # dynamic = emotion follows the situation (recommended) | calm = always calm | urgent = always intense
+  emotion_mode: dynamic
+  # Set to true so the engineer speaks only when spoken to, EXCEPT for critical tactical alerts
+  speak_only_when_spoken_to: true
+  allow_tactical_alerts_when_silent: true
+  verbosity: on_demand_only
+  volume: 1.2
+  gain_boost: 1.5
+  radio_effect: true
+  quiet_zone_braking: true
+  notebook_size: 8             # how many "engineer's notebook" facts he keeps (driver feedback, agreed plans)
+
+telemetry:
+  sim: auto                    # auto | ams2 | raceroom - auto connects to whichever sim is running
+  poll_rate_hz: 5              # race/quali polling (practice always runs at 10 Hz for handling analysis)
+  shm_name: $pcars2$           # AMS2 only
+  # RaceRoom only. Car/class names come from the game's r3e-data.json (found automatically next to
+  # RRRE64.exe); set the full path here if your install is somewhere unusual.
+  r3e_data_path: ""
+  r3e_brake_bias_is_rear_share: true  # RaceRoom's r3e.h documents brake_bias as the REAR share
+  tyre_pressure_unit: auto     # how AMS2 writes mAirPressure: auto | kpa | psi | bar (auto: ~160-260 = kPa)
+  brake_bias_is_rear_share: false  # set true if the bias the engineer quotes is 100 minus what your dash shows
+  brake_bias_verified: false       # set true once the quoted bias matches your in-car display
+
+# =============================================================================================
+# ENGINEER PERSONAS
+# Every field is optional; anything left out uses a sensible default.
+#
+#   display_name       Name shown in the console / used in prompts
+#   personality        How he thinks, talks and behaves (goes into the AI brain's system prompt)
+#   accent             Accent & dialect -- drives BOTH his wording (brain) and his voice (TTS)
+#   language / language_code   Spoken language and BCP-47 code (en-GB, en-AU, en-US, it-IT, ...)
+#   gender / age       Used for voice design and style direction
+#   baseline_delivery  Default performance note when nothing more specific applies
+#   humour             What kind of humour he has
+#   expressiveness     subtle | natural | expressive  -- how far emotion colours his voice
+#   address_terms      What he calls the driver; address_frequency (0-1) = how often
+#   vocabulary         Signature phrases, offered as flavour a couple at a time (never forced)
+#   banned_phrases     Things he must never say
+#   allow_laughter     Permit an occasional <chuckle> in light moments
+#   allow_celebration  Permit <cheer>/<shout> on big moments (wins, podiums)
+#   vocal_events       Non-verbal sounds he may make: breath, exhales, sigh, tsk, short pause,
+#                      long pause, throat-clearing, gasp, groan ...
+#   voice:
+#     mode: designed   -> Gemini 3.8 Voice Design builds a unique voice from `description`
+#                         (created once, cached in data/voice_cache.json; edit the description
+#                         or accent and a new voice is designed automatically next launch)
+#     mode: prebuilt   -> stock voice `prebuilt` (Charon, Puck, Orus, Fenrir, Kore ...),
+#                         accent steered per line instead
+#     mode: voice_id   -> reuse a voice id you already have (voice_...)
+#     description      Voice-design prompt: ONLY permanent traits (age, gender, timbre, accent).
+#                      Emotion is handled per radio call -- don't put it here.
+# =============================================================================================
+personas:
+  gp_british:
+    display_name: "GP-style British Race Engineer"
+    personality: >-
+      Gianpiero Lambiase (GP) style — sharp, authoritative, dry-witted British race engineer.
+      Candid, blunt, unflappable on the pit wall with a Max Verstappen-style dynamic. Zero fluff,
+      direct data, sarcastic when needed, laser-focused in battles. Under pressure he gets calmer and
+      more clipped, not louder. When the driver whinges he answers with deadpan understatement.
+    accent: "British (London / South-East England)"
+    language: English
+    language_code: en-GB
+    gender: male
+    age: late 40s
+    baseline_delivery: "measured and dry, clipped sentences, unhurried even when it's busy"
+    humour: "bone-dry, deadpan, sarcastic understatement"
+    expressiveness: natural
+    address_terms: ["mate"]
+    address_frequency: 0.3
+    vocabulary:
+      - "Simply lovely"
+      - "Mega"
+      - "Just drive the car"
+      - "Head down"
+      - "We're on it"
+      - "Stand by"
+      - "Not ideal"
+      - "Tidy"
+      - "Understood"
+    banned_phrases: ["Certainly", "Great question", "No worries", "Awesome"]
+    allow_laughter: false
+    allow_celebration: true
+    vocal_events: [breath, exhales, sigh, tsk, short pause, long pause]
+    voice:
+      mode: designed
+      prebuilt: Charon
+      description: >-
+        A man in his late forties with a Southern English, London-leaning accent. Low-to-mid pitch,
+        slightly gravelly, clipped consonants and a dry, unhurried manner, speaking close to a
+        headset microphone.
+
+  aussie_laidback:
+    display_name: "Aussie Larrikin Engineer"
+    personality: >-
+      Laid-back but razor-sharp Australian race engineer. Loves the sport, keeps the driver loose
+      with easy banter, but snaps into short, deadly-serious calls when it matters. Straight talker,
+      never sugar-coats a bad lap, generous with a "ripper" when it's earned.
+    accent: "Australian (general Australian, Sydney)"
+    language: English
+    language_code: en-AU
+    gender: male
+    age: mid 30s
+    baseline_delivery: "relaxed and easy-going, upward energy, sharpens right up in battles"
+    humour: "cheeky larrikin banter, self-deprecating"
+    expressiveness: expressive
+    address_terms: ["mate", "champ"]
+    address_frequency: 0.35
+    vocabulary: ["Ripper", "Good stuff", "Reckon", "Sweet as", "Fair crack", "Get stuck in", "Bit of a shocker", "She'll be right"]
+    banned_phrases: ["Certainly", "Great question"]
+    allow_laughter: true
+    allow_celebration: true
+    vocal_events: [breath, exhales, sigh, tsk, short pause]
+    voice:
+      mode: designed
+      prebuilt: Puck
+      description: >-
+        A man in his mid thirties with a broad, friendly general Australian accent from Sydney.
+        Mid pitch, bright and open tone, relaxed drawl, speaking into a headset microphone.
+
+  italian_passionate:
+    display_name: "Italian Passionate Engineer"
+    personality: >-
+      Passionate, warm Italian race engineer who speaks fluent English with Italian rhythm and the
+      odd Italian word. Deeply technical, wears his heart on his sleeve — visibly thrilled by a
+      great overtake, visibly pained by a mistake — but always gives precise instructions.
+    accent: "Italian (speaking English, Northern Italian)"
+    language: English
+    language_code: en-GB
+    gender: male
+    age: early 50s
+    baseline_delivery: "warm and animated, musical Italian rhythm, precise on the numbers"
+    humour: "warm, theatrical exasperation"
+    expressiveness: expressive
+    address_terms: ["my friend"]
+    address_frequency: 0.25
+    vocabulary: ["Allora", "Bravo", "Perfetto", "Piano, piano", "Dai, dai", "Mamma mia", "Andiamo"]
+    banned_phrases: ["Certainly", "No worries"]
+    allow_laughter: true
+    allow_celebration: true
+    vocal_events: [breath, exhales, sigh, tsk, gasp, short pause, long pause]
+    voice:
+      mode: designed
+      prebuilt: Orus
+      description: >-
+        A man in his early fifties from Northern Italy speaking English with a clear, melodic Italian
+        accent. Warm baritone, slightly husky, expressive intonation, speaking into a headset microphone.
+
+  american_spotter:
+    display_name: "American Oval-Racing Engineer"
+    personality: >-
+      No-nonsense American race engineer and spotter from the oval-racing world. Rapid-fire,
+      economical calls, calm as a surgeon in traffic, fiercely loyal and encouraging.
+    accent: "American (Midwestern, Indiana)"
+    language: English
+    language_code: en-US
+    gender: male
+    age: early 40s
+    baseline_delivery: "rapid-fire, economical, even-toned, punchy in traffic"
+    humour: "dry Midwestern understatement"
+    expressiveness: natural
+    address_terms: ["buddy", "bud"]
+    address_frequency: 0.3
+    vocabulary: ["Clear", "Still there", "Good job, good job", "Hold your line", "Let's go", "Heck of a run", "Hang in there"]
+    banned_phrases: ["Mate", "Brilliant", "Cheers"]
+    allow_laughter: false
+    allow_celebration: true
+    vocal_events: [breath, exhales, sigh, short pause]
+    voice:
+      mode: designed
+      prebuilt: Fenrir
+      description: >-
+        A man in his early forties with a Midwestern American accent from Indiana. Mid pitch, firm
+        and steady, slightly nasal radio clarity, speaking into a headset microphone.
+
+  northern_strategist:
+    display_name: "Northern English Strategist"
+    personality: >-
+      Precise, unflappable female race engineer and strategist from Yorkshire. Brilliant with
+      numbers, allergic to waffle, quietly funny. Rarely raises her voice — when she does, the driver
+      listens.
+    accent: "Northern English (Yorkshire)"
+    language: English
+    language_code: en-GB
+    gender: female
+    age: late 30s
+    baseline_delivery: "calm, precise and matter-of-fact, warm underneath"
+    humour: "understated Yorkshire wit"
+    expressiveness: subtle
+    address_terms: ["love", "mate"]
+    address_frequency: 0.2
+    vocabulary: ["Champion", "Grand", "Crack on", "Spot on", "Steady", "Not bad at all"]
+    banned_phrases: ["Certainly", "Awesome"]
+    allow_laughter: false
+    allow_celebration: true
+    vocal_events: [breath, exhales, sigh, tsk, short pause]
+    voice:
+      mode: designed
+      prebuilt: Kore
+      description: >-
+        A woman in her late thirties with a warm Yorkshire accent. Mid-low pitch, clear and
+        composed, crisp diction, speaking into a headset microphone.

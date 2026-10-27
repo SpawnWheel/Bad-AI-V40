@@ -11,6 +11,43 @@ CONFIG_FILE = "launcher_config.json"
 STATE_FILE = "launcher_state.json"
 PROJECT_ROOT_DIR = "Projects"
 
+# Live AI race engineer: its own config.yaml, plus the settings saved from this launcher on top
+ENGINEER_DIR = "RaceEngineer"
+ENGINEER_LAUNCHER_SETTINGS = os.path.join(ENGINEER_DIR, "config.launcher.json")
+
+# (card title, [(config path, label, kind, choices)]) -- kind: entry | choice | persona | bool | int | float
+ENGINEER_SETTINGS = [
+    ("Race Engineer — Engineer", [
+        (("engineer", "persona"), "Persona", "persona", None),
+        (("engineer", "emotion_mode"), "Emotion", "choice", ["dynamic", "calm", "urgent"]),
+        (("engineer", "speak_only_when_spoken_to"), "Speak only when spoken to", "bool", None),
+        (("engineer", "allow_tactical_alerts_when_silent"), "Tactical alerts while silent", "bool", None),
+        (("engineer", "volume"), "Volume", "float", None),
+        (("engineer", "radio_effect"), "Radio effect", "bool", None),
+    ]),
+    ("Race Engineer — Gemini", [
+        (("gemini", "thinking_model"), "Model", "entry", None),
+        (("gemini", "thinking_level"), "Thinking Level", "choice", ["LOW", "MEDIUM", "HIGH"]),
+        (("gemini", "fast_model"), "Fast Model (routine calls, blank = Model)", "entry", None),
+        (("gemini", "fallback_model"), "Fallback Model (blank = none)", "entry", None),
+        (("gemini", "temperature"), "Temperature", "float", None),
+        (("tts", "model"), "Voice Model", "entry", None),
+        (("streaming", "enabled"), "Stream replies (starts talking sooner)", "bool", None),
+    ]),
+    ("Race Engineer — Push to Talk & Sim", [
+        (("push_to_talk", "mode"), "Push-to-Talk", "choice", ["auto", "wheel", "keyboard"]),
+        (("push_to_talk", "keyboard_key"), "Keyboard Key", "entry", None),
+        (("push_to_talk", "joystick_index"), "Wheel Index", "int", None),
+        (("push_to_talk", "button_index"), "Wheel Button", "int", None),
+        (("telemetry", "sim"), "Sim", "choice", ["auto", "ams2", "raceroom"]),
+    ]),
+    ("Race Engineer — Strategy", [
+        (("strategy", "fuel_margin_liters"), "Fuel Margin at the Flag (L)", "float", None),
+        (("strategy", "estimated_pit_loss_sec"), "Pit Loss until Measured (s)", "float", None),
+        (("strategy", "pit_lap_preference"), "Pit Lap in Fuel Window", "choice", ["latest", "middle", "earliest"]),
+    ]),
+]
+
 # --- Modern Dark Theme ---
 THEME_BG = "#0f1117"
 THEME_BG_CARD = "#1a1d27"
@@ -260,13 +297,13 @@ class BadAILauncher:
         self.live_btn_container = tk.Frame(proj_right, bg=THEME_BG)
         self.live_btn_container.pack(side="left")
 
-        self.btn_live_mode = tk.Button(self.live_btn_container, text="🎙️ AMS2 Live", bg=THEME_SUCCESS, fg="#ffffff",
-                                       font=(FONT_FAMILY, 9, "bold"), command=self.launch_live_mode, relief="flat",
-                                       padx=12, pady=4, cursor="hand2",
-                                       activebackground=THEME_SUCCESS_BG, activeforeground="#ffffff",
-                                       bd=0, highlightthickness=0)
-        self.btn_live_mode.pack(side="left", padx=(0, 6))
-        self._bind_hover(self.btn_live_mode, THEME_SUCCESS, THEME_SUCCESS_BG)
+        self.btn_race_engineer = tk.Button(self.live_btn_container, text="🎧 Race Engineer", bg=THEME_SUCCESS, fg="#ffffff",
+                                           font=(FONT_FAMILY, 9, "bold"), command=self.launch_race_engineer, relief="flat",
+                                           padx=12, pady=4, cursor="hand2",
+                                           activebackground=THEME_SUCCESS_BG, activeforeground="#ffffff",
+                                           bd=0, highlightthickness=0)
+        self.btn_race_engineer.pack(side="left", padx=(0, 6))
+        self._bind_hover(self.btn_race_engineer, THEME_SUCCESS, THEME_SUCCESS_BG)
 
         self.btn_corner_mapper = tk.Button(self.live_btn_container, text="🗺️ Corner Mapper", bg=THEME_ACCENT, fg="#ffffff",
                                            font=(FONT_FAMILY, 9, "bold"), command=self.launch_corner_mapper, relief="flat",
@@ -318,7 +355,6 @@ class BadAILauncher:
         # made by subprocess tools (e.g. camera controller writing director notes)
         self._last_project_state_mtime = 0
         self._start_auto_refresh()
-        self._update_live_button_visibility()
 
     def _bind_hover(self, widget, normal_bg, hover_bg):
         """Add hover color effect to a widget."""
@@ -370,7 +406,6 @@ class BadAILauncher:
         self.status(f"Active Project: {self.pm.current_project}")
         self.refresh_state_display()
         self.refresh_run_tab()
-        self._update_live_button_visibility()
 
     def on_sim_change(self, event):
         if self.pm.current_project:
@@ -378,38 +413,32 @@ class BadAILauncher:
             self.pm.save_project_state()
             self.refresh_run_tab()
             self.refresh_state_display()
-        self._update_live_button_visibility()
 
-    def _update_live_button_visibility(self):
-        if hasattr(self, 'btn_live_mode') and hasattr(self, 'btn_corner_mapper'):
-            # Live mode is AMS2 only; each sim has its own Corner Mapper
-            self.btn_live_mode.pack_forget()
-            self.btn_corner_mapper.pack_forget()
-            if self.sim_var.get() == "AMS2":
-                self.btn_live_mode.pack(side="left", padx=(0, 6))
-            self.btn_corner_mapper.pack(side="left", padx=(0, 10))
-
-    def launch_live_mode(self):
-        script_path = os.path.abspath(os.path.join('LiveMode_AMS2', 'orchestrator.py'))
-        if not os.path.exists(script_path):
-            messagebox.showerror('Error', f'Live mode script not found:\n{script_path}')
+    def launch_race_engineer(self):
+        # The engineer detects AMS2 or RaceRoom itself, so it isn't tied to the project's sim
+        engineer_dir = os.path.abspath(ENGINEER_DIR)
+        if not os.path.exists(os.path.join(engineer_dir, 'main.py')):
+            messagebox.showerror('Error', f'Race engineer not found:\n{engineer_dir}')
             return
-        
+        # Launch with what the Settings tab shows, saved or not
+        if not self.save_engineer_settings():
+            return
+
         env = os.environ.copy()
         api_key = self.global_settings.get('gemini_api_key')
         if api_key:
             env['GEMINI_API_KEY'] = api_key
-        
-        self.status('Launching AMS2 Live Mode...')
+
+        self.status('Launching Race Engineer...')
         try:
-            subprocess.Popen(
-                [sys.executable, "-m", "LiveMode_AMS2.orchestrator"],
-                cwd=os.getcwd(),
-                env=env,
-                creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0
-            )
+            if sys.platform == 'win32':
+                # cmd /K keeps the console open so start-up errors stay readable
+                subprocess.Popen(["cmd.exe", "/K", sys.executable, "main.py"], cwd=engineer_dir, env=env,
+                                 creationflags=subprocess.CREATE_NEW_CONSOLE)
+            else:
+                subprocess.Popen([sys.executable, "main.py"], cwd=engineer_dir, env=env)
         except Exception as e:
-            messagebox.showerror('Error', f'Failed to launch live mode:\n{e}')
+            messagebox.showerror('Error', f'Failed to launch the race engineer:\n{e}')
 
     def launch_corner_mapper(self):
         if self.sim_var.get() == "AMS2":
@@ -504,8 +533,9 @@ class BadAILauncher:
         else:
             self.steps = []
             self.global_settings = {"gemini_api_key": ""}
-            
-        self.global_settings.setdefault('live_mode', {})
+
+        # Settings of the old live commentator, which the race engineer replaced
+        self.global_settings.pop('live_mode', None)
 
     def save_config(self):
         try:
@@ -515,7 +545,9 @@ class BadAILauncher:
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(data, f, indent=4)
-            self.status(f"Configuration saved to {CONFIG_FILE}")
+            if not self.save_engineer_settings():
+                return
+            self.status(f"Configuration saved to {CONFIG_FILE} and {ENGINEER_LAUNCHER_SETTINGS}")
             # Update PM config ref
             self.pm.config_steps = self.steps
             self.refresh_run_tab()
@@ -1048,104 +1080,7 @@ class BadAILauncher:
 
         api_card.columnconfigure(0, weight=1)
 
-        # --- Live Mode — LLM card ---
-        llm_card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
-        llm_card.pack(fill="x", pady=(0, 16))
-        
-        tk.Label(llm_card, text="Live Mode — LLM", bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
-        
-        tk.Label(llm_card, text="LLM Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
-        self.lm_llm_model_var = tk.StringVar(value=self.global_settings['live_mode'].get("llm_model", "gemini-3.8-flash"))
-        self.lm_llm_model_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"llm_model": self.lm_llm_model_var.get()}))
-        tk.Entry(llm_card, textvariable=self.lm_llm_model_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=40, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
-        
-        tk.Label(llm_card, text="Thinking Level", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=1, sticky="w", pady=(0, 4))
-        self.lm_thinking_var = tk.StringVar(value=self.global_settings['live_mode'].get("thinking_level", "HIGH"))
-        self.lm_thinking_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"thinking_level": self.lm_thinking_var.get()}))
-        ttk.Combobox(llm_card, textvariable=self.lm_thinking_var, values=["NONE", "LOW", "MEDIUM", "HIGH"], state="readonly", width=15).grid(row=2, column=1, sticky="w", pady=(0, 12))
-
-        tk.Label(llm_card, text="Max Output Tokens", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=0, sticky="w", pady=(0, 4))
-        self.lm_max_tokens_var = tk.StringVar(value=str(self.global_settings['live_mode'].get("max_output_tokens", 200)))
-        def _update_max_tokens(*args):
-            try:
-                self.global_settings['live_mode']["max_output_tokens"] = int(self.lm_max_tokens_var.get())
-            except ValueError:
-                pass
-        self.lm_max_tokens_var.trace_add("write", _update_max_tokens)
-        tk.Spinbox(llm_card, from_=50, to=500, textvariable=self.lm_max_tokens_var, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_MONO, 10), relief="flat", bd=0).grid(row=4, column=0, sticky="w", pady=(0, 12))
-
-        tk.Label(llm_card, text="Max RPM (Rate Limit)", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=1, sticky="w", pady=(0, 4))
-        self.lm_max_rpm_var = tk.StringVar(value=str(self.global_settings['live_mode'].get("max_requests_per_minute", 8)))
-        def _update_max_rpm(*args):
-            try:
-                self.global_settings['live_mode']["max_requests_per_minute"] = int(self.lm_max_rpm_var.get())
-            except ValueError:
-                pass
-        self.lm_max_rpm_var.trace_add("write", _update_max_rpm)
-        tk.Spinbox(llm_card, from_=1, to=60, textvariable=self.lm_max_rpm_var, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_MONO, 10), relief="flat", bd=0).grid(row=4, column=1, sticky="w", pady=(0, 12))
-
-        tk.Label(llm_card, text="Commentary Style", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 4))
-        self.lm_style_text = tk.Text(llm_card, height=3, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_FAMILY, 10), relief="flat", bd=0, insertbackground=THEME_FG)
-        self.lm_style_text.insert("1.0", self.global_settings['live_mode'].get("commentary_style", ""))
-        self.lm_style_text.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 12))
-        self.lm_style_text.bind("<KeyRelease>", lambda e: self.global_settings['live_mode'].update({"commentary_style": self.lm_style_text.get("1.0", "end-1c")}))
-        
-        llm_card.columnconfigure(0, weight=1)
-
-        voices_list = ['Achernar', 'Achird', 'Algenib', 'Algieba', 'Alnilam', 'Aoede', 'Autonoe', 'Callirrhoe', 'Charon', 'Despina', 'Enceladus', 'Erinome', 'Fenrir', 'Gacrux', 'Iapetus', 'Kore', 'Laomedeia', 'Leda', 'Orus', 'Puck', 'Pulcherrima', 'Rasalgethi', 'Sadachbia', 'Sadaltager', 'Schedar', 'Sulafat', 'Umbriel', 'Vindemiatrix', 'Zephyr', 'Zubenelgenubi']
-
-        def create_commentator_card(title, prefix):
-            card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
-            card.pack(fill="x", pady=(0, 16))
-            tk.Label(card, text=title, bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
-            
-            tk.Label(card, text="Name", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
-            name_var = tk.StringVar(value=self.global_settings['live_mode'].get(f"{prefix}_name", ""))
-            name_var.trace_add("write", lambda *a, k=f"{prefix}_name", v=name_var: self.global_settings['live_mode'].update({k: v.get()}))
-            tk.Entry(card, textvariable=name_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=30, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
-            
-            tk.Label(card, text="Voice", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=1, sticky="w", pady=(0, 4))
-            voice_var = tk.StringVar(value=self.global_settings['live_mode'].get(f"{prefix}_voice", ""))
-            voice_var.trace_add("write", lambda *a, k=f"{prefix}_voice", v=voice_var: self.global_settings['live_mode'].update({k: v.get()}))
-            ttk.Combobox(card, textvariable=voice_var, values=voices_list, state="readonly", width=25).grid(row=2, column=1, sticky="w", pady=(0, 12))
-
-            tk.Label(card, text="Voice Style Prompt", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 4))
-            style_text = tk.Text(card, height=3, bg=THEME_BG_INPUT, fg=THEME_FG, font=(FONT_FAMILY, 10), relief="flat", bd=0, insertbackground=THEME_FG)
-            style_text.insert("1.0", self.global_settings['live_mode'].get(f"{prefix}_style", ""))
-            style_text.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(0, 12))
-            style_text.bind("<KeyRelease>", lambda e, k=f"{prefix}_style", t=style_text: self.global_settings['live_mode'].update({k: t.get("1.0", "end-1c")}))
-            
-            card.columnconfigure(0, weight=1)
-
-        create_commentator_card("Live Mode — Commentator 1 (Play-by-Play)", "commentator_1")
-        create_commentator_card("Live Mode — Commentator 2 (Analyst)", "commentator_2")
-
-        # Live Mode - Pipeline
-        pipe_card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
-        pipe_card.pack(fill="x", pady=(0, 16))
-        tk.Label(pipe_card, text="Live Mode — Pipeline", bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
-
-        tk.Label(pipe_card, text="TTS Model", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=1, column=0, sticky="w", pady=(0, 4))
-        self.lm_tts_model_var = tk.StringVar(value=self.global_settings['live_mode'].get("tts_model", "gemini-3.1-flash-tts-preview"))
-        self.lm_tts_model_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"tts_model": self.lm_tts_model_var.get()}))
-        tk.Entry(pipe_card, textvariable=self.lm_tts_model_var, bg=THEME_BG_INPUT, fg=THEME_FG, width=40, font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG).grid(row=2, column=0, sticky="w", pady=(0, 12), ipady=4, padx=(0, 10))
-
-        self.lm_emotion_var = tk.BooleanVar(value=self.global_settings['live_mode'].get("emotion_tags_enabled", True))
-        self.lm_emotion_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"emotion_tags_enabled": self.lm_emotion_var.get()}))
-        check = tk.Checkbutton(pipe_card, text="Emotion Tags Enabled", variable=self.lm_emotion_var, bg=THEME_BG_CARD, fg=THEME_FG, activebackground=THEME_BG_CARD, activeforeground=THEME_FG, selectcolor=THEME_BG_INPUT, bd=0, highlightthickness=0)
-        check.grid(row=2, column=1, sticky="w", pady=(0, 12))
-
-        tk.Label(pipe_card, text="Prefetch Threshold", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=0, sticky="w", pady=(0, 4))
-        self.lm_prefetch_var = tk.DoubleVar(value=self.global_settings['live_mode'].get("prefetch_threshold_seconds", 1.0))
-        self.lm_prefetch_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"prefetch_threshold_seconds": self.lm_prefetch_var.get()}))
-        tk.Scale(pipe_card, from_=0.5, to=3.0, resolution=0.1, orient="horizontal", variable=self.lm_prefetch_var, bg=THEME_BG_CARD, fg=THEME_FG, highlightthickness=0, bd=0, length=200).grid(row=4, column=0, sticky="w", pady=(0, 12))
-
-        tk.Label(pipe_card, text="Event TTL Multiplier", bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=3, column=1, sticky="w", pady=(0, 4))
-        self.lm_ttl_var = tk.DoubleVar(value=self.global_settings['live_mode'].get("event_ttl_multiplier", 1.0))
-        self.lm_ttl_var.trace_add("write", lambda *a: self.global_settings['live_mode'].update({"event_ttl_multiplier": self.lm_ttl_var.get()}))
-        tk.Scale(pipe_card, from_=0.5, to=2.0, resolution=0.1, orient="horizontal", variable=self.lm_ttl_var, bg=THEME_BG_CARD, fg=THEME_FG, highlightthickness=0, bd=0, length=200).grid(row=4, column=1, sticky="w", pady=(0, 12))
-        
-        pipe_card.columnconfigure(0, weight=1)
+        self.build_engineer_settings()
 
         # --- Action Buttons ---
         btn_frame = tk.Frame(self.settings_frame, bg=THEME_BG)
@@ -1162,9 +1097,140 @@ class BadAILauncher:
                               font=(FONT_FAMILY, 10), relief="flat", padx=20, pady=6,
                               cursor="hand2", activebackground=THEME_BUTTON_HOVER, activeforeground=THEME_FG,
                               bd=0, highlightthickness=0,
-                              command=lambda: [self.load_config(), self.refresh_run_tab()])
+                              command=lambda: [self.load_config(), self.refresh_run_tab(), self.load_engineer_settings()])
         reload_btn.pack(side="right")
         self._bind_hover(reload_btn, THEME_BUTTON_BG, THEME_BUTTON_HOVER)
+
+    def _read_engineer_config(self):
+        """Returns (config.yaml over the example's defaults, the launcher's saved settings)."""
+        import yaml  # the engineer needs PyYAML anyway; see RaceEngineer/requirements.txt
+
+        def merge(into, other):
+            for key, value in other.items():
+                if isinstance(value, dict) and isinstance(into.get(key), dict):
+                    merge(into[key], value)
+                else:
+                    into[key] = value
+
+        # An older config.yaml can lack settings added since; the example has them all
+        base = {}
+        for name in ("config.example.yaml", "config.yaml"):
+            path = os.path.join(ENGINEER_DIR, name)
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    merge(base, yaml.safe_load(f) or {})
+        overrides = {}
+        if os.path.exists(ENGINEER_LAUNCHER_SETTINGS):
+            with open(ENGINEER_LAUNCHER_SETTINGS, 'r', encoding='utf-8') as f:
+                overrides = json.load(f) or {}
+        return base, overrides
+
+    @staticmethod
+    def _config_value(config, path):
+        for key in path:
+            if not isinstance(config, dict) or key not in config:
+                return None
+            config = config[key]
+        return config
+
+    def build_engineer_settings(self):
+        self.engineer_vars = {}  # {config path: (var, kind)}
+        try:
+            base, _ = self._read_engineer_config()
+        except Exception as e:
+            base = {}
+            self.status(f"Could not read the race engineer config: {e}")
+        personas = list((base.get("personas") or {}).keys())
+
+        for title, fields in ENGINEER_SETTINGS:
+            card = tk.Frame(self.settings_frame, bg=THEME_BG_CARD, padx=20, pady=20, highlightbackground=THEME_BORDER, highlightthickness=1)
+            card.pack(fill="x", pady=(0, 16))
+            tk.Label(card, text=title, bg=THEME_BG_CARD, fg=THEME_FG, font=(FONT_FAMILY, 13, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+
+            # Two settings per row, label above the field
+            for i, (path, label, kind, choices) in enumerate(fields):
+                row, col = 1 + (i // 2) * 2, i % 2
+                padx = (0, 10) if col == 0 else (0, 0)
+                if kind == "bool":
+                    var = tk.BooleanVar()
+                    tk.Checkbutton(card, text=label, variable=var, bg=THEME_BG_CARD, fg=THEME_FG,
+                                   activebackground=THEME_BG_CARD, activeforeground=THEME_FG, selectcolor=THEME_BG_INPUT,
+                                   bd=0, highlightthickness=0).grid(row=row + 1, column=col, sticky="w", pady=(0, 12), padx=padx)
+                else:
+                    var = tk.StringVar()
+                    tk.Label(card, text=label, bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 10)).grid(row=row, column=col, sticky="w", pady=(0, 4))
+                    if kind in ("choice", "persona"):
+                        ttk.Combobox(card, textvariable=var, values=personas if kind == "persona" else choices,
+                                     state="readonly", width=30).grid(row=row + 1, column=col, sticky="w", pady=(0, 12), padx=padx)
+                    else:
+                        tk.Entry(card, textvariable=var, bg=THEME_BG_INPUT, fg=THEME_FG, width=32 if kind == "entry" else 12,
+                                 font=(FONT_MONO, 10), relief="flat", bd=0, insertbackground=THEME_FG,
+                                 highlightthickness=0).grid(row=row + 1, column=col, sticky="w", pady=(0, 12), ipady=4, padx=padx)
+                self.engineer_vars[path] = (var, kind)
+
+            card.columnconfigure(0, weight=1)
+            card.columnconfigure(1, weight=1)
+
+        tk.Label(self.settings_frame, text=f"Saved to {ENGINEER_LAUNCHER_SETTINGS}, on top of the engineer's config.yaml. "
+                                           "Personas, voices and the other options are edited in config.yaml.",
+                 bg=THEME_BG, fg=THEME_FG_DIM, font=(FONT_FAMILY, 9), anchor="w", justify="left",
+                 wraplength=900).pack(fill="x", pady=(0, 16))
+
+        self.load_engineer_settings()
+
+    def load_engineer_settings(self):
+        try:
+            base, overrides = self._read_engineer_config()
+        except Exception as e:
+            self.status(f"Could not read the race engineer config: {e}")
+            return
+        for path, (var, kind) in self.engineer_vars.items():
+            value = self._config_value(overrides, path)
+            if value is None:
+                value = self._config_value(base, path)
+            if kind == "bool":
+                var.set(bool(value))
+            else:
+                var.set("" if value is None else str(value))
+
+    def save_engineer_settings(self):
+        """Writes the settings that differ from config.yaml to the engineer's launcher settings file."""
+        if not getattr(self, 'engineer_vars', None):
+            return True
+        try:
+            base, _ = self._read_engineer_config()
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not read the race engineer config:\n{e}")
+            return False
+
+        overrides = {}
+        for path, (var, kind) in self.engineer_vars.items():
+            raw = var.get()
+            try:
+                if kind == "int":
+                    value = int(raw)
+                elif kind == "float":
+                    value = float(raw)
+                else:
+                    value = raw
+            except ValueError:
+                label = next(f[1] for _, fields in ENGINEER_SETTINGS for f in fields if f[0] == path)
+                messagebox.showerror("Error", f"Race Engineer — '{label}' must be a number.")
+                return False
+            if value == self._config_value(base, path):
+                continue
+            section = overrides
+            for key in path[:-1]:
+                section = section.setdefault(key, {})
+            section[path[-1]] = value
+
+        try:
+            with open(ENGINEER_LAUNCHER_SETTINGS, 'w', encoding='utf-8') as f:
+                json.dump(overrides, f, indent=4)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save race engineer settings:\n{e}")
+            return False
+        return True
 
     def status(self, msg):
         self.footer.config(text=f"  {msg}")

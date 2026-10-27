@@ -1,0 +1,151 @@
+## AMS2 SETUP ENGINEERING GUIDE (for the race engineer)
+
+Sources distilled: Reiza forum guidance (staff: default GT3 setups aim for ~1.8-1.9 bar HOT), the
+AMS2 community Setup Guide (wiki.gg), "Understanding Car Setup Behaviour in AMS2" (Steam guide),
+Sim Racing Manual understeer/oversteer tables, and vehicle-dynamics practice (understeer gradient:
+steering needed per unit of lateral acceleration).
+
+### 1. Method (the loop)
+1. Baseline run on the current setup: out-lap + 3-5 flying laps. Never change anything before you
+   have data AND the driver's feel.
+2. Diagnose. Locate the problem precisely:
+   - Phase: ENTRY (braking / turn-in), MID (apex, steady state, off or maintenance throttle),
+     EXIT (throttle application).
+   - Speed: SLOW (<100 km/h, mechanical grip), MEDIUM, FAST (>150 km/h, aero if the car has any).
+   - Where: which corners. One corner only = driving line / kerb / that corner's character.
+     Every corner of a type = setup.
+   - Driver vs car: rule out technique first (see section 8).
+3. Hypothesis: ONE change aimed at the main limitation, with a prediction of what moves in the
+   data (e.g. "mid-corner understeer index down, front inner-outer spread down ~2°C").
+4. Test: 3+ flying laps, same fuel range if possible (fuel weight changes balance and lap time).
+5. Evaluate: median flying lap versus lap-to-lap noise, the targeted metric, the driver's feel.
+   Keep or revert. A change that feels better but is slower is still slower; a change that is
+   faster but makes the car hard to drive consistently is a race risk. Revert before the next idea.
+6. Only one variable per run. Use changes big enough to feel: pressures 0.02-0.05 bar,
+   bias 0.5-1%, ARB/springs 2-3 clicks, dampers 2-4 clicks.
+7. Check availability: only prescribe what this car's setup screen allows. One-make and road
+   cars often lock camber, ARBs, springs and aero.
+
+Refining an existing setup, work bottom-up:
+tyre pressures -> camber / toe -> brake bias and ducts -> anti-roll bars -> springs -> dampers ->
+differential -> ride height / rake / aero -> gearing last (very track dependent).
+Building from scratch, work top-down (engine braking, diff, caster, brakes, springs, ARBs, dampers,
+ride height, aero, tyres).
+
+### 2. Tyres - "contact patch is king in AMS2"
+Temperatures (judge on lap-averaged, at-speed values from the run - never pit-box readings):
+- Working window: soft slicks ~70-85°C, medium ~80-100°C, hard up to ~100-115°C.
+  Rough AMS2 rule of thumb: below ~70°C little grip, above ~100°C overheating.
+- Inner vs outer (camber): FRONTS inner ~7°C hotter than outer (5-9 fine). REARS ~3-5°C.
+  More spread = too much negative camber; less or reversed = not enough.
+- Middle vs shoulders (pressure): the middle should sit between inner and outer.
+  Middle hottest = over-inflated (bulging) -> lower pressure. Middle coolest = under-inflated
+  -> raise pressure. Fix pressure BEFORE camber (pressure changes move the middle).
+- Left vs right outer temps: within ~10°C (track direction causes some).
+- Front vs rear: large front/rear temperature imbalance hints at balance (the axle working harder
+  is the one sliding) - but FWD fronts always run hotter (they drive and steer).
+Pressures:
+- "As low as possible, as high as necessary." Hot target for modern GT3 slicks ~1.8-1.9 bar.
+  Other cars: let the temperature profile and grip decide. Set cold pressures so the target is
+  reached after ~3 laps. Pressure rises with temperature: a hot day / long run builds more.
+- Higher: sharper response, smaller patch, more heat in the middle, less compliance, can reduce
+  grip and add understeer if too high. Lower: bigger patch, more compliance, more sidewall flex,
+  slower response, can overheat from flex if too low.
+- To add grip at one axle: move that axle's pressure towards its optimum (usually slightly lower).
+Camber: more negative = more mid-corner lateral grip, less braking/traction patch, hotter inner
+shoulder. Works best in sustained corners; less useful for sharp, point-and-squirt corners.
+Toe: front toe-out sharpens turn-in (costs straight-line stability and heat); rear toe-in adds
+stability under power (costs rotation and top speed). Keep small (roughly ±0.4-0.8°).
+
+### 3. Brakes
+- Bias: fronts should lock just before rears (understeer is safer than a spinning rear).
+  More front = stable braking, entry understeer, front lock-ups. More rear = entry rotation,
+  risk of rear lock-up -> snap entry oversteer. Front-engined cars typically >60% front.
+  Lock-up data: repeated FRONT lock-ups -> bias rearward 0.5-1% (or brake pressure down);
+  REAR lock-ups -> bias forward.
+- Pressure: lower if the driver locks before threshold on non-ABS cars.
+- Ducts: judge on per-lap PEAK temperatures. Too hot (fade / red on HUD for long) -> open.
+  Too cold (fronts well below ~250-300°C at the biggest stop in modern cars) -> close
+  (less drag, and some heat soaks into the rim which warms the tyre carcass).
+- Engine braking (if adjustable): more engine braking = more lift-off rotation and front locking
+  risk. Reduce it if the rear is loose off-throttle.
+
+### 4. Balance tools - what fixes what
+UNDERSTEER
+- Entry: bias rearward, soften front slow bump / stiffen rear slow rebound (faster front load),
+  less coast diff lock, front toe-out, softer front ARB.
+- Mid: soften front ARB or stiffen rear ARB, softer front springs, more front negative camber,
+  front pressure towards optimum, (aero) more front wing / less rear.
+- Exit: RWD - usually too much power-side diff lock or too much rear grip -> less power lock
+  (higher power ramp / less preload), stiffer rear ARB, softer front ARB. FWD - the driven front
+  axle is saturating (steering + traction): smoother throttle, softer front ARB, front pressure
+  towards optimum, diff adjustment if the car has one, TC if fitted.
+OVERSTEER
+- Entry: bias forward, more coast diff lock, stiffer front slow bump / softer rear slow rebound,
+  less engine braking, rear toe-in.
+- Mid: stiffen front ARB or soften rear ARB, softer rear springs, rear pressure towards optimum,
+  (aero) more rear wing.
+- Exit (RWD): less power diff lock, softer rear springs / ARB, softer rear slow bump, TC, smoother
+  throttle. Snap oversteer on exit with FWD is rare - check lift-off (engine braking, rear ARB).
+Speed domains: slow-corner balance = mechanical (springs, ARB, diff, geometry). Fast-corner
+balance =
+aero and ride height/rake. "Slow understeer + fast oversteer" = two problems: fix mechanical for the
+slow corners and aero/rake for the fast ones.
+
+### 5. Chassis
+- ARBs control roll only (mid-corner balance, direction changes). Stiffer end loses grip at
+  that end. Softer rear ARB keeps the inside rear planted over kerbs.
+- Springs control roll, pitch and heave. Stiffer = faster response, less grip over bumps, more tyre
+  heat. Soft enough to ride kerbs, stiff enough to hold the platform/aero.
+- Dampers: SLOW bump/rebound (<~50 mm/s) shape weight transfer from driver inputs (turn-in,
+  braking, throttle). FAST settings handle kerbs and bumps. Rebound usually stiffer than bump.
+  Car skipping over kerbs / bumps -> soften fast bump.
+- Bump stops / packers: stop the floor hitting the ground; hitting them mid-corner gives sudden
+  understeer (front) or snap oversteer (rear, on exit).
+- Ride height: "as low as possible, as high as necessary". Check minimum ride height and floor
+  contact in the run data. Rake (rear higher) moves aero balance forward (more rotation, less stable
+  in fast entries). Fuel load lowers the car at the start of a stint.
+
+### 6. Differential (clutch LSD)
+- Preload: locking before any torque; more = stable, less rotation at low speed.
+- Power ramp (lower angle = more lock on throttle): more lock = traction and stability in a straight
+  line, but push on exit (RWD: can snap once the rear lets go).
+- Coast ramp (lower angle = more lock off throttle): more lock = stable entry, less rotation.
+- Clutch plates amplify everything. Avoid extreme ramp splits.
+- Slow corners: preload/plates dominate. Faster corners: ramps dominate.
+
+### 7. Aero & engine
+- Front wing: more front grip >~120 km/h, shifts aero balance forward.
+- Rear wing: rear stability in fast corners/braking, costs top speed.
+- Radiator: 50-60% open typical; close for less drag if temperatures allow.
+- Gearing: set last. Bouncing off the limiter well before the braking point on the longest straight
+  -> longer top gear / final drive; never reaching the top of top gear -> shorter.
+
+### 8. Driver or car? (check before touching the setup)
+- Early brake release -> front unloads -> mid-corner push. Coach: trail the brake to the apex.
+- Throttle before the car is rotated -> FWD fronts wash wide / RWD rear steps out. Coach patience,
+  then squeeze.
+- Heavy trail-braking with rearward bias -> entry oversteer. Coach a smoother release or move bias.
+- Lots of steering corrections -> nervous car or over-driving; check consistency first.
+- Coasting a lot -> hesitation / not confident on entry; car may be unstable on entry.
+- Long apex-to-full-throttle -> exit traction/balance limits or hesitation.
+Fit the car to the driver: a driver who trail-brakes heavily wants a car that rotates on entry but
+stays stable; a smooth, early-throttle driver needs exit traction.
+
+### 9. FWD specifics (e.g. MINI, Fiat, Copa Montana style cars)
+- Fronts do everything: steer, brake most and drive. Expect front temps well above rears.
+- Rotation comes from the rear: stiffer rear ARB/springs, less rear pressure grip, or some trail-
+  braking and lift-off. Too loose rear -> soften rear ARB / more rear pressure grip.
+- Exit understeer and wheelspin are linked: smooth throttle, less front pressure towards optimum,
+  diff if adjustable.
+- Brake bias usually well forward; rear lock-ups on a light rear end come from too much rear bias.
+
+### 10. Interpreting the engineer's measurements
+- Understeer index (UI): 1 - (path curvature per unit steering while cornering / the same in
+  gentle driving). 0 = linear/neutral response, + = needs more lock than neutral (understeer),
+  - = less (oversteer). Every car trends positive near the limit - compare phases, speed bands,
+  corners and runs. A phase 0.15+ higher than the others is a clear imbalance there.
+- Slip balance: + fronts sliding more, - rears. Exit values include driven-wheel wheelspin.
+- Counter-steer moments: the rear stepped out enough that the driver had to catch it.
+- Lap-time noise: compare the median change with the run's spread; small deltas inside the noise
+  are not proof.

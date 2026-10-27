@@ -1,0 +1,95 @@
+# ==========================================
+# Credentials & Secrets (CRITICAL: DO NOT COMMIT!)
+# ==========================================
+config.yaml
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.secret
+secrets/
+
+# ==========================================
+# Application Logs & Runtime Traces
+# ==========================================
+logs/
+*.log
+interaction_logs/
+
+# ==========================================
+# Python Bytecode & Cache
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / Packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test & coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ==========================================
+# IDEs, Editors & OS Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Gemini voice design cache & auditions (per Google project)
+data/voice_cache.json
+data/voice_samples/
+
+# Settings saved from the BAD AI launcher (layered over config.yaml)
+config.launcher.json
+
+# Learned per-user data (fuel burns, pit losses, track models, setup journal)
+data/*.json
