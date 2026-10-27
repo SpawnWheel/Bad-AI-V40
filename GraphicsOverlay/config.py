@@ -36,7 +36,7 @@ POPUP_TYPES = {
 # Graphics the renderer adds on its own from the race data
 AUTO_TYPES = {
     'title_card': 'Opening title card',
-    'commentators': 'Commentator names',
+    'commentators': 'AI commentator names and bios',
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',
@@ -97,6 +97,8 @@ DEFAULT_CONFIG = {
     'popup_density': 'medium',
     'popup_duration': 7.0,
     'drivers': {},
+    # AI commentator name (as in the commentary) -> {'bio': short line shown under their name}
+    'commentators': {},
 }
 
 DENSITY_GAP = {'low': 75, 'medium': 45, 'high': 28}
@@ -422,6 +424,10 @@ def ensure_drivers(cfg, roster, entries=None):
                 if not d.get(key) and entry.get(src):
                     d[key] = str(entry[src])
     return cfg
+
+
+def commentator_bio(cfg, name):
+    return ((cfg.get('commentators') or {}).get(name) or {}).get('bio', '').strip()
 
 
 def driver_meta(cfg, name):

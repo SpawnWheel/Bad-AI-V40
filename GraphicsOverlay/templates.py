@@ -881,23 +881,127 @@ class Templates:
         ImageDraw.Draw(img).text((x, top + 150), info.upper(), font=font(20, 'semibold_cond'), fill=th.muted)
         return img
 
-    def card_commentators(self, g):
+    def card_commentators(self, g, anim=1.0):
+        """The AI commentator line-up: an accent header with a mic and a LIVE tag, then one column per
+        commentator (accent bar, name, voice waveform, bio). anim 0..1 reveals the columns one after another
+        while the waveforms pulse."""
         th = self.th
-        names = g.get('data', {}).get('names', [])
+        d = g.get('data', {})
+        names = d.get('names', [])
         if not names:
             return None
-        f = font(28, 'bold_cond')
-        rows = [n.upper() for n in names]
-        W = int(max(text_w(f, r) for r in rows) + 80)
-        W = max(W, 360)
-        panel_h = 18 + 38 * len(rows)
-        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'COMMENTARY').upper(), stripe=th.accent)
-        y = top + 12
-        for r in rows:
-            round_rect(img, (24, y + 10, 32, y + 26), 2, th.accent2)
-            ImageDraw.Draw(img).text((44, y + 2), r, font=f, fill=th.text)
-            y += 38
+        anim = 1.0 if anim is None else anim
+        # Bios come from the config at draw time, so edits in Graphics Setup show straight away
+        bios = {n: gcfg.commentator_bio(self.cfg, n) for n in names}
+        per_row = min(3, len(names))
+        col_w, pad, mono = 340, 22, 66
+        f_first, f_last = font(20, 'regular'), font(34, 'bold')
+        f_bio = font(18, 'regular')
+        cols = []
+        for n in names:
+            parts = n.split()
+            first, last = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', n)
+            lines = wrap(bios[n], f_bio, col_w - pad * 2, 3)
+            cols.append((n, first, last.upper(), lines))
+        body_h = pad + mono + 36 + max([len(c[3]) * 23 for c in cols] + [0]) + pad - 10
+        n_rows = (len(cols) + per_row - 1) // per_row
+        head_h = 46
+        W, H = per_row * col_w, head_h + n_rows * body_h
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 10, th.panel)
+        # Header band: accent gradient with a soft highlight along its top edge
+        darker = tuple(int(c * 0.55) for c in th.accent[:3]) + (255,)
+        band = h_gradient(W, head_h, th.accent, darker)
+        shape = Image.new('L', (W, head_h), 0)
+        ImageDraw.Draw(shape).rounded_rectangle((0, 0, W - 1, head_h + 12), radius=10, fill=255)
+        band.putalpha(shape)
+        img.alpha_composite(band)
+        round_rect(img, (10, 1, W - 10, 3), 1, (255, 255, 255, 60))
+        fg = contrast_text(th.accent)
+        self._mic(img, 18, head_h / 2, 26, fg)
+        label = (g.get('label') or 'AI COMMENTATORS').upper()
+        f_head = font(24, 'bold_cond')
+        text_vcenter(img, 50, head_h / 2 + 1, label, f_head, fg)
+        # LIVE tag on the right
+        f_live = font(16, 'bold_cond')
+        lw = int(text_w(f_live, 'LIVE') + 30)
+        lx = W - 16 - lw
+        round_rect(img, (lx, head_h / 2 - 12, lx + lw, head_h / 2 + 12), 12, (0, 0, 0, 90))
+        round_rect(img, (lx + 9, head_h / 2 - 4, lx + 17, head_h / 2 + 4), 4, (255, 255, 255, 255))
+        text_vcenter(img, lx + 22, head_h / 2 + 1, 'LIVE', f_live, (255, 255, 255, 255))
+        round_rect(img, (0, head_h, W, head_h + 3), 0, th.accent2)
+
+        n = len(cols)
+        for i, (name, first, last, lines) in enumerate(cols):
+            # Each column fades and rises in, one after another
+            p = max(0.0, min(1.0, anim * (n + 1.5) - i))
+            e = 1 - (1 - p) ** 3
+            if e <= 0:
+                continue
+            col = Image.new('RGBA', (col_w, body_h), (0, 0, 0, 0))
+            self._commentator_column(col, name, first, last, lines, pad, mono, f_first, f_last, f_bio, anim, i)
+            if e < 1:
+                col.putalpha(col.getchannel('A').point(lambda v, e=e: int(v * e)))
+            cx, cy = (i % per_row) * col_w, head_h + (i // per_row) * body_h + int((1 - e) * 14)
+            img.alpha_composite(col, (cx, cy))
+            if i % per_row:
+                round_rect(img, (cx, head_h + 18, cx + 1, head_h + body_h - 14), 0, (255, 255, 255, 34))
+        round_outline(img, (0, 0, W, H), 10, (255, 255, 255, 40), 1)
         return img
+
+    def _commentator_column(self, col, name, first, last, lines, pad, mono, f_first, f_last, f_bio, anim, idx):
+        th = self.th
+        x, y = pad, pad
+        # Accent bar beside the name, red into gold
+        bar = Image.new('RGBA', (5, mono), (0, 0, 0, 0))
+        grad = Image.linear_gradient('L').resize((5, mono))  # 0 at the top -> 255 at the bottom
+        bar.paste(Image.new('RGBA', (5, mono), th.accent), (0, 0))
+        bar.paste(Image.new('RGBA', (5, mono), th.accent2), (0, 0), grad)
+        shape = Image.new('RGBA', (5, mono), (0, 0, 0, 0))
+        round_rect(shape, (0, 0, 5, mono), 2, (255, 255, 255, 255))
+        bar.putalpha(shape.getchannel('A'))
+        col.alpha_composite(bar, (x, y))
+        tx = x + 18
+        avail = col.width - tx - pad
+        if first:
+            text_vcenter(col, tx, y + 14, ellipsize(first, f_first, avail), f_first, th.muted)
+        f2 = fit_font(last, avail, f_last.size, 'bold')
+        text_vcenter(col, tx, y + (40 if first else 30), last, f2, th.text)
+        # Voice waveform under the name, pulsing while the card animates in
+        self._waveform(col, tx, y + mono + 4, min(avail, 170), 22, anim, idx)
+        self.text_lines(col, x, y + mono + 28, lines, f_bio, th.muted, 23)
+
+    def _waveform(self, img, x, cy, w, h, anim, seed):
+        import math
+        bars, gap = 16, 4
+        bw = max(2, (w - gap * (bars - 1)) / bars)
+        pulse = 1.0 if anim >= 1 else anim
+        for b in range(bars):
+            base = 0.35 + 0.65 * abs(math.sin(b * 1.7 + seed * 2.3)) * (0.6 + 0.4 * math.sin(b * 0.45))
+            wobble = 0.5 + 0.5 * abs(math.sin(anim * 9 + b * 0.8 + seed))
+            amp = base * (wobble * (1 - pulse) + pulse) * max(0.15, min(1.0, anim * 2))
+            bh = max(2, h * amp)
+            bx = x + b * (bw + gap)
+            fade = int(255 * (1 - 0.55 * b / bars))
+            round_rect(img, (bx, cy - bh / 2, bx + bw, cy + bh / 2), bw / 2, self.th.accent2[:3] + (fade,))
+
+    @staticmethod
+    def _mic(img, x, cy, size, color):
+        """Microphone icon drawn at 4x and scaled down for smooth edges."""
+        ss = 4
+        S = size * ss
+        icon = Image.new('L', (S, S), 0)
+        dr = ImageDraw.Draw(icon)
+        cw = S * 0.36
+        dr.rounded_rectangle((S / 2 - cw / 2, S * 0.04, S / 2 + cw / 2, S * 0.62), radius=cw / 2, fill=255)
+        lw = int(S * 0.08)
+        dr.arc((S * 0.2, S * 0.18, S * 0.8, S * 0.74), 0, 180, fill=255, width=lw)
+        dr.line((S / 2, S * 0.74, S / 2, S * 0.9), fill=255, width=lw)
+        dr.rounded_rectangle((S * 0.3, S * 0.88, S * 0.7, S * 0.96), radius=lw / 2, fill=255)
+        icon = icon.resize((size, size), Image.LANCZOS)
+        layer = Image.new('RGBA', (size, size), color)
+        layer.putalpha(icon)
+        img.alpha_composite(layer, (int(x), int(cy - size / 2)))
 
     def card_start_movers(self, g):
         """Biggest gainer and biggest loser since the grid, side by side."""

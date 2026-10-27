@@ -229,11 +229,13 @@ class GraphicsSetup:
         self.tab_layout = self._tab(nb, "Layout")
         self.tab_brand = self._tab(nb, "Branding")
         self.tab_drivers = self._tab(nb, "Drivers")
+        self.tab_commentators = self._tab(nb, "AI Commentators")
         self.tab_graphics = self._tab(nb, "Graphics & Sync")
         self.tab_plan = self._tab(nb, "Planned Graphics")
         self._build_layout_tab()
         self._build_brand_tab()
         self._build_drivers_tab()
+        self._build_commentators_tab()
         self._build_graphics_tab()
         self._build_plan_tab()
 
@@ -785,6 +787,64 @@ class GraphicsSetup:
         self.preview_extra = None
 
     # ------------------------------------------------------------------ graphics tab
+    # ------------------------------------------------------------------ AI commentators tab
+    def _build_commentators_tab(self):
+        f = self.tab_commentators
+        tk.Label(f, text=("A short bio for each AI commentator, shown under their name on the AI Commentators "
+                          "card at the start of the race. Bios are kept for future races like the driver details."),
+                 bg=CARD, fg=DIM, font=(FONT, 9), wraplength=520, justify='left').pack(anchor='w')
+        self.comm_rows = tk.Frame(f, bg=CARD)
+        self.comm_rows.pack(fill='x', pady=(10, 0))
+        add = tk.Frame(f, bg=CARD)
+        add.pack(fill='x', pady=(12, 0))
+        self.new_comm = tk.StringVar()
+        self.entry(add, self.new_comm, 28).pack(side='left')
+        styled_button(add, "Add commentator", self.add_commentator).pack(side='left', padx=6)
+        self.cfg.setdefault('commentators', {})
+        # Commentators heard in this race, plus any saved from earlier races (only a typed bio changes the config)
+        self.comm_found = race_data.commentator_names(race_data.read_commentary(self.files['commentary_text']))
+        self.show_commentators()
+
+    def show_commentators(self):
+        for w in self.comm_rows.winfo_children():
+            w.destroy()
+        names = list(self.comm_found) + sorted((n for n in self.cfg['commentators'] if n not in self.comm_found),
+                                               key=str.lower)
+        if not names:
+            tk.Label(self.comm_rows, text="No commentary found for this race yet - add a commentator below.",
+                     bg=CARD, fg=MUTED, font=(FONT, 9)).pack(anchor='w')
+        for name in names:
+            row = tk.Frame(self.comm_rows, bg=CARD)
+            row.pack(fill='x', pady=4)
+            head = tk.Frame(row, bg=CARD)
+            head.pack(fill='x')
+            tk.Label(head, text=name, bg=CARD, fg=FG, font=(FONT, 10, "bold")).pack(side='left')
+            if name not in self.comm_found:
+                tk.Label(head, text="  (not in this race)", bg=CARD, fg=DIM, font=(FONT, 9)).pack(side='left')
+                tk.Button(head, text="Remove", command=lambda n=name: self.remove_commentator(n), bg=CARD, fg=DIM,
+                          relief='flat', bd=0, cursor="hand2", activebackground=CARD,
+                          font=(FONT, 8)).pack(side='right')
+            box = tk.Text(row, height=2, width=60, wrap='word', bg=INPUT, fg=FG, insertbackground=FG,
+                          relief='flat', font=(FONT, 10), highlightthickness=0)
+            box.insert('1.0', gcfg.commentator_bio(self.cfg, name))
+            box.pack(fill='x', pady=(2, 0))
+            box.bind('<KeyRelease>', lambda e, n=name, b=box: self.set_commentator_bio(n, b))
+
+    def set_commentator_bio(self, name, box):
+        self.cfg['commentators'].setdefault(name, {})['bio'] = ' '.join(box.get('1.0', 'end').split())
+        self.schedule_preview()
+
+    def add_commentator(self):
+        name = self.new_comm.get().strip()
+        if name and name not in self.cfg['commentators'] and name not in self.comm_found:
+            self.cfg['commentators'][name] = {'bio': ''}
+            self.new_comm.set('')
+            self.show_commentators()
+
+    def remove_commentator(self, name):
+        self.cfg['commentators'].pop(name, None)
+        self.show_commentators()
+
     def _build_graphics_tab(self):
         f = self.tab_graphics
         self.enabled_var = tk.BooleanVar(value=bool(self.cfg.get('enabled', True)))

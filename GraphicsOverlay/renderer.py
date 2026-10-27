@@ -23,7 +23,7 @@ TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
 YELLOW_FLAGS = ('yellow', 'double yellow')  # shown by the timing tower turning yellow, not a pop-up
 # type -> (start after pop-in begins, duration) of the held animation
-ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1)}
+ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1), 'commentators': (0.2, 1.4)}
 START_MOVERS_AFTER = 60.0  # seconds after the green flag
 LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening seconds
 LEADER_SETTLE = 8.0        # if the lead swaps again this soon, only the later change gets a banner
@@ -65,8 +65,11 @@ class OverlayRenderer:
         if gf is not None and auto.get('commentators'):
             names = commentator_names(read_commentary(gcfg.project_files(self.project_path)['commentary_text']))
             if names:
-                items.append({'id': 'auto_comm', 'type': 'commentators', 'time': gf + 10.5, 'duration': 6.0,
-                              'lane': 'popup', 'auto': True, 'data': {'names': names}})
+                bios = {n: gcfg.commentator_bio(cfg, n) for n in names}
+                # A little longer on screen when there are bios to read
+                dur = min(12.0, 6.0 + 2.0 * sum(1 for b in bios.values() if b))
+                items.append({'id': 'auto_comm', 'type': 'commentators', 'time': gf + 10.5, 'duration': dur,
+                              'lane': 'popup', 'auto': True, 'data': {'names': names, 'bios': bios}})
         tk = cfg['layout']['ticker']
         if tk['enabled']:
             if gf is not None and auto.get('start_ticker') and race.grid:
