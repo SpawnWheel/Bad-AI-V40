@@ -39,13 +39,18 @@ PREVIEW_W, PREVIEW_H = 960, 540
 SCALE = 1920 / PREVIEW_W
 
 REGIONS = {
-    'leaderboard': ('Leaderboard frame', '#22c55e'),
+    'leaderboard': ('Leaderboard frame (tower off)', '#22c55e'),
     'map': ('Track map frame', '#38bdf8'),
     'logo': ('Championship logo', '#f59e0b'),
-    'popups': ('Pop-up graphics anchor', '#ec4899'),
+    'popups': ('Pop-up graphics (centred)', '#ec4899'),
     'ticker': ('Bottom ticker', '#a78bfa'),
     'radio': ('Team radio (middle right)', '#f43f5e'),
+    'tower': ('Timing tower', '#22c55e'),
 }
+# RaceRoom replays have no leaderboard or map to wrap, so the full timing tower replaces both. AMS2 gets the
+# tower too (hide the in-game leaderboard), or the old frame around the game's own one with the tower off.
+SIM_REGIONS = {'Raceroom': ('tower', 'logo', 'popups', 'ticker', 'radio'),
+               'AMS2': ('tower', 'leaderboard', 'map', 'logo', 'popups', 'ticker', 'radio')}
 
 REGION_FIELDS = {
     'leaderboard': [('enabled', 'Show frame', bool), ('x', 'Left (x)', int), ('y', 'Top of board (y)', int),
@@ -56,15 +61,19 @@ REGION_FIELDS = {
             ('h', 'Height', int), ('header', 'Track name header', bool)],
     'logo': [('enabled', 'Show logo', bool), ('x', 'Right edge (x)', int), ('y', 'Top (y)', int),
              ('h', 'Height', int)],
-    'popups': [('x', 'Left (x)', int), ('bottom', 'Bottom (y)', int)],
+    'popups': [('bottom', 'Bottom (y)', int)],
     'ticker': [('enabled', 'Show tickers', bool), ('y', 'Top (y)', int), ('h', 'Height', int),
                ('speed', 'Scroll speed (px/s)', int), ('max_duration', 'Max crawl seconds', int),
                ('extra_hold', 'Extra seconds held on screen', int)],
     'radio': [('right', 'Right edge (x)', int), ('cy', 'Vertical centre (y)', int), ('w', 'Width', int)],
+    'tower': [('enabled', 'Show timing tower', bool), ('x', 'Left (x)', int), ('y', 'Top (y)', int),
+              ('w', 'Max width (shrinks to fit the names)', int), ('row_h', 'Max row height', int), ('bottom', 'Lowest bottom edge (y)', int),
+              ('rows', 'Rows (0 = every car; per class when multi-class)', int),
+              ('cycle', 'Columns in turn (interval, gap, name, team)', str), ('cycle_sec', 'Seconds per column', int)],
 }
 
 DRIVER_COLS = [('log', 'Log name', 150), ('display', 'Display name', 140), ('short', 'Short', 90),
-               ('number', '#', 40), ('country', 'Ctry', 50), ('team', 'Team / livery', 160),
+               ('number', '#', 40), ('country', 'Ctry', 50), ('team', 'Team / livery', 160), ('make', 'Make', 90),
                ('color', 'Colour', 70), ('car_image', 'Car image', 170)]
 
 
@@ -94,7 +103,8 @@ class GraphicsSetup:
             self.cfg['sync']['offset_sec'] = detected if detected is not None else 0.0
         self.race = race_data.RaceData(self.files['raw_log'], self.cfg['sync']['offset_sec'],
                                        self.files['director_notes'])
-        gcfg.ensure_drivers(self.cfg, self.race.drivers)
+        gcfg.ensure_drivers(self.cfg, self.race.drivers, self.race.entries())
+        self.regions = {k: REGIONS[k] for k in SIM_REGIONS[self.race.sim]}
         if self.first_run:
             self._first_run_defaults()
 
@@ -102,7 +112,7 @@ class GraphicsSetup:
         self.video_duration = self._probe_duration()
         self.tmp_png = os.path.join(tempfile.gettempdir(), "graphics_setup_frame.png")
         self.photo = None
-        self.region = tk.StringVar(value='leaderboard')
+        self.region = tk.StringVar(value=next(iter(self.regions)))
         self.show_overlay = tk.BooleanVar(value=True)
         self.show_guides = tk.BooleanVar(value=True)
         self.drag_start = None
@@ -203,8 +213,11 @@ class GraphicsSetup:
                        selectcolor=INPUT, activebackground=BG, activeforeground=FG).pack(side='left')
         styled_button(row, "Render 30s test clip", self.render_test_clip, primary=True).pack(side='right')
 
-        tips = ("Pick a region on the Layout tab, then drag a box over the video to place it. "
-                "Move the slider to a moment where the in-game leaderboard and map are visible.")
+        tips = "Pick a region on the Layout tab, then drag a box over the video to place it. "
+        tips += ("Drag the tower box from its top-left corner down to the lowest point it may reach."
+                 if not self.race.has_hud else
+                 "Hide the in-game leaderboard for the timing tower, or turn the tower off to frame the game's own "
+                 "leaderboard (move the slider to where it and the map are visible).")
         tk.Label(left, text=tips, bg=BG, fg=DIM, font=(FONT, 9), wraplength=PREVIEW_W, justify='left').pack(anchor='w')
         self.status = tk.Label(left, text="", bg=BG, fg=MUTED, font=(FONT, 9), anchor='w')
         self.status.pack(fill='x', pady=(4, 0))
@@ -308,7 +321,7 @@ class GraphicsSetup:
             return
         self.cfg = gcfg.apply_championship(self.cfg, champ)
         self.cfg[gcfg.PRESET_KEY] = name
-        gcfg.ensure_drivers(self.cfg, self.race.drivers)
+        gcfg.ensure_drivers(self.cfg, self.race.drivers, self.race.entries())
         self.champ_saved = gcfg.championship_snapshot(champ)
         self.rebuild()
         self.set_status(f"Switched to \"{name}\". Click Save to use it for this race.")
@@ -393,15 +406,24 @@ class GraphicsSetup:
         tk.Label(f, text="Region to place", bg=CARD, fg=FG, font=(FONT, 11, "bold")).pack(anchor='w')
         radios = tk.Frame(f, bg=CARD)
         radios.pack(anchor='w', pady=(4, 10))
-        for key, (name, color) in REGIONS.items():
+        for key, (name, color) in self.regions.items():
             tk.Radiobutton(radios, text=name, value=key, variable=self.region, command=self.show_region_fields,
                            bg=CARD, fg=color, selectcolor=INPUT, activebackground=CARD, activeforeground=color,
                            font=(FONT, 10)).pack(anchor='w')
         self.region_frame = tk.Frame(f, bg=CARD)
         self.region_frame.pack(fill='x')
-        tk.Label(f, text=("The leaderboard frame wraps the in-game timing tower. With rows set to 0 its height "
-                          f"follows the number of drivers in the race ({len(self.race.drivers)} here): "
-                          "rows × row height + padding."), bg=CARD, fg=DIM, font=(FONT, 9), wraplength=480,
+        if self.race.has_hud and not self.cfg['layout']['tower'].get('enabled', True):
+            note = ("The leaderboard frame wraps the in-game timing tower. With rows set to 0 its height "
+                    f"follows the number of drivers in the race ({len(self.race.drivers)} here): "
+                    "rows × row height + padding.")
+        else:
+            note = ("The timing tower is drawn from the live timing the logger recorded"
+                    + ("" if self.race.timing.recorded else " (this race has none, so it uses the log's overtakes "
+                       "and standings)")
+                    + f". Rows shrink to fit above the lowest bottom edge ({len(self.race.drivers)} drivers here). "
+                    "Each row shows the driver's logo from the Drivers tab (Car image, when it is not a car "
+                    "preview), else Graphics/Manufacturers/<make>.png.")
+        tk.Label(f, text=note, bg=CARD, fg=DIM, font=(FONT, 9), wraplength=480,
                  justify='left').pack(anchor='w', pady=(12, 0))
         self.show_region_fields()
 
@@ -412,7 +434,13 @@ class GraphicsSetup:
         section = self.cfg['layout'][key]
         self.region_vars = {}
         for i, (field, label, typ) in enumerate(REGION_FIELDS[key]):
-            if typ is bool:
+            if typ is str:
+                var = tk.StringVar(value=str(section.get(field) or ''))
+                self.label(self.region_frame, label, row=i, column=0, sticky='w', pady=2)
+                ent = self.entry(self.region_frame, var, 24)
+                ent.grid(row=i, column=1, sticky='w', padx=8, pady=2)
+                ent.bind("<KeyRelease>", lambda e, f=field, v=var: self.set_region_value(f, v.get(), str))
+            elif typ is bool:
                 var = tk.BooleanVar(value=bool(section.get(field, True)))
                 tk.Checkbutton(self.region_frame, text=label, variable=var, bg=CARD, fg=FG, selectcolor=INPUT,
                                activebackground=CARD, activeforeground=FG,
@@ -429,9 +457,9 @@ class GraphicsSetup:
             self.region_vars[field] = var
         self.draw_guides()
 
-    def set_region_value(self, field, value):
+    def set_region_value(self, field, value, typ=None):
         key = self.region.get()
-        if isinstance(value, bool):
+        if isinstance(value, bool) or typ is str:
             self.cfg['layout'][key][field] = value
         else:
             try:
@@ -445,6 +473,8 @@ class GraphicsSetup:
         for field, var in self.region_vars.items():
             if isinstance(var, tk.BooleanVar):
                 var.set(bool(section.get(field)))
+            elif field == 'cycle':
+                var.set(str(section.get(field) or ''))
             else:
                 var.set(str(section.get(field) or 0))
 
@@ -637,7 +667,7 @@ class GraphicsSetup:
         tk.Label(self.driver_form, text=name, bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
             row=0, column=0, columnspan=4, sticky='w', pady=(4, 6))
         fields = [('display', 'Display name', 22), ('short', 'Short (caps)', 12), ('number', 'Car number', 6),
-                  ('country', 'Country code', 6), ('team', 'Team / livery', 26)]
+                  ('country', 'Country code', 6), ('team', 'Team / livery', 26), ('make', 'Make', 14)]
         for i, (k, label, width) in enumerate(fields):
             r, c = 1 + i // 2, (i % 2) * 2
             self.label(self.driver_form, label, row=r, column=c, sticky='w', pady=2)
@@ -931,12 +961,16 @@ class GraphicsSetup:
         if key == 'map':
             m = lay['map']
             return m['x'], m['y'], m['x'] + m['w'], m['y'] + m['h']
+        if key == 'tower':
+            tw = lay['tower']
+            return tw['x'], tw['y'], tw['x'] + tw['w'], tw['bottom']
         if key == 'logo':
             lg = lay['logo']
             return lg['x'] - lg['h'] * 2.6, lg['y'], lg['x'], lg['y'] + lg['h']
         if key == 'popups':
             p = lay['popups']
-            return p['x'], p['bottom'] - 200, p['x'] + p.get('max_w', 780), p['bottom']
+            half = p.get('max_w', 780) / 2
+            return 960 - half, p['bottom'] - 200, 960 + half, p['bottom']
         if key == 'ticker':
             tk_ = lay['ticker']
             return 0, tk_['y'], 1920, tk_['y'] + tk_['h']
@@ -948,7 +982,7 @@ class GraphicsSetup:
         self.canvas.delete('guide')
         if not self.show_guides.get():
             return
-        for key, (name, color) in REGIONS.items():
+        for key, (name, color) in self.regions.items():
             x0, y0, x1, y1 = [v / SCALE for v in self.region_rect(key)]
             sel = key == self.region.get()
             self.canvas.create_rectangle(x0, y0, x1, y1, outline=color, width=2 if sel else 1,
@@ -987,10 +1021,12 @@ class GraphicsSetup:
             lb['row_h'] = max(10, int(round((by1 - by0 - lb['pad']) / max(1, rows))))
         elif key == 'map':
             lay['map'].update(x=bx0, y=by0, w=bx1 - bx0, h=by1 - by0)
+        elif key == 'tower':
+            lay['tower'].update(x=bx0, y=by0, w=max(260, bx1 - bx0), bottom=by1)
         elif key == 'logo':
             lay['logo'].update(x=bx1, y=by0, h=by1 - by0)
         elif key == 'popups':
-            lay['popups'].update(x=bx0, bottom=by1)
+            lay['popups'].update(bottom=by1)
         elif key == 'ticker':
             lay['ticker'].update(y=by0, h=max(30, by1 - by0))
         elif key == 'radio':

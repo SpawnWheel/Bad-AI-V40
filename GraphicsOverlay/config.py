@@ -40,7 +40,7 @@ AUTO_TYPES = {
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',
-    'fastest_lap': 'Fastest lap of the race (from lap 5)',
+    'fastest_lap': 'Fastest lap of the race (top centre, from lap 5)',
     'new_leader': 'New race leader banner (top centre, from 20 seconds into the race)',
     'pit_stops': 'Pit stop pop-up when a car pits (cars pitting together share one)',
     'radio': 'Team radio quotes (middle right)',
@@ -75,10 +75,17 @@ DEFAULT_CONFIG = {
         'leaderboard': {'enabled': True, 'x': 10, 'y': 110, 'w': 420, 'row_h': 25, 'pad': 15,
                         'rows': None, 'header': True, 'footer': True},
         'map': {'enabled': True, 'x': 1597, 'y': 113, 'w': 306, 'h': 299, 'header': True},
+        # Full timing tower drawn from the recorded live timing (RaceRoom replays show no leaderboard
+        # or map, so the frames above are not used there; AMS2 uses the leaderboard frame only with the
+        # tower off). Rows shrink to fit above 'bottom', the width shrinks to fit the names (up to 'w');
+        # 'cycle' lists the value columns shown in turn (interval, gap, name, team).
+        'tower': {'enabled': True, 'x': 24, 'y': 24, 'w': 400, 'row_h': 34, 'bottom': 820, 'rows': 0,
+                  'cycle': 'interval,gap,name,team', 'cycle_sec': 15},
         'logo': {'enabled': True, 'x': 1903, 'y': 14, 'h': 58, 'anchor': 'right'},
         'extra_logos': [],
         'ticker': {'enabled': True, 'y': 1018, 'h': 46, 'speed': 150, 'max_duration': 40,
                    'extra_hold': 10},
+        # Pop-up cards sit centred above 'bottom' (clear of the timing tower)
         'popups': {'x': 40, 'bottom': 1000, 'max_w': 780},
         # Team radio quotes, F1 style: anchored by their right edge and vertical centre
         'radio': {'right': 1880, 'cy': 640, 'w': 400},
@@ -393,18 +400,27 @@ def default_driver(log_name, files=None):
         'number': '',
         'country': '',
         'team': '',
+        'make': '',
         'color': '',
         'car_image': f"Graphics/CarPreviews/{image}" if image else '',
     }
 
 
-def ensure_drivers(cfg, roster):
+def ensure_drivers(cfg, roster, entries=None):
+    """Adds every log name to cfg['drivers']. entries (RaceRoom's recorded entry list) fills in a
+    blank team, car number and make."""
     files = list_images(CAR_PREVIEW_DIR)
     for name in roster:
         if name not in cfg['drivers']:
             cfg['drivers'][name] = default_driver(name, files)
         else:
             cfg['drivers'][name] = {**default_driver(name, files), **cfg['drivers'][name]}
+        entry = (entries or {}).get(name)
+        if entry:
+            d = cfg['drivers'][name]
+            for key, src in (('team', 'team'), ('number', 'num'), ('make', 'mfr')):
+                if not d.get(key) and entry.get(src):
+                    d[key] = str(entry[src])
     return cfg
 
 

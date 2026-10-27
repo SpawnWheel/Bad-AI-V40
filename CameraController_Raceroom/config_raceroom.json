@@ -2,108 +2,40 @@
     "settings": {
         "hold_time": 0.05,
         "step_gap": 0.15,
-        "category_wait": 0.25,
-        "car_ahead_key": "num+",
-        "car_behind_key": "num-",
-        "manual_fallback": true,
+        "hide_ui_key": "h",
+        "hide_replay_ui": true,
+        "manual_fallback": false,
+        "camera_method": "hotkeys",
+        "camera_keys": {
+            "external": "pagedown",
+            "cycle_external": "end",
+            "onboard": "home",
+            "driving": "insert"
+        },
+        "gemini_model": "gemini-3.8-flash",
+        "gemini_thinking_level": "HIGH",
         "api_key": ""
     },
-    "EXTERNAL": {
-        "key": "pagedown",
-        "cycle_key": "end",
-        "cameras": [
-            {
-                "label": "TV",
-                "fav": true
-            },
-            {
-                "label": "Action",
-                "fav": true
-            },
-            {
-                "label": "Aerial",
-                "fav": true
-            },
-            {
-                "label": "Static",
-                "fav": false
-            }
-        ]
-    },
-    "ONBOARD": {
-        "key": "home",
-        "cycle_key": "home",
-        "cameras": [
-            {
-                "label": "Dash Close",
-                "fav": false
-            },
-            {
-                "label": "Dash Far (With hands)",
-                "fav": true
-            },
-            {
-                "label": "Front (No hood)",
-                "fav": false
-            },
-            {
-                "label": "Rear (No bumper)",
-                "fav": false
-            },
-            {
-                "label": "Front Left Tyre",
-                "fav": false
-            },
-            {
-                "label": "Front Right Tyre",
-                "fav": false
-            },
-            {
-                "label": "Rear Facing Left Tyre",
-                "fav": false
-            },
-            {
-                "label": "Rear Facing Right Tyre",
-                "fav": true
-            },
-            {
-                "label": "Front Facing Left Quarter",
-                "fav": false
-            },
-            {
-                "label": "Front Facing Right Quarter",
-                "fav": false
-            },
-            {
-                "label": "Hood Front Facing (Left)",
-                "fav": true
-            },
-            {
-                "label": "Rear Facing Inc Bumper",
-                "fav": true
-            }
-        ]
-    },
-    "DRIVER": {
-        "key": "insert",
-        "cycle_key": "insert",
-        "cameras": [
-            {
-                "label": "Nose",
-                "fav": true
-            },
-            {
-                "label": "Hood",
-                "fav": true
-            },
-            {
-                "label": "Cockpit",
-                "fav": true
-            },
-            {
-                "label": "Chase",
-                "fav": true
-            }
-        ]
+    "cameras": {
+        "TV": true,
+        "Action": false,
+        "Aerial": true,
+        "Static": false,
+        "Chase": false,
+        "Cockpit": true,
+        "Hood": false,
+        "Nose": false,
+        "Onboard 1": true,
+        "Onboard 2": true,
+        "Onboard 3": false,
+        "Onboard 4": false,
+        "Onboard 5": false,
+        "Onboard 6": false,
+        "Onboard 7": false,
+        "Onboard 8": false,
+        "Onboard 9": false,
+        "Onboard 10": false,
+        "Onboard 11": false,
+        "Onboard 12": false
     }
 }

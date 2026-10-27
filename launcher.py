@@ -279,6 +279,7 @@ class BadAILauncher:
         for text, cmd in [("New Project", self.create_project), 
                           ("Open Folder", self.open_project_folder),
                           ("Project Notes", self.edit_project_notes),
+                          ("Director Notes", self.edit_camera_instructions),
                           ("Scan Files", self.scan_files)]:
             btn = tk.Button(proj_right, text=text, bg=THEME_BUTTON_BG, fg=THEME_FG,
                            font=(FONT_FAMILY, 9), command=cmd, relief="flat",
@@ -381,12 +382,12 @@ class BadAILauncher:
 
     def _update_live_button_visibility(self):
         if hasattr(self, 'btn_live_mode') and hasattr(self, 'btn_corner_mapper'):
+            # Live mode is AMS2 only; each sim has its own Corner Mapper
+            self.btn_live_mode.pack_forget()
+            self.btn_corner_mapper.pack_forget()
             if self.sim_var.get() == "AMS2":
                 self.btn_live_mode.pack(side="left", padx=(0, 6))
-                self.btn_corner_mapper.pack(side="left", padx=(0, 10))
-            else:
-                self.btn_live_mode.pack_forget()
-                self.btn_corner_mapper.pack_forget()
+            self.btn_corner_mapper.pack(side="left", padx=(0, 10))
 
     def launch_live_mode(self):
         script_path = os.path.abspath(os.path.join('LiveMode_AMS2', 'orchestrator.py'))
@@ -411,12 +412,15 @@ class BadAILauncher:
             messagebox.showerror('Error', f'Failed to launch live mode:\n{e}')
 
     def launch_corner_mapper(self):
-        script_path = os.path.abspath(os.path.join('CornerMapper_AMS2', 'corner_mapper.py'))
+        if self.sim_var.get() == "AMS2":
+            sim_name, script_path = 'AMS2', os.path.abspath(os.path.join('CornerMapper_AMS2', 'corner_mapper.py'))
+        else:
+            sim_name, script_path = 'RaceRoom', os.path.abspath(os.path.join('CornerMapper_Raceroom', 'corner_mapper_raceroom.py'))
         if not os.path.exists(script_path):
             messagebox.showerror('Error', f'Corner Mapper script not found:\n{script_path}')
             return
-        
-        self.status('Launching AMS2 Corner Mapper...')
+
+        self.status(f'Launching {sim_name} Corner Mapper...')
         try:
             subprocess.Popen(
                 [sys.executable, script_path],
@@ -459,6 +463,25 @@ class BadAILauncher:
                     messagebox.showerror("Error", f"Failed to create notes file: {e}")
                     return
             
+            os.startfile(notes_file)
+        else:
+            messagebox.showwarning("Warning", "No active project selected.")
+
+    def edit_camera_instructions(self):
+        # Stored apart from the camera's generated director_notes_*.txt files
+        path = self.pm.get_project_path()
+        if path and os.path.exists(path):
+            notes_file = os.path.join(path, "camera_instructions.txt")
+            if not os.path.exists(notes_file):
+                try:
+                    with open(notes_file, 'w', encoding='utf-8') as f:
+                        f.write("# Director Notes for the Camera Controller AI\n"
+                                "# Lines starting with # are ignored.\n"
+                                "# Example: Focus on car #24 whenever it is battling for position.\n")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to create director notes file: {e}")
+                    return
+
             os.startfile(notes_file)
         else:
             messagebox.showwarning("Warning", "No active project selected.")

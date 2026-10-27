@@ -212,9 +212,11 @@ def sanitize_filename(name):
 
 
 class CornerMapperApp:
+    SIM_NAME = "AMS2"
+
     def __init__(self, root):
         self.root = root
-        self.root.title("AMS2 Corner Mapper & Track Manager")
+        self.root.title(f"{self.SIM_NAME} Corner Mapper & Track Manager")
         self.root.geometry("1180x760")
         self.root.minsize(860, 600)
         self.root.configure(bg=THEME_BG)
@@ -293,7 +295,7 @@ class CornerMapperApp:
         self.top_row = tk.Frame(self.header_frame, bg=THEME_BG_CARD)
         self.top_row.pack(fill="x")
 
-        self.lbl_status = tk.Label(self.top_row, text="🔴 Connecting to AMS2...", bg=THEME_BG_CARD, fg=THEME_DANGER, font=(FONT_FAMILY, 10, "bold"))
+        self.lbl_status = tk.Label(self.top_row, text=f"🔴 Connecting to {self.SIM_NAME}...", bg=THEME_BG_CARD, fg=THEME_DANGER, font=(FONT_FAMILY, 10, "bold"))
         self.lbl_status.pack(side="left")
 
         # Overlay Mode Toggle Button (always visible in header)
@@ -528,7 +530,7 @@ class CornerMapperApp:
         self.bottom_bar = tk.Frame(self.root, bg=THEME_BG_CARD, padx=16, pady=8, highlightbackground=THEME_BORDER, highlightthickness=1)
         self.bottom_bar.pack(fill="x", padx=16, pady=(6, 12))
 
-        self.lbl_bottom_status = tk.Label(self.bottom_bar, text="Ready. Drive a lap in AMS2 to trace map, or load an existing track profile.",
+        self.lbl_bottom_status = tk.Label(self.bottom_bar, text=f"Ready. Drive a lap in {self.SIM_NAME} to trace map, or load an existing track profile.",
                                           bg=THEME_BG_CARD, fg=THEME_FG_MUTED, font=(FONT_FAMILY, 9))
         self.lbl_bottom_status.pack(side="left")
 
@@ -584,7 +586,7 @@ class CornerMapperApp:
             self.header_frame.pack_configure(padx=6, pady=(6, 2))
 
             self.btn_overlay_toggle.config(text="🪟 Normal (F7)", bg=THEME_INFO)
-            self.root.title("AMS2 Corner Mapper [OVERLAY]")
+            self.root.title(f"{self.SIM_NAME} Corner Mapper [OVERLAY]")
             self.root.minsize(400, 320)
             self.root.geometry("500x450")
             self.redraw_map()
@@ -607,7 +609,7 @@ class CornerMapperApp:
             self.bottom_bar.pack(fill="x", padx=16, pady=(6, 12), side="bottom")
 
             self.btn_overlay_toggle.config(text="📌 Overlay Mode (F7)", bg=THEME_ACCENT)
-            self.root.title("AMS2 Corner Mapper & Track Manager")
+            self.root.title(f"{self.SIM_NAME} Corner Mapper & Track Manager")
             self.root.minsize(860, 600)
             self.root.geometry(self.prev_geometry if self.prev_geometry else "1180x760")
             self.redraw_map()
@@ -626,55 +628,12 @@ class CornerMapperApp:
 
         while self.running:
             try:
-                # 1. Connect or maintain connection
-                if not self.shm:
-                    shm_size = ctypes.sizeof(SharedMemory)
-                    try:
-                        self.shm = mmap.mmap(-1, shm_size, SHARED_MEMORY_NAME)
-                        self.data = SharedMemory.from_buffer(self.shm)
-                        self.is_connected = True
-                    except Exception:
-                        self.is_connected = False
-                        self.shm = None
-                        self.data = None
-                        time.sleep(1.0)
-                        continue
+                # 1 + 2. Connect and read live data
+                if not self._poll_sim():
+                    time.sleep(1.0)
+                    continue
 
-                # 2. Read live data
-                if self.data:
-                    view_idx = self.data.mViewedParticipantIndex
-                    if view_idx < 0 or view_idx >= STORED_PARTICIPANTS_MAX:
-                        view_idx = 0
-
-                    p = self.data.mParticipantInfo[view_idx]
-                    self.current_lap_dist = float(p.mCurrentLapDistance)
-                    self.current_lap = int(p.mCurrentLap)
-                    self.current_speed = float(self.data.mSpeed) * 3.6  # m/s to km/h
-                    self.track_length = float(self.data.mTrackLength)
-
-                    try:
-                        self.track_location = self.data.mTrackLocation.decode('utf-8', errors='ignore').strip('\x00')
-                        self.track_variation = self.data.mTrackVariation.decode('utf-8', errors='ignore').strip('\x00')
-                    except Exception:
-                        pass
-
-                    # Sample World Coordinates (X, Z) for the live track map
-                    try:
-                        wx = float(p.mWorldPosition[0])
-                        wz = float(p.mWorldPosition[2])
-                        self.car_world_pos = (wx, wz, self.current_lap_dist)
-
-                        # Record track outline points as the player drives
-                        if self.track_length > 100.0 and self.current_speed > 2.0 and 0.0 <= self.current_lap_dist <= self.track_length:
-                            bin_size = 4.0  # Sample every 4 meters
-                            bin_idx = int(self.current_lap_dist / bin_size)
-                            if bin_idx not in self.track_bins:
-                                self.track_bins[bin_idx] = (wx, wz, self.current_lap_dist)
-                                self.need_track_rebuild = True
-                    except Exception:
-                        pass
-
-                # 3. Global Hotkey Checking (allows F7/F8/F9/F10 to trigger even with AMS2 focused)
+                # 3. Global Hotkey Checking (allows F7/F8/F9/F10 to trigger even with the game focused)
                 try:
                     f7_state = ctypes.windll.user32.GetAsyncKeyState(VK_F7) & 0x8000 != 0
                     if f7_state and not f7_down_prev:
@@ -704,13 +663,61 @@ class CornerMapperApp:
 
             time.sleep(0.04)  # ~25Hz polling
 
+    def _record_track_point(self, wx, wz):
+        """Store the car position and record track outline points as the player drives."""
+        self.car_world_pos = (wx, wz, self.current_lap_dist)
+        if self.track_length > 100.0 and self.current_speed > 2.0 and 0.0 <= self.current_lap_dist <= self.track_length:
+            bin_size = 4.0  # Sample every 4 meters
+            bin_idx = int(self.current_lap_dist / bin_size)
+            if bin_idx not in self.track_bins:
+                self.track_bins[bin_idx] = (wx, wz, self.current_lap_dist)
+                self.need_track_rebuild = True
+
+    def _poll_sim(self):
+        """Connect to the AMS2 shared memory and read the viewed car. Returns False while disconnected."""
+        if not self.shm:
+            shm_size = ctypes.sizeof(SharedMemory)
+            try:
+                self.shm = mmap.mmap(-1, shm_size, SHARED_MEMORY_NAME)
+                self.data = SharedMemory.from_buffer(self.shm)
+                self.is_connected = True
+            except Exception:
+                self.is_connected = False
+                self.shm = None
+                self.data = None
+                return False
+
+        if self.data:
+            view_idx = self.data.mViewedParticipantIndex
+            if view_idx < 0 or view_idx >= STORED_PARTICIPANTS_MAX:
+                view_idx = 0
+
+            p = self.data.mParticipantInfo[view_idx]
+            self.current_lap_dist = float(p.mCurrentLapDistance)
+            self.current_lap = int(p.mCurrentLap)
+            self.current_speed = float(self.data.mSpeed) * 3.6  # m/s to km/h
+            self.track_length = float(self.data.mTrackLength)
+
+            try:
+                self.track_location = self.data.mTrackLocation.decode('utf-8', errors='ignore').strip('\x00')
+                self.track_variation = self.data.mTrackVariation.decode('utf-8', errors='ignore').strip('\x00')
+            except Exception:
+                pass
+
+            # Sample World Coordinates (X, Z) for the live track map
+            try:
+                self._record_track_point(float(p.mWorldPosition[0]), float(p.mWorldPosition[2]))
+            except Exception:
+                pass
+        return True
+
     # --- UI Periodic Update Loop ---
     def _update_ui_loop(self):
         if not self.running:
             return
 
         if self.is_connected and self.track_length > 0:
-            self.lbl_status.config(text="🟢 Connected to AMS2", fg=THEME_SUCCESS)
+            self.lbl_status.config(text=f"🟢 Connected to {self.SIM_NAME}", fg=THEME_SUCCESS)
             self.lbl_telemetry_track.config(text=f"Track: {self.track_location} - {self.track_variation} ({self.track_length:.1f} m)")
 
             lap_pct = min(100.0, max(0.0, (self.current_lap_dist / self.track_length) * 100.0))
@@ -745,7 +752,7 @@ class CornerMapperApp:
             self.update_car_marker()
 
         else:
-            self.lbl_status.config(text="🔴 Waiting for AMS2...", fg=THEME_DANGER)
+            self.lbl_status.config(text=f"🔴 Waiting for {self.SIM_NAME}...", fg=THEME_DANGER)
             self.lbl_telemetry_track.config(text="Sim Track: Waiting for game...")
             self.lbl_telemetry_dist.config(text="Lap Dist: -- m")
             self.lbl_telemetry_speed.config(text="Speed: -- km/h")
@@ -784,7 +791,7 @@ class CornerMapperApp:
         self._track_distances.clear()
         self.screen_points.clear()
         self.redraw_map()
-        self.lbl_bottom_status.config(text="Map cleared. Drive a lap in AMS2 to trace the circuit outline.", fg=THEME_INFO)
+        self.lbl_bottom_status.config(text=f"Map cleared. Drive a lap in {self.SIM_NAME} to trace the circuit outline.", fg=THEME_INFO)
         if hasattr(self, 'lbl_overlay_status'):
             self.lbl_overlay_status.config(text="Map cleared. Drive a lap to trace.", fg=THEME_INFO)
 
@@ -865,9 +872,9 @@ class CornerMapperApp:
             # Draw friendly guidance message
             cx = self.canvas_w / 2
             cy = self.canvas_h / 2
-            self.canvas.create_text(cx, cy - 25, text="🏎️ AMS2 Visual Track Map", fill=THEME_ACCENT,
+            self.canvas.create_text(cx, cy - 25, text=f"🏎️ {self.SIM_NAME} Visual Track Map", fill=THEME_ACCENT,
                                     font=(FONT_FAMILY, 12, "bold"))
-            self.canvas.create_text(cx, cy + 5, text="Drive a lap in AMS2 to trace the track layout.", fill=THEME_FG,
+            self.canvas.create_text(cx, cy + 5, text=f"Drive a lap in {self.SIM_NAME} to trace the track layout.", fill=THEME_FG,
                                     font=(FONT_FAMILY, 9))
             self.canvas.create_text(cx, cy + 28, text="Corners and In/Out handles will appear here.", fill=THEME_FG_MUTED,
                                     font=(FONT_FAMILY, 9))
@@ -1625,7 +1632,7 @@ class CornerMapperApp:
                 messagebox.showerror("Error", "Distances must be valid numbers.")
                 return
 
-            self.corners[idx] = {"name": name, "start": start, "end": end}
+            self.corners[idx].update({"name": name, "start": start, "end": end})
             self.refresh_table()
             self.redraw_map()
             self.select_corner(idx)

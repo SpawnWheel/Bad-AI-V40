@@ -7,6 +7,8 @@ import sys
 import random
 import json
 
+from leaderboard_recorder_ams2 import AMS2LeaderboardRecorder
+
 def sanitize_filename(name):
     name = name.replace(":", "_").replace("/", "_").replace("\\", "_").replace(" ", "_")
     return "".join(c for c in name if c.isalnum() or c in ("_", "-"))
@@ -280,6 +282,7 @@ class AMS2EventLogger:
         self.shm = None
         self.data = None
         self.log_file = None
+        self.recorder = None # Live timing for the timing tower graphic (the log only has 4-minute standings)
         self.last_leaderboard_time = None # Track periodic leaderboard updates (sim time)
         self.last_session_state = None
         self.last_race_state = None
@@ -414,6 +417,11 @@ class AMS2EventLogger:
         
         self.log_file = open(filepath, "w", encoding="utf-8")
         self.log("SYSTEM", f"New log file started: {os.path.abspath(filepath)}")
+        try:
+            self.recorder = AMS2LeaderboardRecorder(filepath, self)
+            print(f"Recording live timing for the timing tower graphic: {self.recorder.path}")
+        except OSError as e:
+            print(f"Live timing is not recorded ({e}); the race log is unaffected.")
 
     def log(self, category, message, sim_time=None, print_to_console=True, write_to_file=True):
         if sim_time is not None:
@@ -946,6 +954,9 @@ class AMS2EventLogger:
         self.last_laps_completed = new_laps_completed
         self.last_laps = new_laps
 
+        if self.recorder:
+            self.recorder.update(sim_now)
+
     @staticmethod
     def format_lap_time(seconds):
         minutes, secs = divmod(seconds, 60)
@@ -1179,6 +1190,8 @@ class AMS2EventLogger:
         finally:
             if self.log_file:
                 self.log_file.close()
+            if self.recorder:
+                self.recorder.close()
 
 if __name__ == "__main__":
     logger = AMS2EventLogger()

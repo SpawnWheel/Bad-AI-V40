@@ -9,24 +9,82 @@ from datetime import datetime, timedelta
 from pynput.keyboard import Key, Listener
 import pydirectinput
 import pygetwindow as gw
-from google import genai
-from google.genai import types
+from PIL import Image, ImageChops, ImageGrab, ImageStat
 
-# Shared memory reader lives with the RaceRoom logger
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Logger_Raceroom"))
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, APP_DIR) # camera_gemini.py
+sys.path.insert(0, os.path.join(APP_DIR, "Logger_Raceroom")) # Shared memory reader lives with the RaceRoom logger
 from r3e_shared import R3ESharedMemory, decode
+import camera_gemini
 
 # Disable pydirectinput's safety pause and failsafe
 pydirectinput.PAUSE = 0.01
 pydirectinput.FAILSAFE = False
 
-# Numpad digits are missing from pydirectinput's scancode table
-pydirectinput.KEYBOARD_MAPPING.update({
-    "num0": 0x52, "num1": 0x4F, "num2": 0x50, "num3": 0x51, "num4": 0x4B,
-    "num5": 0x4C, "num6": 0x4D, "num7": 0x47, "num8": 0x48, "num9": 0x49,
-})
+# --- RaceRoom's replay bar, in pixels of a 1920x1080 game window (scaled to the real window size) ---
+# The Driver Ahead/Behind keys (Numpad +/-) do nothing in 3.6 replays, and the camera keys step through
+# every camera in between, so everything is driven through the bar's own controls instead.
+BAR_Y = 1018
+DRIVER_AHEAD_X = 512 # ">" next to the driver name
+DRIVER_BEHIND_X = 271 # "<"
+CAMERA_MENU_X = 736 # The camera dropdown's arrow button
+CAMERA_ITEM_X = 640
+PLAY_BUTTON_X = 960
+# The bar's rewind buttons, compared with a saved picture of them to tell whether the bar is showing
+# (a plain darkness check is fooled by dark cockpit views). Measured: 0-2 when shown, 23+ when hidden.
+BAR_BUTTONS_BOX = (840, 998, 936, 1038)
+BAR_BUTTONS_IMAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "replay_bar_buttons.png")
+BAR_MATCH_LIMIT = 10
+CAMERA_ARROW_PROBE = (726, 1008, 746, 1028) # Points down when the menu is closed, up when open
+PLAY_ICON_PROBE = (945, 1003, 975, 1033) # White triangle when paused, two bars when playing
 
-CATEGORIES = ("EXTERNAL", "ONBOARD", "DRIVER")
+# The camera dropdown lists every camera at a fixed height (the list grows upwards from the bar).
+# "inside" cameras are the ones in or on the car; the director never cuts straight between two of them.
+CAMERAS = {
+    "TV": (977, "external"),
+    "Action": (947, "external"),
+    "Aerial": (917, "external"),
+    "Static": (887, "external"),
+    "Chase": (831, "external"),
+    "Cockpit": (801, "inside"),
+    "Hood": (771, "inside"),
+    "Nose": (741, "inside"),
+    **{f"Onboard {n}": (568 - 30 * (n - 1), "inside") for n in range(1, 13)},
+}
+DEFAULT_ENABLED = ["TV", "Aerial", "Onboard 1", "Onboard 2", "Cockpit"]
+MAX_CARS = 128 # Safety stop when clicking round the driver list
+ARROW_CLICK_GAP = 0.03 # RaceRoom takes every arrow click even 0.02s apart, so a switch is one quick burst
+
+# RaceRoom's camera hotkeys (F1 in a replay), as measured:
+# - External (Page Down) comes back to the last external camera; End steps TV -> Action -> Aerial -> Static -> TV
+#   and only works while an external camera is showing.
+# - Onboard (Home) comes back to the last onboard camera, and each further press steps to the next one.
+# - Driving (Insert) always starts on Hood, and each further press steps Hood -> Nose -> Chase -> Cockpit.
+# The game never reports which camera is live, so the controller keeps count; a menu pick sets the same memory.
+EXTERNAL_CYCLE = ["TV", "Action", "Aerial", "Static"]
+DRIVING_CYCLE = ["Hood", "Nose", "Chase", "Cockpit"]
+DEFAULT_CAMERA_KEYS = {"external": "pagedown", "cycle_external": "end", "onboard": "home", "driving": "insert"}
+# Seconds per key down / up. RaceRoom registers presses well under one 60 fps frame apart (measured: 6 ms
+# reliable, 3 ms drops presses; 7 ms was 80/80), so an in-between camera exists for ~14 ms: one frame at most.
+HOTKEY_TAP = 0.007
+
+
+def precise_wait(seconds):
+    """time.sleep is only accurate to ~15 ms on Windows, too coarse for HOTKEY_TAP."""
+    end = time.perf_counter() + seconds
+    while time.perf_counter() < end:
+        pass
+
+
+def camera_group(camera):
+    if camera in EXTERNAL_CYCLE:
+        return "external"
+    if camera in DRIVING_CYCLE:
+        return "driving"
+    if camera.startswith("Onboard "):
+        return "onboard"
+    return None
+FALLBACK_CAMERA = "TV"
 
 KEY_NAMES = {
     Key.ctrl: "ctrl", Key.alt: "alt", Key.shift: "shift",
@@ -39,18 +97,11 @@ KEY_NAMES = {
     Key.f5: "f5", Key.f6: "f6", Key.f7: "f7", Key.f8: "f8",
     Key.f9: "f9", Key.f10: "f10", Key.f11: "f11", Key.f12: "f12",
 }
-VK_NAMES = {96: "num0", 97: "num1", 98: "num2", 99: "num3", 100: "num4", 101: "num5", 102: "num6",
-            103: "num7", 104: "num8", 105: "num9", 106: "num*", 107: "num+", 109: "num-", 110: "num.", 111: "num/"}
-DIRECT_KEYS = {"pgup": "pageup", "pgdn": "pagedown", "pgdown": "pagedown", "del": "delete", "ins": "insert",
-               "num+": "add", "num-": "subtract", "num*": "multiply", "num/": "divide", "num.": "decimal"}
 
 
 def key_to_str(key):
     if key in KEY_NAMES:
         return KEY_NAMES[key]
-    vk = getattr(key, "vk", None)
-    if vk in VK_NAMES:
-        return VK_NAMES[vk]
     char = getattr(key, "char", None)
     if char:
         return char.lower()
@@ -74,11 +125,92 @@ def record_key(on_done):
     Listener(on_press=on_press, on_release=on_release, suppress=True).start()
 
 
+def is_inside(camera):
+    return CAMERAS.get(camera, (0, "external"))[1] == "inside"
+
+
+def item_camera(item):
+    """Camera name of a sequence entry ("camera", or "label" from older sequence files)."""
+    return item.get("camera") or item.get("label")
+
+
+# A driver change on the same external camera looks like a jump (the game snaps between cars), so swap it
+SAME_CAMERA_SWAP = {"TV": "Aerial", "Aerial": "TV", "Action": "TV", "Static": "TV", "Chase": "TV"}
+
+
+def enforce_camera_rules(sequence):
+    """Applies the cutting rules to a sequence:
+    - never cut straight from one inside camera to another (onboard, cockpit...): go external first;
+    - never change driver on the same external camera (TV -> TV jumps between cars).
+
+    Returns the fixed sequence and a list of the changes made.
+    """
+    fixed, changes = [], []
+    previous, previous_driver = None, None
+    for item in sequence:
+        item = dict(item)
+        camera = item_camera(item)
+        driver = item.get("driver")
+        if camera and camera not in CAMERAS:
+            changes.append(f"{item.get('timecode')}: unknown camera '{camera}' -> {FALLBACK_CAMERA}")
+            camera = FALLBACK_CAMERA
+        if camera and previous and is_inside(previous) and is_inside(camera):
+            if driver == previous_driver:
+                # Same car: stay on the inside camera already showing rather than cutting out and back
+                changes.append(f"{item.get('timecode')}: {previous} -> {camera} is inside to inside -> stays on {previous}")
+                continue
+            changes.append(f"{item.get('timecode')}: {previous} -> {camera} is inside to inside -> {FALLBACK_CAMERA}")
+            camera = FALLBACK_CAMERA
+        if camera and camera == previous and driver != previous_driver and camera in SAME_CAMERA_SWAP:
+            swap = SAME_CAMERA_SWAP[camera]
+            changes.append(f"{item.get('timecode')}: {camera} -> {camera} on a new driver -> {swap}")
+            camera = swap
+        if camera:
+            item["camera"] = camera
+            item.pop("label", None)
+            item.pop("category", None)
+            previous = camera
+        previous_driver = driver
+        fixed.append(item)
+    return fixed, changes
+
+
+def load_race_timing(log_path):
+    """Running order through the race from the logger's <log>_timing.jsonl: [(log time, [names by place])].
+
+    The ">" driver arrow follows this order, so a switch can be counted out in clicks. Retired and
+    disqualified cars are left out, as RaceRoom leaves them out of the arrow cycle.
+    """
+    if not log_path:
+        return []
+    base = os.path.splitext(log_path)[0]
+    path = base + "_timing.jsonl"
+    if not os.path.exists(path): # A combined log: use the newest timing file in the project's Logs folder
+        logs = os.path.join(os.path.dirname(log_path), "Logs")
+        files = [os.path.join(logs, f) for f in os.listdir(logs) if f.endswith("_timing.jsonl")] if os.path.isdir(logs) else []
+        if not files:
+            return []
+        path = max(files, key=os.path.getmtime)
+    snapshots = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                record = json.loads(line)
+                if record["type"] == "session":
+                    snapshots = [] # The clock restarts; the race is the last session in the file
+                elif record["type"] == "timing":
+                    rows = sorted(record["rows"], key=lambda r: r[1])
+                    snapshots.append((record["t"], [r[0] for r in rows if r[12] in (0, 1)]))
+    except (OSError, ValueError, KeyError, IndexError):
+        return []
+    return snapshots
+
+
 class RaceroomCameraController:
     def __init__(self, root):
         self.root = root
         self.root.title("RaceRoom Camera Controller")
-        self.root.geometry("400x1060")
+        self.root.geometry("400x1000")
         self.root.attributes("-topmost", True)
 
         self.config_file = "config_raceroom.json"
@@ -87,10 +219,11 @@ class RaceroomCameraController:
 
         self.target_window_name = tk.StringVar()
         self.status_msg = tk.StringVar(value="Ready")
+        self.camera_display = tk.StringVar(value="Camera: (unknown)")
 
         self.sequence_data = None
         self.is_playing_sequence = False
-        self.logic_lock = threading.Lock()
+        self.logic_lock = threading.RLock()
 
         # Playback Timing
         self.playback_start_time = datetime.now()
@@ -98,15 +231,16 @@ class RaceroomCameraController:
         self.timer_display = tk.StringVar(value="00:00:00")
 
         self.current_driver = None
+        self.current_camera = None
+        self.camera_memory = {"external": None, "onboard": None} # What Page Down / Home would come back to
+        self.driver_ring = [] # The replay's driver list in "driver ahead" arrow order: [{slot, name, car, num}]
+        self.race_timing = [] # [(log time, running order by place)] from the logger's timing file
         self.is_paused = False
         self.pause_start_time = None
         self.ignore_space_until = 0.0 # Our own simulated Space presses must not toggle the pause
 
-        # Camera memory: which category is live and which camera each category was left on
-        self.active_category = None
-        self.cat_states = {c: 0 for c in CATEGORIES}
-
         self.session_log_filename = None
+        self.bar_buttons = None # Reference picture of the replay bar, loaded on first use
 
         # Pre-loaded input file from launcher
         self.preloaded_input_file = None
@@ -156,32 +290,36 @@ class RaceroomCameraController:
             "settings": {
                 "hold_time": 0.05,
                 "step_gap": 0.15,
-                "category_wait": 0.25,
-                "car_ahead_key": "num+",
-                "car_behind_key": "num-",
-                "manual_fallback": True,
+                "hide_ui_key": "h",
+                "hide_replay_ui": True,
+                "manual_fallback": False,
+                "camera_method": "hotkeys",
+                "camera_keys": dict(DEFAULT_CAMERA_KEYS),
+                "gemini_model": camera_gemini.DEFAULT_MODEL,
+                "gemini_thinking_level": camera_gemini.DEFAULT_THINKING,
                 "api_key": ""
             },
-            "EXTERNAL": {"key": "pagedown", "cycle_key": "end", "cameras": [{"label": "TV", "fav": True}]},
-            "ONBOARD": {"key": "home", "cycle_key": "home", "cameras": [{"label": "Dash", "fav": True}]},
-            "DRIVER": {"key": "insert", "cycle_key": "insert", "cameras": [{"label": "Cockpit", "fav": True}]}
+            "cameras": {name: name in DEFAULT_ENABLED for name in CAMERAS},
         }
+        cfg = {}
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
-                # Merge defaults
-                for k, v in defaults.items():
-                    cfg.setdefault(k, v)
-                for k, v in defaults["settings"].items():
-                    cfg["settings"].setdefault(k, v)
-                return cfg
             except: pass
-        return defaults
+        settings = {**defaults["settings"], **cfg.get("settings", {})}
+        settings["camera_keys"] = {**DEFAULT_CAMERA_KEYS, **settings.get("camera_keys", {})}
+        for old in ("category_wait", "car_ahead_key", "car_behind_key"):
+            settings.pop(old, None)
+        cameras = {**defaults["cameras"], **cfg.get("cameras", {})}
+        return {"settings": settings, "cameras": {k: v for k, v in cameras.items() if k in CAMERAS}}
 
     def save_config(self):
         with open(self.config_file, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=4)
+
+    def enabled_cameras(self):
+        return [name for name in CAMERAS if self.data["cameras"].get(name)]
 
     def setup_ui(self):
         self.main_frame = ttk.Frame(self.root, padding="5")
@@ -217,33 +355,30 @@ class RaceroomCameraController:
         self.gap_ent = ttk.Entry(row1, width=8)
         self.gap_ent.insert(0, str(self.data["settings"]["step_gap"]))
         self.gap_ent.pack(side=tk.LEFT, padx=2)
+        ttk.Button(row1, text="Save Settings", command=self.update_settings).pack(side=tk.RIGHT, padx=2)
 
-        row2 = ttk.Frame(set_f); row2.pack(fill=tk.X, pady=2)
-        ttk.Label(row2, text="Camera Wait:").pack(side=tk.LEFT, padx=2)
-        self.cat_wait_ent = ttk.Entry(row2, width=8)
-        self.cat_wait_ent.insert(0, str(self.data["settings"]["category_wait"]))
-        self.cat_wait_ent.pack(side=tk.LEFT, padx=2)
-        ttk.Button(row2, text="Save Settings", command=self.update_settings).pack(side=tk.RIGHT, padx=2)
-
-        # Driver Switching
-        drv_f = ttk.LabelFrame(self.main_frame, text="Driver Switching")
+        # Replay control (driver + camera)
+        drv_f = ttk.LabelFrame(self.main_frame, text="Replay Control")
         drv_f.pack(fill=tk.X, pady=5)
 
-        self.key_buttons = {}
-        for label, setting in (("Car Ahead Key:", "car_ahead_key"), ("Car Behind Key:", "car_behind_key")):
-            row = ttk.Frame(drv_f); row.pack(fill=tk.X, pady=2)
-            ttk.Label(row, text=label).pack(side=tk.LEFT, padx=2)
-            btn = ttk.Button(row, text=self.data["settings"][setting], width=12,
-                             command=lambda s=setting: self.record_setting_key(s))
-            btn.pack(side=tk.RIGHT, padx=2)
-            self.key_buttons[setting] = btn
+        ttk.Label(drv_f, text="Uses the replay bar's driver arrows and camera menu.",
+                  font=("Helvetica", 8)).pack(anchor="w", padx=2)
+        row = ttk.Frame(drv_f); row.pack(fill=tk.X, pady=2)
+        ttk.Label(row, text="Hide UI Key:").pack(side=tk.LEFT, padx=2)
+        self.hide_key_btn = ttk.Button(row, text=self.data["settings"]["hide_ui_key"], width=12,
+                                       command=self.record_hide_ui_key)
+        self.hide_key_btn.pack(side=tk.RIGHT, padx=2)
 
+        self.hide_ui_var = tk.BooleanVar(value=self.data["settings"]["hide_replay_ui"])
+        ttk.Checkbutton(drv_f, text="Hide the replay bar again after switching", variable=self.hide_ui_var,
+                        command=lambda: self._save_setting("hide_replay_ui", self.hide_ui_var.get())).pack(anchor="w", padx=2)
         self.manual_fallback_var = tk.BooleanVar(value=self.data["settings"]["manual_fallback"])
         ttk.Checkbutton(drv_f, text="Pause for manual pick if auto-switch fails", variable=self.manual_fallback_var,
-                        command=self._save_manual_fallback).pack(anchor="w", padx=2)
+                        command=lambda: self._save_setting("manual_fallback", self.manual_fallback_var.get())).pack(anchor="w", padx=2)
 
         drv_btn_f = ttk.Frame(drv_f); drv_btn_f.pack(fill=tk.X, pady=2)
         ttk.Button(drv_btn_f, text="Check Focused Car", command=self.check_focus).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        ttk.Button(drv_btn_f, text="Learn Drivers", command=self.learn_drivers_prompt).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         ttk.Button(drv_btn_f, text="Go To Driver...", command=self.go_to_driver_prompt).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
 
         # Cameras
@@ -295,6 +430,8 @@ class RaceroomCameraController:
         seq_f = ttk.LabelFrame(self.main_frame, text="Sequence")
         seq_f.pack(fill=tk.X, pady=5)
 
+        camera_gemini.add_model_settings(seq_f, self.data["settings"], self.save_config)
+
         btn_f = ttk.Frame(seq_f); btn_f.pack(fill=tk.X, pady=2)
         ttk.Button(btn_f, text="Load JSON", command=self.load_sequence_file).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
         ttk.Button(btn_f, text="Generate (Gemini)", command=self.generate_sequence_with_gemini).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
@@ -315,31 +452,28 @@ class RaceroomCameraController:
         try:
             self.data["settings"]["hold_time"] = float(self.hold_ent.get())
             self.data["settings"]["step_gap"] = float(self.gap_ent.get())
-            self.data["settings"]["category_wait"] = float(self.cat_wait_ent.get())
             self.save_config()
             messagebox.showinfo("Success", "Settings updated")
         except:
             messagebox.showerror("Error", "Invalid numeric values")
 
-    def _save_manual_fallback(self):
-        self.data["settings"]["manual_fallback"] = self.manual_fallback_var.get()
+    def _save_setting(self, key, value):
+        self.data["settings"][key] = value
         self.save_config()
 
-    def record_setting_key(self, setting):
-        btn = self.key_buttons[setting]
-        btn.config(text="Press a key...")
+    def record_hide_ui_key(self):
+        self.hide_key_btn.config(text="Press a key...")
 
         def done(name):
-            self.data["settings"][setting] = name
-            self.save_config()
-            self.root.after(0, lambda: btn.config(text=name))
+            self._save_setting("hide_ui_key", name)
+            self.root.after(0, lambda: self.hide_key_btn.config(text=name))
         record_key(done)
 
     def refresh_windows(self):
         titles = [w.title for w in gw.getAllWindows() if w.title]
         self.win_combo['values'] = sorted(titles)
         for t in titles:
-            if "raceroom" in t.lower(): self.target_window_name.set(t); break
+            if "raceroom racing experience" in t.lower(): self.target_window_name.set(t); break
 
     def log_message(self, msg):
         now = datetime.now().strftime("%H:%M:%S")
@@ -351,202 +485,415 @@ class RaceroomCameraController:
         self.log_text.see(tk.END)
         self.log_text.config(state="disabled")
 
-    # ------------------------------------------------------------------ cameras
+    # ------------------------------------------------------------------ camera panel
 
     def render_cameras(self):
         for w in self.cam_f.winfo_children():
             w.destroy()
-        self.camera_vars = {}
-        for cat in CATEGORIES:
-            favs = [c["label"] for c in self.data[cat]["cameras"] if c.get("fav", True)]
+        ttk.Label(self.cam_f, textvariable=self.camera_display, font=("Helvetica", 9, "bold")).pack(anchor="w", padx=2)
+        for kind, title in (("external", "External:"), ("inside", "Inside:")):
             row = ttk.Frame(self.cam_f); row.pack(fill=tk.X, pady=2)
-            ttk.Label(row, text=f"{cat.title()}:", width=9).pack(side=tk.LEFT, padx=2)
-            var = tk.StringVar(value=favs[0] if favs else "")
-            self.camera_vars[cat] = var
-            ttk.Combobox(row, textvariable=var, values=favs, state="readonly", width=22).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-            ttk.Button(row, text="Go", width=4, command=lambda c=cat: self.select_camera(c, self.camera_vars[c].get())).pack(side=tk.RIGHT, padx=2)
-
+            ttk.Label(row, text=title, width=9).pack(side=tk.LEFT, padx=2)
+            for name in self.enabled_cameras():
+                if CAMERAS[name][1] == kind:
+                    ttk.Button(row, text=name, command=lambda n=name: self.select_camera(n)).pack(side=tk.LEFT, padx=1)
+        method_row = ttk.Frame(self.cam_f); method_row.pack(fill=tk.X, pady=2)
+        ttk.Label(method_row, text="Switch with:").pack(side=tk.LEFT, padx=2)
+        self.camera_method_var = tk.StringVar(value=self.data["settings"]["camera_method"])
+        for value, text in (("hotkeys", "Hotkeys"), ("menu", "Replay menu")):
+            ttk.Radiobutton(method_row, text=text, value=value, variable=self.camera_method_var,
+                            command=lambda: self._save_setting("camera_method", self.camera_method_var.get())).pack(side=tk.LEFT, padx=2)
         btn_row = ttk.Frame(self.cam_f); btn_row.pack(fill=tk.X, pady=2)
-        ttk.Button(btn_row, text="Edit Cameras...", command=self.open_camera_editor).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        ttk.Button(btn_row, text="Reset Camera Memory", command=self.reset_camera_memory).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        ttk.Button(btn_row, text="Sync Cameras", command=self.sync_cameras_prompt).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        ttk.Button(btn_row, text="Choose Cameras...", command=self.open_camera_chooser).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
 
-    def reset_camera_memory(self):
-        """Use after changing camera by hand in the game: assumes every category is back on its first camera."""
-        self.active_category = None
-        self.cat_states = {c: 0 for c in CATEGORIES}
-        self.log_message("Camera memory reset (every category assumed on its first camera)")
-
-    def open_camera_editor(self):
+    def open_camera_chooser(self):
         win = tk.Toplevel(self.root)
-        win.title("Edit Cameras")
-        win.geometry("380x600")
+        win.title("Cameras")
         win.attributes("-topmost", True)
-        body = ttk.Frame(win, padding=5); body.pack(fill=tk.BOTH, expand=True)
+        body = ttk.Frame(win, padding=8); body.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(body, text="Ticked cameras are offered to Gemini and shown as buttons.\n"
+                             "The director never cuts straight between two inside cameras.",
+                  wraplength=320).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        for col, (kind, title) in enumerate((("external", "External"), ("inside", "Inside (on / in the car)"))):
+            frame = ttk.LabelFrame(body, text=title); frame.grid(row=1, column=col, sticky="n", padx=4)
+            for name, (_, k) in CAMERAS.items():
+                if k != kind:
+                    continue
+                var = tk.BooleanVar(value=self.data["cameras"].get(name, False))
+                ttk.Checkbutton(frame, text=name, variable=var,
+                                command=lambda n=name, v=var: self._toggle_camera(n, v.get())).pack(anchor="w")
 
-        def rebuild():
-            for w in body.winfo_children():
-                w.destroy()
-            ttk.Label(body, text="Cameras are listed in the order the cycle key steps through them.\n"
-                                 "Untick a camera to hide it from the AI and the dropdowns.",
-                      wraplength=360).pack(fill=tk.X, pady=(0, 6))
-            for cat in CATEGORIES:
-                cat_data = self.data[cat]
-                frame = ttk.LabelFrame(body, text=cat); frame.pack(fill=tk.X, pady=4)
-                keys = ttk.Frame(frame); keys.pack(fill=tk.X, pady=2)
-                for label, field in (("Key:", "key"), ("Cycle:", "cycle_key")):
-                    ttk.Label(keys, text=label).pack(side=tk.LEFT, padx=2)
-                    btn = ttk.Button(keys, text=cat_data[field] or "Record", width=10)
-                    btn.config(command=lambda c=cat, f=field, b=btn: self._record_camera_key(c, f, b))
-                    btn.pack(side=tk.LEFT, padx=2)
-                for i, cam in enumerate(cat_data["cameras"]):
-                    row = ttk.Frame(frame); row.pack(fill=tk.X)
-                    fav = tk.BooleanVar(value=cam.get("fav", True))
-                    ttk.Checkbutton(row, variable=fav, command=lambda c=cat, idx=i, v=fav: self._set_cam(c, idx, "fav", v.get())).pack(side=tk.LEFT)
-                    ent = ttk.Entry(row); ent.insert(0, cam["label"]); ent.pack(side=tk.LEFT, fill=tk.X, expand=True)
-                    ent.bind("<FocusOut>", lambda e, c=cat, idx=i, v=ent: self._set_cam(c, idx, "label", v.get()))
-                    ttk.Button(row, text="X", width=2, command=lambda c=cat, idx=i: (self.data[c]["cameras"].pop(idx), self._cameras_changed(), rebuild())).pack(side=tk.RIGHT)
-                ttk.Button(frame, text="+ Add Camera", command=lambda c=cat: (self.data[c]["cameras"].append({"label": "New Cam", "fav": True}), self._cameras_changed(), rebuild())).pack(anchor="w", pady=2)
-
-        rebuild()
-
-    def _record_camera_key(self, cat, field, btn):
-        btn.config(text="Press a key...")
-
-        def done(name):
-            self.data[cat][field] = name
-            self.save_config()
-            self.root.after(0, lambda: btn.config(text=name))
-        record_key(done)
-
-    def _set_cam(self, cat, idx, field, value):
-        self.data[cat]["cameras"][idx][field] = value
-        self._cameras_changed()
-
-    def _cameras_changed(self):
+    def _toggle_camera(self, name, enabled):
+        self.data["cameras"][name] = enabled
         self.save_config()
         self.render_cameras()
 
-    def select_camera(self, category, label):
-        if not label: return
-        threading.Thread(target=self._switch_camera, args=(category, label), daemon=True).start()
+    def select_camera(self, name):
+        threading.Thread(target=self._apply_shot, args=(None, None, name), daemon=True).start()
 
-    def _switch_camera(self, category, label):
-        """Enter the camera category, then cycle within it from the remembered camera to the target."""
-        cameras = [c["label"] for c in self.data.get(category, {}).get("cameras", [])]
-        if label not in cameras:
-            self.log_message(f"Warning: unknown camera {category} - {label}")
-            return False
-        target_idx = cameras.index(label)
-        with self.logic_lock:
-            if not self.focus_target_window():
-                self.log_message("Error: RaceRoom window not found")
-                return False
-            time.sleep(0.1)
-            sets = self.data["settings"]
-            cat_data = self.data[category]
-            if self.active_category != category:
-                self._send_keys(cat_data["key"])
-                self.active_category = category
-                time.sleep(sets["category_wait"])
-            steps = (target_idx - self.cat_states[category]) % len(cameras)
-            cycle_key = cat_data.get("cycle_key") or cat_data["key"]
-            for _ in range(steps):
-                self._send_keys(cycle_key)
-                time.sleep(sets["step_gap"])
-            self.cat_states[category] = target_idx
-        self.log_message(f"Camera: {category} - {label}")
-        return True
+    # ------------------------------------------------------------------ screen helpers
+
+    def _game_window_rect(self):
+        target = self.target_window_name.get()
+        wins = gw.getWindowsWithTitle(target) if target else []
+        if not wins:
+            return None
+        w = wins[0]
+        return w.left, w.top, w.width, w.height
+
+    @staticmethod
+    def _to_screen(rect, x, y):
+        left, top, width, height = rect
+        return int(left + x * width / 1920), int(top + y * height / 1080)
+
+    def _grab(self, rect, box):
+        """Screenshot of a box given in 1920x1080 game pixels, resized back to that size."""
+        x0, y0 = self._to_screen(rect, box[0], box[1])
+        x1, y1 = self._to_screen(rect, box[2], box[3])
+        img = ImageGrab.grab((x0, y0, max(x1, x0 + 1), max(y1, y0 + 1)), all_screens=True)
+        return img.resize((box[2] - box[0], box[3] - box[1])).convert("L")
+
+    def _click(self, rect, x, y):
+        pydirectinput.click(*self._to_screen(rect, x, y))
+
+    def _replay_bar_visible(self, rect):
+        if self.bar_buttons is None:
+            self.bar_buttons = Image.open(BAR_BUTTONS_IMAGE).convert("L")
+        diff = ImageChops.difference(self._grab(rect, BAR_BUTTONS_BOX), self.bar_buttons)
+        return ImageStat.Stat(diff).mean[0] < BAR_MATCH_LIMIT
+
+    def _set_replay_bar(self, rect, visible):
+        """Shows or hides the replay bar with the Hide UI key, polling the screen until it has changed."""
+        for _ in range(2):
+            if self._replay_bar_visible(rect) == visible:
+                return True
+            self._send_keys(self.data["settings"]["hide_ui_key"])
+            deadline = time.time() + 0.6
+            while time.time() < deadline:
+                time.sleep(0.05)
+                if self._replay_bar_visible(rect) == visible:
+                    time.sleep(0.05) # Let the bar finish fading in before clicking
+                    return True
+        return self._replay_bar_visible(rect) == visible
+
+    def _camera_menu_open(self, rect):
+        img = self._grab(rect, CAMERA_ARROW_PROBE)
+        top = ImageStat.Stat(img.crop((0, 4, 20, 10))).mean[0]
+        bottom = ImageStat.Stat(img.crop((0, 10, 20, 16))).mean[0]
+        return bottom > top # Arrow points up
+
+    def _replay_playing(self, rect):
+        img = self._grab(rect, PLAY_ICON_PROBE)
+        return ImageStat.Stat(img.crop((13, 8, 17, 22))).mean[0] < 100 # Gap between the pause bars
+
+    def _wait_for(self, check, timeout=0.6):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if check():
+                return True
+            time.sleep(0.03)
+        return check()
 
     # ------------------------------------------------------------------ driver switching
 
-    def _read_field(self):
-        """Current cars and focused slot from RaceRoom shared memory: ({slot: (name, place)}, focused_slot)."""
-        header, drivers = self.shm.read()
+    def _focused_car(self):
+        """The car in view. Some replays never fill in the field list, but in a replay the vehicle info and
+        player name always describe the car being watched."""
+        header, _ = self.shm.read()
         if header is None:
-            return None, None
-        cars = {d.driver_info.slot_id: (decode(d.driver_info.name), d.place) for d in drivers if d.place > 0}
-        return cars, header.vehicle_info.slot_id
+            return None
+        v = header.vehicle_info
+        return {"slot": v.slot_id, "name": decode(header.player_name), "car": decode(v.name),
+                "num": str(v.car_number) if v.car_number > 0 else ""}
 
-    @staticmethod
-    def _find_slot(cars, driver, position):
-        """Match the sequence's driver name to a car; fall back to the position it gives."""
-        wanted = (driver or "").strip().lower()
-        if wanted:
-            for slot, (name, _) in cars.items():
-                if name.lower() == wanted:
-                    return slot
-            for slot, (name, _) in cars.items():
-                if wanted in name.lower() or name.lower() in wanted:
-                    return slot
-        if position is not None:
-            for slot, (_, place) in cars.items():
-                if place == int(position):
-                    return slot
-        return None
+    def _ring_index(self, slot):
+        return next((i for i, car in enumerate(self.driver_ring) if car["slot"] == slot), None)
 
     def check_focus(self):
-        cars, focused = self._read_field()
-        if cars is None:
+        car = self._focused_car()
+        if car is None:
             self.log_message("RaceRoom shared memory not available (is the game running?)")
-        elif focused in cars:
-            name, place = cars[focused]
-            self.log_message(f"Focused car: {name} (P{place}) - {len(cars)} cars in session")
-        else:
-            self.log_message(f"Focused slot {focused} not found among {len(cars)} cars")
+            return
+        i = self._ring_index(car["slot"])
+        name = car["name"] or (self.driver_ring[i]["name"] if i is not None else None) or "(not learned yet)"
+        self.log_message(f"Focused car: {name} - {car['car']} #{car['num']} (slot {car['slot']})")
 
     def go_to_driver_prompt(self):
-        cars, _ = self._read_field()
-        if not cars:
-            messagebox.showerror("Error", "RaceRoom shared memory not available (is the game running?)")
-            return
-        driver = simpledialog.askstring("Go To Driver", "Driver name or position (e.g. 3):", parent=self.root)
-        if not driver: return
-        position = int(driver) if driver.strip().isdigit() else None
-        name = None if position else driver
-        threading.Thread(target=self._switch_driver, args=(name, position), daemon=True).start()
+        driver = simpledialog.askstring("Go To Driver", "Driver name:", parent=self.root)
+        if driver:
+            threading.Thread(target=self._apply_shot, args=(driver.strip(), None, None), daemon=True).start()
 
-    def _switch_driver(self, driver, position):
-        """Steps the replay focus with the car ahead/behind keys until RaceRoom reports the target car in view."""
-        sets = self.data["settings"]
+    def learn_drivers_prompt(self):
+        threading.Thread(target=self._learn_drivers_standalone, daemon=True).start()
+
+    def _learn_drivers_standalone(self):
         with self.logic_lock:
-            cars, focused = self._read_field()
-            if cars is None:
-                self.log_message("Error: RaceRoom shared memory not available")
-                return False
-            target = self._find_slot(cars, driver, position)
-            if target is None:
-                self.log_message(f"Warning: {driver or ('P' + str(position))} not found in the session")
-                return False
-            target_name = cars[target][0]
-            if focused == target:
-                return True
-            if not self.focus_target_window():
+            rect = self._game_window_rect()
+            if rect is None or not self.focus_target_window():
                 self.log_message("Error: RaceRoom window not found")
                 return False
             time.sleep(0.1)
+            mouse_home = pydirectinput.position()
+            try:
+                self._set_replay_bar(rect, True)
+                return self._learn_drivers(rect)
+            finally:
+                if self.data["settings"].get("hide_replay_ui", True):
+                    self._set_replay_bar(rect, False)
+                pydirectinput.moveTo(*mouse_home)
 
-            presses, unchanged = 0, 0
-            max_presses = len(cars) + 2
-            while focused != target and presses < max_presses:
-                current_place = cars.get(focused, ("", 999))[1]
-                key = sets["car_ahead_key"] if cars[target][1] < current_place else sets["car_behind_key"]
-                self._send_keys(key)
-                presses += 1
-                time.sleep(sets["step_gap"])
-                new_cars, new_focused = self._read_field()
-                if new_cars is None:
-                    break
-                unchanged = unchanged + 1 if new_focused == focused else 0
-                if unchanged >= 3:
-                    self.log_message("Driver keys are not changing the focused car - check the key bindings")
-                    break
-                cars, focused = new_cars, new_focused
+    def _click_arrow(self, rect, ahead, slot):
+        """Clicks a driver arrow and waits for RaceRoom to report a different car in view (~0.05s)."""
+        self._click(rect, DRIVER_AHEAD_X if ahead else DRIVER_BEHIND_X, BAR_Y)
+        deadline = time.time() + max(0.6, self.data["settings"]["step_gap"])
+        car = None
+        while time.time() < deadline:
+            time.sleep(0.02)
+            car = self._focused_car()
+            if car and car["slot"] != slot:
+                return car
+        return car
 
-        if focused == target:
-            self.log_message(f"Now watching {target_name} (P{cars[target][1]}) after {presses} key presses")
-            return True
-        self.log_message(f"Could not reach {target_name} automatically")
+    def _learn_drivers(self, rect):
+        """With the replay bar showing, clicks the "driver ahead" arrow once round the whole field.
+
+        The arrows cycle through the replay's driver list (alphabetical by surname), so this gives the exact
+        order, slot and name of every car; later switches then take the short way round.
+        """
+        car = self._focused_car()
+        if car is None:
+            self.log_message("Error: RaceRoom shared memory not available")
+            return False
+        self.log_message("Learning the replay's driver order...")
+        ring, seen, stuck = [], set(), 0
+        while len(ring) < MAX_CARS:
+            new = self._click_arrow(rect, True, car["slot"])
+            if not new or new["slot"] == car["slot"]:
+                stuck += 1
+                if stuck >= 3:
+                    self.log_message("The driver arrows are not changing the car in view - is the replay bar where expected?")
+                    return False
+                continue
+            stuck, car = 0, new
+            if car["slot"] in seen:
+                break
+            seen.add(car["slot"])
+            ring.append(car)
+        # The first car in view may not be in the list (nobody selected yet), so the loop is cut where it closes
+        while ring and ring[0]["slot"] != car["slot"]:
+            ring.pop(0)
+        if not ring:
+            return False
+        self.driver_ring = ring
+        self.log_message(f"Learned {len(ring)} drivers: " + ", ".join(c["name"] for c in ring))
+        return True
+
+    def _arrow_order(self, t=None):
+        """Driver names in "driver ahead" (>) order: from the timing log at log time t, else as learned."""
+        if t is not None and self.race_timing:
+            order = self.race_timing[0][1]
+            for snap_t, names in self.race_timing:
+                if snap_t > t:
+                    break
+                order = names
+            return order[:1] + order[1:][::-1] # > goes to the car one place ahead, and from P1 round to last
+        return [c["name"] for c in self.driver_ring]
+
+    @staticmethod
+    def _order_index(order, driver):
+        wanted = (driver or "").strip().casefold()
+        names = [n.casefold() for n in order]
+        if wanted in names:
+            return names.index(wanted)
+        return next((i for i, n in enumerate(names) if wanted and (wanted in n or n in wanted)), None)
+
+    def _click_burst(self, rect, ahead, clicks, slot):
+        """Clicks a driver arrow several times in a row, then waits once for the car in view to settle."""
+        for _ in range(clicks):
+            self._click(rect, DRIVER_AHEAD_X if ahead else DRIVER_BEHIND_X, BAR_Y)
+            time.sleep(ARROW_CLICK_GAP)
+        deadline = time.time() + 0.5
+        car = self._focused_car()
+        while car and car["slot"] == slot and time.time() < deadline:
+            time.sleep(0.02)
+            car = self._focused_car()
+        time.sleep(0.05) # Let any last click land before reading the result
+        return self._focused_car()
+
+    def _step_to_driver(self, rect, driver, position, log_time=None):
+        """With the replay bar showing, clicks the driver arrows the short way round to the target car.
+
+        The clicks are counted from the running order and sent in one burst, then the car in view is checked;
+        if RaceRoom's order differed (a car left out of the arrow cycle, positions just changed), it recounts
+        from wherever it landed.
+        """
+        order = self._arrow_order(log_time)
+        if not order or self._order_index(order, driver) is None:
+            if not self._learn_drivers(rect):
+                return False
+            order = self._arrow_order()
+        target = self._order_index(order, driver)
+        if target is None:
+            self.log_message(f"Warning: {driver} is not in the replay's driver list")
+            return False
+        name = order[target]
+        car = self._focused_car()
+        if car is None:
+            return False
+        clicks = 0
+        for _ in range(4):
+            if car["name"].casefold() == name.casefold():
+                self.log_message(f"Now watching {name} after {clicks} clicks")
+                return True
+            current = self._order_index(order, car["name"])
+            if current is None: # Nobody selected yet, or a car not in the order: step once and look again
+                ahead, steps = True, 1
+            else:
+                ahead_steps, behind_steps = (target - current) % len(order), (current - target) % len(order)
+                ahead, steps = ahead_steps <= behind_steps, min(ahead_steps, behind_steps)
+            car = self._click_burst(rect, ahead, steps, car["slot"])
+            clicks += steps
+            if car is None:
+                return False
+        self.log_message(f"Could not reach {name} with the driver arrows (staying on {car['name']})")
         return False
+
+    def _pick_camera(self, rect, camera):
+        """With the replay bar showing, picks the camera straight from the bar's camera menu (no stepping)."""
+        if camera not in CAMERAS:
+            self.log_message(f"Warning: unknown camera '{camera}'")
+            return False
+        if not self._camera_menu_open(rect):
+            self._click(rect, CAMERA_MENU_X, BAR_Y)
+            if not self._wait_for(lambda: self._camera_menu_open(rect), 0.5):
+                self.log_message("Camera menu did not open")
+                return False
+        self._click(rect, CAMERA_ITEM_X, CAMERAS[camera][0])
+        self._wait_for(lambda: not self._camera_menu_open(rect), 0.5)
+        self._now_showing(camera)
+        return True
+
+    def _now_showing(self, camera):
+        self.current_camera = camera
+        group = camera_group(camera)
+        if group == "external":
+            self.camera_memory["external"] = EXTERNAL_CYCLE.index(camera)
+        elif group == "onboard":
+            self.camera_memory["onboard"] = int(camera.split()[1])
+        self.root.after(0, lambda: self.camera_display.set(f"Camera: {camera}"))
+
+    def _hotkey_plan(self, camera):
+        """Key presses that reach the camera from the tracked state, or None when the state isn't known."""
+        keys = self.data["settings"]["camera_keys"]
+        group, current = camera_group(camera), camera_group(self.current_camera or "")
+        if group == "external":
+            if current == "external":
+                start, presses = EXTERNAL_CYCLE.index(self.current_camera), []
+            elif self.camera_memory["external"] is not None:
+                start, presses = self.camera_memory["external"], [keys["external"]]
+            else:
+                return None
+            return presses + [keys["cycle_external"]] * ((EXTERNAL_CYCLE.index(camera) - start) % len(EXTERNAL_CYCLE))
+        if group == "driving":
+            if current == "driving":
+                steps = (DRIVING_CYCLE.index(camera) - DRIVING_CYCLE.index(self.current_camera)) % len(DRIVING_CYCLE)
+                return [keys["driving"]] * steps
+            return [keys["driving"]] * (DRIVING_CYCLE.index(camera) + 1)
+        if group == "onboard":
+            target = int(camera.split()[1])
+            if current == "onboard":
+                start, presses = int(self.current_camera.split()[1]), []
+            elif self.camera_memory["onboard"] is not None:
+                start, presses = self.camera_memory["onboard"], [keys["onboard"]]
+            else:
+                return None
+            if target < start:
+                return None # Going round the loop needs the car's onboard count, which isn't known
+            return presses + [keys["onboard"]] * (target - start)
+        return None
+
+    def _hotkey_camera(self, camera):
+        """Switches camera with the hotkeys (no replay bar). Returns False when the menu is needed instead."""
+        plan = self._hotkey_plan(camera)
+        if plan is None:
+            return False
+        for key in plan:
+            pydirectinput.keyDown(key); precise_wait(HOTKEY_TAP)
+            pydirectinput.keyUp(key); precise_wait(HOTKEY_TAP)
+        self._now_showing(camera)
+        return True
+
+    def sync_cameras_prompt(self):
+        threading.Thread(target=self._sync_cameras, daemon=True).start()
+
+    def _sync_cameras(self):
+        """Puts the camera hotkeys in a known state: Onboard 1 and TV remembered, TV showing. Shows briefly on screen."""
+        with self.logic_lock:
+            rect = self._game_window_rect()
+            if rect is None or not self.focus_target_window():
+                self.log_message("Error: RaceRoom window not found")
+                return False
+            time.sleep(0.1)
+            mouse_home = pydirectinput.position()
+            try:
+                self._set_replay_bar(rect, True)
+                ok = self._pick_camera(rect, "Onboard 1") and self._pick_camera(rect, "TV")
+            finally:
+                if self.data["settings"].get("hide_replay_ui", True):
+                    self._set_replay_bar(rect, False)
+                pydirectinput.moveTo(*mouse_home)
+            self.log_message("Cameras synced (TV)" if ok else "Camera sync failed")
+            return ok
+
+    def _apply_shot(self, driver, position, camera, log_time=None):
+        """Switches driver and/or camera in one showing of the replay bar. Returns whether the driver was reached."""
+        with self.logic_lock:
+            rect = self._game_window_rect()
+            if rect is None or not self.focus_target_window():
+                self.log_message("Error: RaceRoom window not found")
+                return False
+            time.sleep(0.1)
+            mouse_home = pydirectinput.position()
+            reached = True
+            new_camera = camera if camera and camera != self.current_camera else None
+            by_hotkey = (new_camera and self.data["settings"].get("camera_method") == "hotkeys"
+                         and self._hotkey_plan(new_camera) is not None)
+            if (driver or position is not None) or (new_camera and not by_hotkey):
+                try:
+                    self._set_replay_bar(rect, True)
+                    if driver or position is not None:
+                        reached = self._step_to_driver(rect, driver, position, log_time)
+                    if new_camera and not by_hotkey and self._pick_camera(rect, new_camera):
+                        self.log_message(f"Camera: {new_camera} (menu)")
+                finally:
+                    if self.data["settings"].get("hide_replay_ui", True):
+                        self._set_replay_bar(rect, False)
+                    pydirectinput.moveTo(*mouse_home)
+            if by_hotkey and self._hotkey_camera(new_camera):
+                self.log_message(f"Camera: {new_camera}")
+            return reached
+
+    def _set_replay_playing(self, playing):
+        """Starts or pauses the RaceRoom replay with the bar's play button. Returns True if it changed."""
+        with self.logic_lock:
+            rect = self._game_window_rect()
+            if rect is None or not self.focus_target_window():
+                self.log_message("Error: RaceRoom window not found")
+                return False
+            time.sleep(0.1)
+            mouse_home = pydirectinput.position()
+            changed = False
+            try:
+                self._set_replay_bar(rect, True)
+                if self._replay_playing(rect) != playing:
+                    self._click(rect, PLAY_BUTTON_X, BAR_Y)
+                    changed = self._wait_for(lambda: self._replay_playing(rect) == playing, 1.0)
+            finally:
+                if self.data["settings"].get("hide_replay_ui", True):
+                    self._set_replay_bar(rect, False)
+                pydirectinput.moveTo(*mouse_home)
+            return changed
 
     def _manual_driver_pick(self, driver):
         """Fallback: pause the replay so the user can pick the driver, then carry on when they press Space."""
@@ -568,10 +915,7 @@ class RaceroomCameraController:
         if not keys_str: return
         hold = float(self.data["settings"]["hold_time"])
         for step in keys_str.split(','):
-            parts = [DIRECT_KEYS.get(p, p) for p in step.lower().replace(" ", "").split('+') if p]
-            # "num+" splits into "num" and "" - rebuild it
-            if step.strip().lower() in DIRECT_KEYS:
-                parts = [DIRECT_KEYS[step.strip().lower()]]
+            parts = [p for p in step.lower().replace(" ", "").split('+') if p]
             try:
                 for p in parts:
                     pydirectinput.keyDown(p)
@@ -608,14 +952,16 @@ class RaceroomCameraController:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if "sequence" in data:
-                    self.sequence_data = data["sequence"]
-                    self.play_btn.config(state="normal")
-                    self.status_msg.set(f"Loaded: {os.path.basename(path)}")
-                    if self.sequence_data:
-                        self.log_gf_time.set(self.sequence_data[0]["timecode"])
-                else:
-                    messagebox.showerror("Error", "Invalid sequence file format.")
+            if "sequence" not in data:
+                messagebox.showerror("Error", "Invalid sequence file format.")
+                return
+            self.sequence_data, changes = enforce_camera_rules(data["sequence"])
+            for change in changes:
+                self.log_message(f"Camera rule: {change}")
+            self.play_btn.config(state="normal")
+            self.status_msg.set(f"Loaded: {os.path.basename(path)}" + (f" ({len(changes)} camera fixes)" if changes else ""))
+            if self.sequence_data:
+                self.log_gf_time.set(self.sequence_data[0]["timecode"])
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
 
@@ -637,11 +983,12 @@ class RaceroomCameraController:
         self.input_status_label.config(bg="#1a2e1a", fg="#0f0")
 
     def _camera_list_for_prompt(self):
-        lines = []
-        for cat in CATEGORIES:
-            favs = [c["label"] for c in self.data[cat]["cameras"] if c.get("fav", True)]
-            if favs:
-                lines.append(f"- {cat}: " + ", ".join(f'"{f}"' for f in favs))
+        enabled = self.enabled_cameras()
+        external = [c for c in enabled if not is_inside(c)] or [FALLBACK_CAMERA]
+        inside = [c for c in enabled if is_inside(c)]
+        lines = ["- External: " + ", ".join(f'"{c}"' for c in external)]
+        if inside:
+            lines.append("- Inside (on or in the car): " + ", ".join(f'"{c}"' for c in inside))
         return "\n".join(lines)
 
     def generate_sequence_with_gemini(self):
@@ -649,7 +996,7 @@ class RaceroomCameraController:
         if not api_key:
             api_key = simpledialog.askstring("API Key", "Enter your Gemini API Key:", show='*')
             if not api_key: return
-            api_key_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "API_Key.txt")
+            api_key_path = os.path.join(APP_DIR, "API_Key.txt")
             with open(api_key_path, "w") as f:
                 f.write(api_key.strip())
 
@@ -696,10 +1043,37 @@ class RaceroomCameraController:
                     self.log_message(f"Loaded project notes from: {os.path.basename(notes_path)}")
                 except Exception as e:
                     self.log_message(f"Warning: Failed to read project notes: {e}")
+            extra_context += self._director_instructions(project_path)
 
-        self.status_msg.set("Generating sequence with Gemini...")
+        settings = self.data["settings"]
+        try:
+            max_tokens = int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS") or 65536)
+        except ValueError:
+            max_tokens = 65536
+        model, level = settings["gemini_model"], settings["gemini_thinking_level"]
+        self.status_msg.set(f"Generating with {model} (thinking {level})...")
+        self.log_message(f"Gemini: {model}, thinking {level}")
         full_prompt = f"{prompt_text}{extra_context}\n\nRace Data:\n{data_content}"
-        threading.Thread(target=self._call_gemini_api, args=(api_key, full_prompt), daemon=True).start()
+        camera_gemini.generate(self.root, api_key, full_prompt, model, level, max_tokens,
+                               self._on_gemini_answer, self._on_gemini_error)
+
+    def _director_instructions(self, project_path):
+        """Director Notes from the launcher (camera_instructions.txt); # lines are comments."""
+        path = os.path.join(project_path, "camera_instructions.txt")
+        if not os.path.exists(path):
+            return ""
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = [l.rstrip() for l in f if not l.lstrip().startswith("#")]
+        except Exception as e:
+            self.log_message(f"Warning: Failed to read director notes: {e}")
+            return ""
+        text = "\n".join(lines).strip()
+        if not text:
+            return ""
+        self.log_message("Loaded director notes for the camera AI")
+        return ("\n\nDirector Instructions (from the user - follow these closely, "
+                f"they take priority over the general guidance above):\n{text}")
 
     def _get_gemini_api_key(self):
         # Environment Variable (passed from launcher) first
@@ -713,75 +1087,34 @@ class RaceroomCameraController:
                 with open(p, "r") as f: return f.read().strip()
         return None
 
-    def _call_gemini_api(self, api_key, full_prompt):
+    def _on_gemini_error(self, e):
+        messagebox.showerror("Generation Error", f"An error occurred: {e}")
+        self.status_msg.set("Generation failed")
+
+    def _on_gemini_answer(self, result_text):
         try:
-            client = genai.Client(api_key=api_key)
-            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.8-flash')
-            max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
-            try:
-                max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
-            except ValueError:
-                max_output_tokens = 65536
+            json_data = camera_gemini.extract_json(result_text)
+            json_data["sequence"], changes = enforce_camera_rules(json_data.get("sequence", []))
+            for change in changes:
+                self.log_message(f"Camera rule: {change}")
 
-            is_gemini_3 = any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
-            thinking_config = types.ThinkingConfig(
-                include_thoughts=True,
-                thinking_level="HIGH"
-            ) if is_gemini_3 else None
-
-            config = types.GenerateContentConfig(
-                max_output_tokens=max_output_tokens,
-                thinking_config=thinking_config
-            )
-
-            response = client.models.generate_content(
-                model=model_name,
-                contents=full_prompt,
-                config=config
-            )
-
-            # Print thinking to console
-            if response.candidates:
-                for part in response.candidates[0].content.parts:
-                    if part.thought:
-                        print("\n" + "="*60)
-                        print("GEMINI THINKING:")
-                        print("="*60)
-                        print(part.text)
-                        print("="*60 + "\n")
-                        self.log_message("Gemini thinking printed to console")
-
-            result_text = response.text
-            if "```json" in result_text:
-                result_text = result_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in result_text:
-                result_text = result_text.split("```")[1].split("```")[0].strip()
-
-            json_data = json.loads(result_text)
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = f"camera_sequence_raceroom_{timestamp}.json"
-
+            output_filename = f"camera_sequence_raceroom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             project_path = os.environ.get("R3E_PROJECT_PATH")
             if project_path:
                 output_filename = os.path.join(project_path, output_filename)
-
             with open(output_filename, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, indent=4)
-
-            self.root.after(0, lambda: self._on_generation_success(output_filename))
-
+            self._on_generation_success(output_filename)
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Generation Error", f"An error occurred: {e}"))
-            self.root.after(0, lambda: self.status_msg.set("Generation failed"))
+            self._on_gemini_error(e)
 
     @staticmethod
     def _note_text(item):
         driver = item.get("driver", "Unknown")
         pos = item.get("position")
         text = f"Watching {driver} (P{pos})" if pos is not None else f"Watching {driver}"
-        if item.get("label"):
-            text += f" - {item.get('category', '').title()} {item['label']} camera"
+        if item_camera(item):
+            text += f" - {item_camera(item)} camera"
         return text
 
     def _generate_director_notes_from_sequence(self, sequence_data):
@@ -862,12 +1195,13 @@ class RaceroomCameraController:
             self.is_playing_sequence = False
             self.is_paused = False
             self.play_btn.config(text="Play Sequence")
+            threading.Thread(target=self._set_replay_playing, args=(False,), daemon=True).start()
             return
 
         self.is_playing_sequence = True
         self.is_paused = False
-        self.playback_start_time = datetime.now()
         self.current_driver = None
+        self.current_camera = None
 
         # Create session log file
         filename = f"director_notes_raceroom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
@@ -885,6 +1219,21 @@ class RaceroomCameraController:
         except: pass
 
     def _run_sequence(self):
+        # Start the replay in RaceRoom; the sequence clock starts the moment it is playing
+        self.status_msg.set("Starting the replay...")
+        if self.data["settings"].get("camera_method") == "hotkeys":
+            self._set_replay_playing(False)
+            self._sync_cameras() # While the replay is still paused
+        self.race_timing = load_race_timing(self.preloaded_input_file)
+        if self.race_timing:
+            self.log_message(f"Driver order from the timing log ({len(self.race_timing)} snapshots)")
+        elif self.sequence_data and any(item.get("driver") for item in self.sequence_data):
+            self.status_msg.set("Learning the driver order...")
+            self._learn_drivers_standalone() # Also while paused: one lap of the driver arrows
+        if self._set_replay_playing(True):
+            self.log_message("Replay started in RaceRoom")
+        self.playback_start_time = datetime.now()
+        self.status_msg.set("Running...")
         self.log_message("Sequence started")
 
         # Timer update loop
@@ -928,16 +1277,19 @@ class RaceroomCameraController:
     def _apply_item(self, item):
         driver = item.get("driver")
         pos = item.get("position")
-        if driver != self.current_driver:
-            self.log_message(f"Switching to {driver} (P{pos})")
-            if self._switch_driver(driver, pos):
+        camera = item_camera(item)
+        new_driver = driver != self.current_driver
+        if new_driver:
+            self.log_message(f"Switching to {driver}" + (f" (P{pos})" if pos else ""))
+        h, m_, s_ = map(int, item.get("timecode", "0:0:0").split(":"))
+        reached = self._apply_shot(driver if new_driver else None, pos if new_driver else None, camera,
+                                   log_time=h * 3600 + m_ * 60 + s_) # The timecode is where the replay is now
+        if new_driver:
+            if reached:
                 self.current_driver = driver
             elif self.data["settings"].get("manual_fallback", True):
                 self.current_driver = driver
                 self._manual_driver_pick(driver)
-        category, label = item.get("category"), item.get("label")
-        if category and label:
-            self._switch_camera(category, label)
 
 
 if __name__ == "__main__":

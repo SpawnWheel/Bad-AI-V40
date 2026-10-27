@@ -28,7 +28,7 @@ def main():
     if not race.drivers:
         print("Error: could not read any drivers from the race log.")
         return
-    gcfg.ensure_drivers(cfg, race.drivers)
+    gcfg.ensure_drivers(cfg, race.drivers, race.entries())
     print(f"Race: {race.track} | {len(race.drivers)} drivers | sync offset {race.offset:+.0f}s")
 
     renderer = OverlayRenderer(project_path, cfg, {'graphics': []}, race=race)
