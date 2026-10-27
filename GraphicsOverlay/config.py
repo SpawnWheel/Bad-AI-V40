@@ -61,6 +61,8 @@ DEFAULT_CONFIG = {
         'event_name': '',
         'logo': '',
         'logo_tint_white': False,
+        # Flag image faded in behind the opening race card (Graphics/Flags, or any image)
+        'event_flag': '',
     },
     'theme': {
         'accent': '#E10600',

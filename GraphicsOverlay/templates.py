@@ -4,8 +4,9 @@ import os
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from . import config as gcfg
-from .drawing import (add_shadow, ellipsize, fit_font, fit_image, font, h_gradient, load_image, logo_outline, polygon,
-                      rgba, round_outline, round_rect, text_vcenter, text_w, wrap)
+from .drawing import (add_shadow, cover_image, ellipsize, fit_font, fit_image, font, h_gradient, load_image,
+                      logo_outline, polygon, rgba, round_outline, round_rect, text_vcenter, text_w, wave_cloth,
+                      wrap)
 from .race_data import fmt_clock
 
 LABEL_H = 30
@@ -854,31 +855,91 @@ class Templates:
             y += 26
         return img
 
-    def card_title_card(self, g):
+    def card_title_card(self, g, anim=1.0):
+        """Opening race card. The event flag (Branding tab) fills the right of the card as waving cloth,
+        fading out towards the text; anim 0..1 sweeps it in while it ripples, then it settles."""
         th = self.th
         champ = self.cfg['championship']
         d = g.get('data', {})
-        W, panel_h = 760, 190
-        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'RACE').upper(), stripe=th.accent)
-        x = 28
-        if self.logo:
-            lg = fit_image(self.logo, 200, 70)
-            img.alpha_composite(lg, (W - lg.width - 24, int(top + 22)))
-        name = (champ.get('name') or '').upper()
-        if name:
-            f = fit_font(name, W - 280, 24, 'bold_cond')
-            ImageDraw.Draw(img).text((x, top + 18), name, font=f, fill=th.accent2)
-        sub = '  ·  '.join(s.upper() for s in (champ.get('season'), champ.get('round')) if s)
-        if sub:
-            ImageDraw.Draw(img).text((x, top + 48), sub, font=font(20, 'semibold_cond'), fill=th.muted)
+        anim = 1.0 if anim is None else anim
+        e = 1 - (1 - anim) ** 3
+        W, H = 940, 226
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        shape = Image.new('L', (W, H), 0)
+        ImageDraw.Draw(shape).rounded_rectangle((0, 0, W - 1, H - 1), radius=12, fill=255)
+        round_rect(img, (0, 0, W, H), 12, th.panel)
+
+        # Text first: the flag and the slashes start where it ends
+        x = 34
+        name = (champ.get('name') or '').strip().upper()
+        f_name = fit_font(name, W * 0.6 - x, 26, 'bold_cond') if name else None
         track = (g.get('title') or champ.get('event_name') or gcfg.clean_track_name(self.race.track)).upper()
-        f = fit_font(track, W - 60, 64, 'bold')
-        ImageDraw.Draw(img).text((x, top + 76), track, font=f, fill=th.text)
-        info = g.get('text') or '  ·  '.join(s for s in (
+        f_track = fit_font(track, W * 0.6 - x, 76, 'bold')
+        info = (g.get('text') or '  ·  '.join(s_ for s_ in (
             gcfg.clean_track_name(self.race.track_layout),
             f"{self.race.track_length_m / 1000:.3f} KM" if self.race.track_length_m else '',
-            f"{d.get('drivers')} DRIVERS" if d.get('drivers') else '') if s)
-        ImageDraw.Draw(img).text((x, top + 150), info.upper(), font=font(20, 'semibold_cond'), fill=th.muted)
+            f"{d.get('drivers')} DRIVERS" if d.get('drivers') else '') if s_)).upper()
+        f_info = font(19, 'semibold_cond')
+        text_right = x + max(text_w(f_track, track), text_w(f_name, name) if name else 0, 52 + text_w(f_info, info))
+        fx = int(min(W * 0.62, max(W * 0.36, text_right - 10)))
+        fw = W - fx
+
+        # Flag (or an accent glow without one), cut to the card's shape
+        art = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        flag = load_image(gcfg.resolve_path(champ.get('event_flag')), autocrop=False)
+        if flag is not None:
+            cloth = wave_cloth(cover_image(flag, fw + 40, H + 20), phase=(1 - e) * 2.6 + 0.6)
+            art.alpha_composite(cloth, (fx - int((1 - e) * 40), -10))
+            # Fade in from the left, keep it a backdrop rather than the main act
+            ramp = Image.linear_gradient('L').rotate(90).resize((int(fw * 0.6), H))  # 0 left -> 255 right
+            mask = Image.new('L', (W, H), 0)
+            mask.paste(ramp, (fx, 0))
+            mask.paste(255, (fx + ramp.width, 0, W, H))
+            strength = 0.78 * min(1.0, e * 1.3)
+            art.putalpha(ImageChops.multiply(art.getchannel('A'), mask.point(lambda v: int(v * strength))))
+            # Darken the bottom so the info line and the logo stay readable on bright flags
+            shade = Image.linear_gradient('L').resize((W, H)).point(lambda v: int(v * 0.55))
+            dim = Image.new('RGBA', (W, H), (0, 0, 0, 255))
+            dim.putalpha(ImageChops.multiply(shade, mask.point(lambda v: int(v * strength))))
+            art.alpha_composite(dim)
+        else:
+            glow = Image.new('RGBA', (W, H), th.accent[:3] + (255,))
+            mask = Image.new('L', (W, H), 0)
+            mask.paste(Image.linear_gradient('L').rotate(90).resize((fw, H)), (fx, 0))
+            glow.putalpha(mask.point(lambda v: int(v * 0.3 * e)))
+            art.alpha_composite(glow)
+        art.putalpha(ImageChops.multiply(art.getchannel('A'), shape))
+        img.alpha_composite(art)
+
+        # Twin slashes where the flag begins, sliding in with it
+        sx = fx + 6 - int((1 - e) * 60)
+        for off, col, a in ((0, th.accent, 255), (22, th.accent2, 230)):
+            polygon(img, [(sx + off + 46, 0), (sx + off + 58, 0), (sx + off + 12, H), (sx + off, H)],
+                    col[:3] + (int(a * min(1.0, e * 1.5)),))
+        polygon(img, [(sx + 78, 0), (sx + 82, 0), (sx + 36, H), (sx + 32, H)], (255, 255, 255, int(70 * e)))
+
+        # Text on the left
+        label = (g.get('label') or 'RACE').upper()
+        f_lab = font(17, 'bold_cond')
+        lw = int(text_w(f_lab, label) + 22)
+        round_rect(img, (x, 24, x + lw, 50), 4, th.accent)
+        text_vcenter(img, x + lw / 2, 38, label, f_lab, contrast_text(th.accent), 'm')
+        sub = '  ·  '.join(s_.upper() for s_ in (champ.get('season'), champ.get('round')) if s_)
+        if sub:
+            text_vcenter(img, x + lw + 12, 38, sub, font(18, 'semibold_cond'), th.muted)
+        if name:
+            ImageDraw.Draw(img).text((x, 62), name, font=f_name, fill=th.accent2)
+        # Soft shadow under the track name so it holds over the flag
+        tshadow = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(tshadow).text((x + 2, 98), track, font=f_track, fill=(0, 0, 0, 170))
+        img.alpha_composite(tshadow.filter(ImageFilter.GaussianBlur(4)))
+        ImageDraw.Draw(img).text((x, 94), track, font=f_track, fill=th.text)
+        round_rect(img, (x, 186, x + 40, 189), 1, th.accent2)
+        text_vcenter(img, x + 52, 188, ellipsize(info, f_info, fx - x - 62), f_info, th.text[:3] + (215,))
+        if self.logo:
+            lg = fit_image(self.logo, 190, 64)
+            img.alpha_composite(lg, (W - lg.width - 26, H - lg.height - 20))
+        round_outline(img, (0, 0, W, H), 12, (255, 255, 255, 40), 1)
         return img
 
     def card_commentators(self, g, anim=1.0):

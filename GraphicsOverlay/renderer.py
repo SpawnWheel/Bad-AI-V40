@@ -23,7 +23,8 @@ TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
 YELLOW_FLAGS = ('yellow', 'double yellow')  # shown by the timing tower turning yellow, not a pop-up
 # type -> (start after pop-in begins, duration) of the held animation
-ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1), 'commentators': (0.2, 1.4)}
+ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1), 'commentators': (0.2, 1.4),
+            'title_card': (0.0, 1.6)}
 START_MOVERS_AFTER = 60.0  # seconds after the green flag
 LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening seconds
 LEADER_SETTLE = 8.0        # if the lead swaps again this soon, only the later change gets a banner

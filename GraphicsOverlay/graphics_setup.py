@@ -511,6 +511,15 @@ class GraphicsSetup:
                                         self.schedule_preview())).grid(row=r + 1, column=1, sticky='w', padx=8)
 
         r += 2
+        self.label(f, "Event flag (behind the race card)", row=r, column=0, sticky='w', pady=(8, 3))
+        self.flag_var = tk.StringVar(value=champ.get('event_flag', ''))
+        fcb = ttk.Combobox(f, textvariable=self.flag_var, width=32,
+                           values=['(none)'] + [f"Graphics/Flags/{x}" for x in gcfg.list_images(gcfg.FLAG_DIR)])
+        fcb.grid(row=r, column=1, sticky='w', padx=8, pady=(8, 3))
+        fcb.bind("<<ComboboxSelected>>", lambda e: self.set_event_flag(self.flag_var.get()))
+        styled_button(f, "Browse…", lambda: self.set_event_flag(self.browse_image(self.flag_dir()))).grid(
+            row=r, column=2, sticky='w', pady=(8, 3))
+        r += 1
         tk.Label(f, text="Colours", bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(row=r, column=0, sticky='w',
                                                                                pady=(16, 4))
         self.color_buttons = {}
@@ -554,6 +563,19 @@ class GraphicsSetup:
             return
         self.logo_var.set(path)
         self.cfg['championship']['logo'] = path
+        self.schedule_preview()
+
+    @staticmethod
+    def flag_dir():
+        os.makedirs(gcfg.FLAG_DIR, exist_ok=True)
+        return gcfg.FLAG_DIR
+
+    def set_event_flag(self, path):
+        if path is None:
+            return
+        path = '' if path == '(none)' else path
+        self.flag_var.set(path)
+        self.cfg['championship']['event_flag'] = path
         self.schedule_preview()
 
     def pick_theme_color(self, key):

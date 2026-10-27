@@ -239,3 +239,43 @@ def logo_outline(logo, width=2, color=(255, 255, 255, 255)):
     out.alpha_composite(edge)
     out.alpha_composite(logo, (width, width))
     return out
+
+
+def wave_cloth(img, phase=0.0, amp=None, wavelength=None, shade=0.28):
+    """img rippled like a flag in the wind: columns shift up and down along a sine and the folds
+    are lit and shaded. Returns a new image the same size (edges stay covered)."""
+    import math
+    w, h = img.size
+    amp = amp if amp is not None else max(2, h * 0.035)
+    wavelength = wavelength or max(60, w * 0.45)
+    # Stretch a little so the shifted columns never show a gap at the top or bottom
+    src = img.resize((w, int(h + amp * 2 + 2)), Image.LANCZOS)
+    out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    light = Image.new('L', (w, h), 0)
+    dark = Image.new('L', (w, h), 0)
+    ld, dd = ImageDraw.Draw(light), ImageDraw.Draw(dark)
+    for x in range(w):
+        a = 2 * math.pi * x / wavelength + phase
+        dy = amp * math.sin(a)
+        out.paste(src.crop((x, int(amp + dy), x + 1, int(amp + dy) + h)), (x, 0))
+        k = math.cos(a)
+        if k > 0:
+            ld.line((x, 0, x, h), fill=int(255 * shade * k))
+        else:
+            dd.line((x, 0, x, h), fill=int(255 * shade * -k))
+    alpha = out.getchannel('A')
+    white = Image.new('RGBA', (w, h), (255, 255, 255, 255))
+    white.putalpha(ImageChops.multiply(light, alpha))
+    black = Image.new('RGBA', (w, h), (0, 0, 0, 255))
+    black.putalpha(ImageChops.multiply(dark, alpha))
+    out.alpha_composite(white)
+    out.alpha_composite(black)
+    return out
+
+
+def cover_image(im, w, h):
+    """im scaled and centre-cropped to fill w x h exactly."""
+    scale = max(w / im.width, h / im.height)
+    im = im.resize((max(1, int(im.width * scale + 0.5)), max(1, int(im.height * scale + 0.5))), Image.LANCZOS)
+    x, y = (im.width - w) // 2, (im.height - h) // 2
+    return im.crop((x, y, x + w, y + h))
