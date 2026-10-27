@@ -46,6 +46,10 @@ class Templates:
         self.th = Theme(cfg)
         champ = cfg['championship']
         self.logo = load_image(gcfg.resolve_path(champ.get('logo')), bool(champ.get('logo_tint_white')))
+        self.tower = None
+        if race.has_tower and cfg['layout']['tower'].get('enabled', True):
+            from .tower import TimingTower  # tower imports this module
+            self.tower = TimingTower(self)
 
     # ------------------------------------------------------------------ helpers
     def meta(self, name):
@@ -155,9 +159,10 @@ class Templates:
     def static_layer(self, size):
         img = Image.new('RGBA', size, (0, 0, 0, 0))
         lay = self.cfg['layout']
-        if lay['leaderboard']['enabled']:
+        # The frame and map wrap the game's own HUD, which RaceRoom replays don't show
+        if lay['leaderboard']['enabled'] and not self.race.has_tower:
             self._leaderboard_frame(img)
-        if lay['map']['enabled']:
+        if lay['map']['enabled'] and not self.race.has_tower:
             self._map_frame(img)
         if lay['logo']['enabled'] and self.logo:
             lg = lay['logo']

@@ -11,6 +11,7 @@ from r3e_shared import (
     FINISH_FINISHED, FINISH_DNF, FINISH_DNS, FINISH_DQ,
     LENGTH_LAPS, LENGTH_TIME_AND_LAP, PENALTY_REASONS,
 )
+from leaderboard_recorder import LeaderboardRecorder
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -74,16 +75,22 @@ class SimClock:
 
 
 class R3ELookup:
-    """Car and class names from RaceRoom's content data (r3e-data.json)."""
+    """Car, class, team and manufacturer names from RaceRoom's content data (r3e-data.json)."""
     def __init__(self):
         self.cars = {}
         self.classes = {}
+        self.liveries = {}
+        self.teams = {}
+        self.manufacturers = {}
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "r3e-data.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.cars = data.get("cars", {})
             self.classes = data.get("classes", {})
+            self.liveries = data.get("liveries", {})
+            self.teams = data.get("teams", {})
+            self.manufacturers = data.get("manufacturers", {})
         except Exception as e:
             print(f"Warning: could not load car names from {path}: {e}")
 
@@ -93,6 +100,15 @@ class R3ELookup:
     def class_name(self, class_id):
         return self.classes.get(str(class_id), {}).get("Name", "Unknown Class")
 
+    def team_name(self, team_id, livery_id):
+        """Team from the team id, else the livery's team, or "" when unknown."""
+        team = self.teams.get(str(team_id), {}).get("Name") or self.liveries.get(str(livery_id), {}).get("TeamName")
+        return (team or "").strip()
+
+    def manufacturer_name(self, manufacturer_id, model_id):
+        name = self.manufacturers.get(str(manufacturer_id), {}).get("Name")
+        return (name or self.cars.get(str(model_id), {}).get("BrandName") or "").strip()
+
 
 class RaceroomEventLogger:
     def __init__(self):
@@ -101,6 +117,7 @@ class RaceroomEventLogger:
         self.lookup = R3ELookup()
         self.clock = SimClock()
         self.log_file = None
+        self.recorder = None # Live timing for the leaderboard graphic (replays share no driver data)
         self.wall_clock_noted = False
         self.version_warned = False
 
@@ -189,6 +206,11 @@ class RaceroomEventLogger:
         filepath = os.path.join(log_dir, filename)
         self.log_file = open(filepath, "w", encoding="utf-8")
         self.log("SYSTEM", f"New log file started: {os.path.abspath(filepath)}")
+        try:
+            self.recorder = LeaderboardRecorder(filepath, self.lookup, decode)
+            print(f"Recording live timing for the leaderboard graphic: {self.recorder.path}")
+        except Exception as e:
+            print(f"Live timing for the leaderboard graphic is off ({e}); the race log is unaffected.")
 
     def log(self, category, message, sim_time=None):
         ts_val = max(0, int(self.clock.elapsed if sim_time is None else sim_time))
@@ -225,6 +247,8 @@ class RaceroomEventLogger:
                 "name": name,
                 "pos": d.place,
                 "car": self.lookup.car_name(info.model_id),
+                "team": self.lookup.team_name(info.team_id, info.livery_id),
+                "manufacturer": self.lookup.manufacturer_name(info.manufacturer_id, info.model_id),
                 "class": self.lookup.class_name(info.class_id),
                 "dist": max(0.0, d.lap_distance),
                 "laps": max(0, d.completed_laps),
@@ -354,6 +378,9 @@ class RaceroomEventLogger:
             self.check_fastest_lap(drivers, sim_now)
             self.check_accidents(drivers, sim_now)
             self.check_battles(drivers, sim_now)
+
+        if is_race and self.recorder:
+            self.recorder.update(header, raw_drivers, sim_now, SESSION_NAMES.get(header.session_type, "Unknown"))
 
         self.last_positions = {d["name"]: d["pos"] for d in drivers}
         self.last_laps_completed = {d["name"]: d["laps"] for d in drivers}
@@ -702,6 +729,15 @@ class RaceroomEventLogger:
         grid = sorted(drivers, key=lambda x: x["pos"])
         grid_str = " | ".join(f"P{d['pos']}: {d['name']} [{d['car']}]" for d in grid)
         self.log("LEADERBOARD", f"Starting Grid Order: {grid_str}")
+        # Who drives for whom, so the commentators can mention teams and manufacturers
+        teams = []
+        for d in grid:
+            team = d["team"] or d["manufacturer"]
+            if team:
+                maker = f" ({d['manufacturer']})" if d["manufacturer"] and d["manufacturer"] not in team else ""
+                teams.append(f"{d['name']} - {team}{maker}")
+        if teams:
+            self.log("ENTRY", f"Teams: {' | '.join(teams)}")
 
     # ------------------------------------------------------------------ run loop
 
@@ -725,6 +761,8 @@ class RaceroomEventLogger:
         finally:
             if self.log_file:
                 self.log_file.close()
+            if self.recorder:
+                self.recorder.close()
             self.shm.close()
 
 

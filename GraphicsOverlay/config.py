@@ -75,6 +75,11 @@ DEFAULT_CONFIG = {
         'leaderboard': {'enabled': True, 'x': 10, 'y': 110, 'w': 420, 'row_h': 25, 'pad': 15,
                         'rows': None, 'header': True, 'footer': True},
         'map': {'enabled': True, 'x': 1597, 'y': 113, 'w': 306, 'h': 299, 'header': True},
+        # RaceRoom only: a full timing tower drawn from the recorded live timing (replays show no
+        # leaderboard or map, so the frame and map above are not used there). Rows shrink to fit
+        # above 'bottom'; 'cycle' lists the value columns shown in turn (interval, gap, name, team).
+        'tower': {'enabled': True, 'x': 24, 'y': 24, 'w': 400, 'row_h': 34, 'bottom': 820, 'rows': 0,
+                  'cycle': 'interval,gap,name,team', 'cycle_sec': 15},
         'logo': {'enabled': True, 'x': 1903, 'y': 14, 'h': 58, 'anchor': 'right'},
         'extra_logos': [],
         'ticker': {'enabled': True, 'y': 1018, 'h': 46, 'speed': 150, 'max_duration': 40,
@@ -393,18 +398,27 @@ def default_driver(log_name, files=None):
         'number': '',
         'country': '',
         'team': '',
+        'make': '',
         'color': '',
         'car_image': f"Graphics/CarPreviews/{image}" if image else '',
     }
 
 
-def ensure_drivers(cfg, roster):
+def ensure_drivers(cfg, roster, entries=None):
+    """Adds every log name to cfg['drivers']. entries (RaceRoom's recorded entry list) fills in a
+    blank team, car number and make."""
     files = list_images(CAR_PREVIEW_DIR)
     for name in roster:
         if name not in cfg['drivers']:
             cfg['drivers'][name] = default_driver(name, files)
         else:
             cfg['drivers'][name] = {**default_driver(name, files), **cfg['drivers'][name]}
+        entry = (entries or {}).get(name)
+        if entry:
+            d = cfg['drivers'][name]
+            for key, src in (('team', 'team'), ('number', 'num'), ('make', 'mfr')):
+                if not d.get(key) and entry.get(src):
+                    d[key] = str(entry[src])
     return cfg
 
 

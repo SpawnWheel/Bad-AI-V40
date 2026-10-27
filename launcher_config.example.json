@@ -212,6 +212,7 @@
         {
             "name": "Graphics 1 - Setup (run first)",
             "sims": [
+                "Raceroom",
                 "AMS2"
             ],
             "script_path": "GraphicsOverlay/graphics_setup.py",
@@ -232,6 +233,7 @@
         {
             "name": "Graphics 2 - AI Graphic Creator",
             "sims": [
+                "Raceroom",
                 "AMS2"
             ],
             "script_path": "AI Steps/graphic_creator.py",

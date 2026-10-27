@@ -43,8 +43,10 @@ class OverlayRenderer:
         self.size = tuple(size)
         self.fps = float(fps)
         self.race = race or gcfg.build_race(project_path, self.cfg)
-        gcfg.ensure_drivers(self.cfg, self.race.drivers)
+        gcfg.ensure_drivers(self.cfg, self.race.drivers, self.race.entries())
         self.tpl = Templates(self.cfg, self.race)
+        if self.tpl.tower:
+            self.tpl.tower.fps = self.fps
         self.static = self.tpl.static_layer(self.size)
         self._cards = {}
         self._strips = {}
@@ -279,6 +281,8 @@ class OverlayRenderer:
 
     def frame_key(self, t):
         key = [self.race.flag_state_at(t)]
+        if self.tpl.tower:
+            key.append(self.tpl.tower.key(t))
         for it in self._active(t):
             if it['lane'] == 'ticker':
                 phase, idx = self._phase(it, t, TICKER_SLIDE, TICKER_SLIDE)
@@ -325,7 +329,9 @@ class OverlayRenderer:
 
     def render_frame(self, t):
         frame = self.static.copy()
-        if self.cfg['layout']['leaderboard']['enabled']:
+        if self.tpl.tower:
+            self.tpl.tower.draw(frame, t)
+        elif self.cfg['layout']['leaderboard']['enabled'] and not self.race.has_tower:
             self.tpl.leaderboard_footer(frame, self.race.flag_state_at(t))
         for it in self._active(t):
             if it['lane'] == 'ticker':
