@@ -338,13 +338,14 @@ class RaceData:
         return self._timing
 
     @property
-    def has_tower(self):
-        """RaceRoom replays have no leaderboard of their own, so the graphics draw the whole tower."""
-        return self.sim == 'Raceroom'
+    def has_hud(self):
+        """AMS2 replays show the game's own leaderboard and map (the frames can wrap them instead of the
+        tower); RaceRoom replays show neither."""
+        return self.sim == 'AMS2'
 
     def entries(self):
         """Recorded entry list (team, number, make per driver), or None."""
-        return self.timing.entries if self.has_tower else None
+        return self.timing.entries if self.timing.recorded else None
 
     # ------------------------------------------------------------------ queries (video time)
     def to_video(self, t_log):
@@ -445,8 +446,13 @@ class RaceData:
                 break
         return current
 
-    def flag_state_at(self, t_video, hold=20):
-        """Returns 'green', 'yellow', 'chequered' or None (pre-race)."""
+    def flag_state_at(self, t_video, hold=None):
+        """Returns 'green', 'yellow', 'chequered' or None (pre-race).
+
+        A yellow lasts until the next green flag in the log, for at most hold seconds: the RaceRoom logger
+        always writes the all-clear, the AMS2 one misses it when the flag drops to none instead of green."""
+        if hold is None:
+            hold = 120 if self.sim == 'Raceroom' else 20
         lf = self.leader_finish_video
         if lf is not None and t_video >= lf:
             return 'chequered'

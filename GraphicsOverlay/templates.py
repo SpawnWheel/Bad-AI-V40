@@ -1,8 +1,10 @@
 """Broadcast graphic templates, drawn with Pillow in 1920x1080 space."""
+import os
+
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from . import config as gcfg
-from .drawing import (add_shadow, ellipsize, fit_font, fit_image, font, h_gradient, load_image, polygon,
+from .drawing import (add_shadow, ellipsize, fit_font, fit_image, font, h_gradient, load_image, logo_outline, polygon,
                       rgba, round_outline, round_rect, text_vcenter, text_w, wrap)
 from .race_data import fmt_clock
 
@@ -47,7 +49,8 @@ class Templates:
         champ = cfg['championship']
         self.logo = load_image(gcfg.resolve_path(champ.get('logo')), bool(champ.get('logo_tint_white')))
         self.tower = None
-        if race.has_tower and cfg['layout']['tower'].get('enabled', True):
+        # RaceRoom replays show no leaderboard, so it always gets the tower; AMS2 can wrap its own instead
+        if cfg['layout']['tower'].get('enabled', True) or not race.has_hud:
             from .tower import TimingTower  # tower imports this module
             self.tower = TimingTower(self)
 
@@ -59,9 +62,49 @@ class Templates:
         c = self.meta(name).get('color')
         return rgba(c) if c else self.th.accent
 
+    def _image_path(self, name):
+        return gcfg.resolve_path(self.meta(name).get('car_image')) if name else ''
+
+    @staticmethod
+    def _is_car_preview(path):
+        return os.path.normcase(os.path.abspath(path)).startswith(os.path.normcase(gcfg.CAR_PREVIEW_DIR))
+
     def car(self, name, max_w, max_h):
-        path = gcfg.resolve_path(self.meta(name).get('car_image'))
-        return fit_image(load_image(path), max_w, max_h) if path else None
+        """Car preview render (Graphics/CarPreviews), which may stand out of its card; None for logos."""
+        path = self._image_path(name)
+        if not path or not self._is_car_preview(path):
+            return None
+        return fit_image(load_image(path), max_w, max_h)
+
+    def logo_path(self, name):
+        """The driver's team/make logo (any Drivers tab image that is not a car preview), or ''."""
+        path = self._image_path(name)
+        return path if path and not self._is_car_preview(path) and os.path.exists(path) else ''
+
+    def badge(self, name, h):
+        """Team/make logo with a white outline, sized to sit inside a card (never over its edge).
+        No tile or colour strip behind it."""
+        path = self.logo_path(name)
+        logo = load_image(path) if path else None
+        if logo is None:
+            return None
+        h = int(h)
+        return logo_outline(fit_image(logo, int(h * 1.5) - 4, h - 4), 2)
+
+    def card_badge(self, name, panel_h, max_h=88):
+        """Badge for the right-hand end of a card, or None."""
+        return self.badge(name, min(max_h, panel_h - 24)) if name else None
+
+    @staticmethod
+    def place_badge(img, badge, top, panel_h, right_pad=12):
+        """Puts a badge at the right-hand end of the panel, centred vertically."""
+        if badge is not None:
+            img.alpha_composite(badge, (int(img.width - badge.width - right_pad),
+                                        int(top + (panel_h - badge.height) / 2)))
+
+    @staticmethod
+    def badge_w(badge):
+        return badge.width + 18 if badge is not None else 0
 
     def flag_img(self, country, h):
         if not country:
@@ -127,6 +170,34 @@ class Templates:
         ImageDraw.Draw(img).text((x, y), last.upper(), font=f2, fill=self.th.text)
         return y + big
 
+    def name_block_w(self, name, max_w, big=40, small=24):
+        """Width name_block() takes for this driver."""
+        parts = self.meta(name)['display'].split()
+        first, last = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', ' '.join(parts))
+        w = text_w(fit_font(last.upper(), max_w, big, 'bold'), last.upper())
+        if first:
+            w = max(w, text_w(fit_font(first, max_w, small, 'regular'), first))
+        return min(max_w, w)
+
+    def meta_row_w(self, name, max_w):
+        """Width meta_row() takes for this driver (the team is cut short past max_w)."""
+        m = self.meta(name)
+        w = 0
+        if m.get('number'):
+            w += text_w(font(17, 'bold_cond'), f"#{m['number']}") + 16 + 6
+        flag = self.flag_img(m.get('country'), 20)
+        if flag:
+            w += flag.width + 6
+        if m.get('country'):
+            w += text_w(font(17, 'bold_cond'), m['country'].upper()) + 16 + 8
+        if m.get('team'):
+            w += text_w(font(19, 'semibold_cond'), m['team'])
+        return min(max_w, w)
+
+    @staticmethod
+    def lines_w(lines, f):
+        return max([text_w(f, ln) for ln in lines] or [0])
+
     def meta_row(self, img, x, cy, name, max_w):
         m = self.meta(name)
         cx = x
@@ -160,9 +231,9 @@ class Templates:
         img = Image.new('RGBA', size, (0, 0, 0, 0))
         lay = self.cfg['layout']
         # The frame and map wrap the game's own HUD, which RaceRoom replays don't show
-        if lay['leaderboard']['enabled'] and not self.race.has_tower:
+        if lay['leaderboard']['enabled'] and self.race.has_hud and not self.tower:
             self._leaderboard_frame(img)
-        if lay['map']['enabled'] and not self.race.has_tower:
+        if lay['map']['enabled'] and self.race.has_hud:
             self._map_frame(img)
         if lay['logo']['enabled'] and self.logo:
             lg = lay['logo']
@@ -363,7 +434,11 @@ class Templates:
         lines = wrap(g.get('text', ''), font(21, 'regular'), text_w_max, 4)
         panel_h = 128 + (len(lines) * 26 + 8 if lines else 0)
         car_w = car.width + 10 if car else 0
-        W = 110 + text_w_max + 20 + car_w
+        badge = self.card_badge(name, panel_h, 96)
+        # Only as wide as the text needs, so the logo sits next to it
+        used = max(self.name_block_w(name, text_w_max, 40, 22), self.meta_row_w(name, text_w_max),
+                   self.lines_w(lines, font(21, 'regular')), 220)
+        W = 110 + int(used) + 24 + car_w + self.badge_w(badge)
         over = max(0, (car.height - panel_h + 10)) if car else 0
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'DRIVER').upper(),
                                     top_extra=LABEL_H + over, stripe=self.driver_color(name))
@@ -382,6 +457,7 @@ class Templates:
             ly += 26
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 6)))
+        self.place_badge(img, badge, top, panel_h)
         return img
 
     def card_battle(self, g):
@@ -390,8 +466,8 @@ class Templates:
         if not b:
             return None
         d = g.get('data', {})
-        car_a = self.car(a, 190, 92)
-        car_b = self.car(b, 190, 92)
+        car_a = self.car(a, 190, 92) or self.badge(a, 76)
+        car_b = self.car(b, 190, 92) or self.badge(b, 76)
         W = 900
         f_text = font(19, 'regular')
         lines = wrap(g.get('text', ''), f_text, W - 60, 2)
@@ -407,14 +483,16 @@ class Templates:
                 round_rect(img, (W - 6, top, W, top + panel_h), 0, col, corners=(False, True, True, False))
             m = self.meta(name)
             short = m['short'].upper()
-            fname = fit_font(short, 190, 36, 'bold_cond')
             label = f"P{pos}" if pos else ''
             fchip = font(22, 'bold_cond')
             wchip = int(text_w(fchip, label) + 16)
+            # Text starts just inside the car/logo and the name shrinks to stay clear of the interval box
+            inset = max(144, 16 + (car.width if car else 0) + 18)
+            fname = fit_font(short, cx - 82 - (inset + wchip + 10), 36, 'bold_cond')
             if side == 0:
                 if car:
                     img.alpha_composite(car, (16, int(cy - car.height / 2)))
-                x = 214
+                x = inset
                 self.chip(img, x, cy - 14, label, col, size=22, h=32)
                 text_vcenter(img, x + wchip + 10, cy - 14, short, fname, th.text)
                 if m.get('team'):
@@ -422,9 +500,10 @@ class Templates:
                     text_vcenter(img, x, cy + 22, ellipsize(m['team'], f, cx - 90 - x), f, th.muted)
             else:
                 if car:
-                    img.alpha_composite(car.transpose(Image.FLIP_LEFT_RIGHT),
-                                        (int(W - 16 - car.width), int(cy - car.height / 2)))
-                x = W - 214
+                    if not self.logo_path(name):  # car previews face the middle; logos stay readable
+                        car = car.transpose(Image.FLIP_LEFT_RIGHT)
+                    img.alpha_composite(car, (int(W - 16 - car.width), int(cy - car.height / 2)))
+                x = W - inset
                 self.chip(img, x - wchip, cy - 14, label, col, size=22, h=32)
                 text_vcenter(img, x - wchip - 10, cy - 14, short, fname, th.text, 'r')
                 if m.get('team'):
@@ -471,7 +550,9 @@ class Templates:
         lines = wrap(g.get('text') or (d.get('corner') or '').upper(), f, row_w + 80, 2)
         rows_h = row_h * (n + 1) + gap * n
         panel_h = pad * 2 + rows_h + (len(lines) * 24 + 4 if lines else 0)
-        W = 92 + row_w + 20 + (car.width + 10 if car else 0)  # 20 leaves room for the row lifting out
+        badge = self.card_badge(name, panel_h, 96)
+        # 20 leaves room for the row lifting out
+        W = 92 + row_w + 20 + (car.width + 10 if car else 0) + self.badge_w(badge)
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'POSITION CHANGE').upper(),
                                     top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0))
         slot_y = lambda s: top + pad + s * (row_h + gap)
@@ -498,6 +579,7 @@ class Templates:
             self.text_lines(img, pad + 2, top + pad + rows_h + 8, lines, f, th.muted, 24)
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        self.place_badge(img, badge, top, panel_h)
         return img
 
     def _overtake_row(self, name, w, h, highlight, delta, arrow_alpha):
@@ -529,7 +611,6 @@ class Templates:
         name, d = g['driver'], g.get('data', {})
         victim = g.get('driver2') or d.get('victim')
         car = self.car(name, 280, 120)
-        W = 560 + (car.width + 10 if car else 0)
         sub = []
         if victim:
             sub.append(f"PASSES {self.meta(victim)['short'].upper()}")
@@ -538,6 +619,9 @@ class Templates:
         f = font(19, 'semibold_cond')
         lines = wrap(g.get('text') or '  ·  '.join(sub), f, 430, 3)
         panel_h = 112 + 24 * max(0, len(lines) - 1)
+        badge = self.card_badge(name, panel_h)
+        used = max(self.name_block_w(name, 420, 36, 20), self.lines_w(lines, f), 200)
+        W = 110 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'POSITION CHANGE').upper(),
                                     top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
                                     stripe=self.driver_color(name))
@@ -548,6 +632,7 @@ class Templates:
         self.text_lines(img, 110, top + 80, lines, f, th.muted, 24)
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        self.place_badge(img, badge, top, panel_h)
         return img
 
     def card_new_leader(self, g, shine=1.0):
@@ -556,8 +641,21 @@ class Templates:
         name, d = g['driver'], g.get('data', {})
         gold = rgba(PODIUM[1])
         dark_gold = tuple(int(c * 0.62) for c in gold[:3]) + (255,)
-        W, band_h, body_h = 880, 42, 118
+        band_h, body_h = 42, 118
         H = band_h + body_h
+        car = self.car(name, 300, 104) or self.badge(name, body_h - 28)
+        car_w = car.width + 16 if car else 0
+        victims = d.get('victims') or ([g['driver2']] if g.get('driver2') else [])
+        sub = []
+        if victims:
+            sub.append('PASSES ' + ' & '.join(self.meta(v)['short'].upper() for v in victims[:2]))
+        if d.get('corner'):
+            sub.append(d['corner'].upper())
+        f_sub = font(19, 'semibold_cond')
+        sub_w = text_w(f_sub, '  ·  '.join(sub)) if sub else self.meta_row_w(name, 600)
+        # Only as wide as the name and the line under it (but wide enough for the header)
+        used = max(self.name_block_w(name, 600, 44, 22), sub_w)
+        W = int(max(560, 140 + used + 24 + car_w + 14))
         img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
         round_rect(img, (0, 0, W, H), 8, th.panel)
         # Gold header band, brightest in the middle
@@ -583,23 +681,16 @@ class Templates:
         round_rect(img, (0, top, 8, H), 0, self.driver_color(name))
         round_rect(img, (24, top + 14, 118, top + body_h - 14), 8, gold)
         text_vcenter(img, 71, top + body_h / 2 + 1, 'P1', font(48, 'bold'), th.dark_text, 'm')
-        car = self.car(name, 300, 104)
-        car_w = car.width + 16 if car else 0
         text_max = W - 140 - car_w - 16
         y = self.name_block(img, 140, top + 10, name, text_max, 44, 22)
-        victims = d.get('victims') or ([g['driver2']] if g.get('driver2') else [])
-        sub = []
-        if victims:
-            sub.append('PASSES ' + ' & '.join(self.meta(v)['short'].upper() for v in victims[:2]))
-        if d.get('corner'):
-            sub.append(d['corner'].upper())
         if sub:
-            f = font(19, 'semibold_cond')
-            text_vcenter(img, 140, min(y + 18, H - 16), ellipsize('  ·  '.join(sub), f, text_max), f, th.muted)
+            text_vcenter(img, 140, min(y + 18, H - 16), ellipsize('  ·  '.join(sub), f_sub, text_max), f_sub,
+                         th.muted)
         else:
             self.meta_row(img, 140, min(y + 18, H - 16), name, text_max)
         if car:
-            img.alpha_composite(car, (int(W - car.width - 14), int(H - car.height - 6)))
+            cy_car = top + body_h / 2 if self.logo_path(name) else H - car.height / 2 - 6
+            img.alpha_composite(car, (int(W - car.width - 14), int(cy_car - car.height / 2)))
         round_outline(img, (0, 0, W, H), 8, gold[:3] + (200,), 2)
         if 0 < shine < 1:
             x = -160 + shine * (W + 320)
@@ -650,8 +741,19 @@ class Templates:
         single = len(names) == 1
         car = self.car(names[0], 240, 100) if single else None
         row_h = 54 if single else 40
-        W = 520 + (car.width if car else 0)
         panel_h = 44 + row_h * len(names) + 8
+        badge = self.card_badge(names[0], panel_h, 76) if single else None
+        # Only as wide as the widest row (number, name, team) needs
+        used = text_w(font(17, 'bold_cond'), 'ENTERS THE PIT LANE' if single else f"{len(names)} CARS IN THE PIT LANE")
+        for nm in names:
+            m = self.meta(nm)
+            x = 36 + (text_w(font(17, 'bold_cond'), f"#{m['number']}") + 26 if m.get('number') else 0)
+            label = m['display'].upper()
+            x += text_w(fit_font(label, 460 - x, 34 if single else 26, 'bold_cond'), label)
+            if m.get('team') and 490 - x - 14 > 60:
+                x += 14 + min(490 - x - 14, text_w(font(18, 'semibold_cond'), m['team']))
+            used = max(used, x - 22)
+        W = int(22 + used + 24) + (car.width if car else 0) + self.badge_w(badge)
         img, top = self.card_canvas(W, panel_h, (g.get('title') or ('PIT STOP' if single else 'PIT STOPS')).upper(),
                                     top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
                                     stripe=self.driver_color(names[0]) if single else th.accent2)
@@ -675,6 +777,7 @@ class Templates:
             y += row_h
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        self.place_badge(img, badge, top, panel_h)
         return img
 
     def card_stat(self, g):
@@ -690,9 +793,11 @@ class Templates:
         f_title = font(26, 'bold_cond')
         title_lines = wrap(title, f_title, 420, 2)
         lines = wrap(cap, font(20, 'regular'), 420, 4)
-        W = vw + 440 + (car.width + 10 if car else 0)
         body_top = 20 + len(title_lines) * 30
         panel_h = max(112, body_top + len(lines) * 25 + 14)
+        badge = self.card_badge(name, panel_h)
+        used = max(self.lines_w(title_lines, f_title), self.lines_w(lines, font(20, 'regular')), 200)
+        W = vw + 14 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
         img, top = self.card_canvas(W, panel_h, (g.get('label') or 'RACE STATS').upper(),
                                     top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
                                     stripe=th.accent2)
@@ -702,6 +807,7 @@ class Templates:
         self.text_lines(img, x, top + body_top, lines, font(20, 'regular'), th.muted, 25)
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        self.place_badge(img, badge, top, panel_h)
         return img
 
     def card_movers(self, g):
@@ -827,7 +933,6 @@ class Templates:
         name, d = g['driver'], g.get('data', {})
         purple = rgba(FASTEST_PURPLE)
         car = self.car(name, 260, 110)
-        W = 640 + (car.width + 10 if car else 0)
         sub = []
         if d.get('lap'):
             sub.append(f"LAP {d['lap']}")
@@ -837,6 +942,10 @@ class Templates:
         f = font(19, 'semibold_cond')
         lines = wrap(g.get('text') or '  ·  '.join(sub), f, 410, 3)
         panel_h = 112 + 24 * max(0, len(lines) - 1)
+        badge = self.card_badge(name, panel_h, 76)
+        # Only as wide as the name and the line under it, so the logo sits close to them
+        used = max(self.name_block_w(name, 400, 36, 20), self.lines_w(lines, f), 180)
+        W = 214 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'FASTEST LAP').upper(), label_bg=purple,
                                     top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
                                     stripe=self.driver_color(name))
@@ -849,6 +958,7 @@ class Templates:
         self.text_lines(img, 214, top + 80, lines, f, th.muted, 24)
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+        self.place_badge(img, badge, top, panel_h)
         return img
 
     @staticmethod

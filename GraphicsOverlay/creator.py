@@ -295,6 +295,8 @@ def resolve_entry(raw, cfg, race, resolve, facts):
             return None, 'race_control needs a message title'
         flag = str(raw.get('flag') or 'yellow').lower()
         data = {'flag': flag if flag in RACE_CONTROL_FLAGS else 'yellow'}
+        if data['flag'] in ('yellow', 'double yellow'):
+            return None, 'yellow flags are shown by the timing tower turning yellow'
         if d1:
             g['driver'] = d1
 
@@ -376,12 +378,9 @@ def rule_based(cfg, race):
             continue
         if e['type'] == 'overtake' and 2 <= e['pos'] <= 3 and enabled.get('overtake'):
             picks.append((2, {'type': 'overtake', 'time': t + 1, 'driver': e['driver']}))
-        elif e['type'] == 'incident' and enabled.get('race_control'):
-            where = f" - {e['where'].upper()}" if e['where'] else ''
-            name = gcfg.driver_meta(cfg, e['driver'])['display'].upper()
-            picks.append((1, {'type': 'race_control', 'time': t + 1, 'flag': 'yellow',
-                              'title': f"CAR OF {name} STOPPED ON TRACK{where}"}))
-        elif e['type'] == 'flag' and enabled.get('race_control'):
+        # Yellows (and the stopped cars behind them) turn the timing tower yellow instead of a pop-up
+        elif (e['type'] == 'flag' and enabled.get('race_control')
+              and not any(k in e['flag'].lower() for k in ('yellow', 'green'))):
             picks.append((1, {'type': 'race_control', 'time': t + 1, 'flag': e['flag'].lower(),
                               'title': f"{e['flag'].upper()} FLAG"}))
     for t_log, name in race.camera:

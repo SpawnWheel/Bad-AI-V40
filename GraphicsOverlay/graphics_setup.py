@@ -39,17 +39,18 @@ PREVIEW_W, PREVIEW_H = 960, 540
 SCALE = 1920 / PREVIEW_W
 
 REGIONS = {
-    'leaderboard': ('Leaderboard frame', '#22c55e'),
+    'leaderboard': ('Leaderboard frame (tower off)', '#22c55e'),
     'map': ('Track map frame', '#38bdf8'),
     'logo': ('Championship logo', '#f59e0b'),
-    'popups': ('Pop-up graphics anchor', '#ec4899'),
+    'popups': ('Pop-up graphics (centred)', '#ec4899'),
     'ticker': ('Bottom ticker', '#a78bfa'),
     'radio': ('Team radio (middle right)', '#f43f5e'),
-    'tower': ('Timing tower (RaceRoom)', '#22c55e'),
+    'tower': ('Timing tower', '#22c55e'),
 }
-# RaceRoom replays have no leaderboard or map to wrap, so the full timing tower replaces both
+# RaceRoom replays have no leaderboard or map to wrap, so the full timing tower replaces both. AMS2 gets the
+# tower too (hide the in-game leaderboard), or the old frame around the game's own one with the tower off.
 SIM_REGIONS = {'Raceroom': ('tower', 'logo', 'popups', 'ticker', 'radio'),
-               'AMS2': ('leaderboard', 'map', 'logo', 'popups', 'ticker', 'radio')}
+               'AMS2': ('tower', 'leaderboard', 'map', 'logo', 'popups', 'ticker', 'radio')}
 
 REGION_FIELDS = {
     'leaderboard': [('enabled', 'Show frame', bool), ('x', 'Left (x)', int), ('y', 'Top of board (y)', int),
@@ -60,13 +61,13 @@ REGION_FIELDS = {
             ('h', 'Height', int), ('header', 'Track name header', bool)],
     'logo': [('enabled', 'Show logo', bool), ('x', 'Right edge (x)', int), ('y', 'Top (y)', int),
              ('h', 'Height', int)],
-    'popups': [('x', 'Left (x)', int), ('bottom', 'Bottom (y)', int)],
+    'popups': [('bottom', 'Bottom (y)', int)],
     'ticker': [('enabled', 'Show tickers', bool), ('y', 'Top (y)', int), ('h', 'Height', int),
                ('speed', 'Scroll speed (px/s)', int), ('max_duration', 'Max crawl seconds', int),
                ('extra_hold', 'Extra seconds held on screen', int)],
     'radio': [('right', 'Right edge (x)', int), ('cy', 'Vertical centre (y)', int), ('w', 'Width', int)],
     'tower': [('enabled', 'Show timing tower', bool), ('x', 'Left (x)', int), ('y', 'Top (y)', int),
-              ('w', 'Width', int), ('row_h', 'Max row height', int), ('bottom', 'Lowest bottom edge (y)', int),
+              ('w', 'Max width (shrinks to fit the names)', int), ('row_h', 'Max row height', int), ('bottom', 'Lowest bottom edge (y)', int),
               ('rows', 'Rows (0 = every car; per class when multi-class)', int),
               ('cycle', 'Columns in turn (interval, gap, name, team)', str), ('cycle_sec', 'Seconds per column', int)],
 }
@@ -103,7 +104,7 @@ class GraphicsSetup:
         self.race = race_data.RaceData(self.files['raw_log'], self.cfg['sync']['offset_sec'],
                                        self.files['director_notes'])
         gcfg.ensure_drivers(self.cfg, self.race.drivers, self.race.entries())
-        self.regions = {k: REGIONS[k] for k in SIM_REGIONS['Raceroom' if self.race.has_tower else 'AMS2']}
+        self.regions = {k: REGIONS[k] for k in SIM_REGIONS[self.race.sim]}
         if self.first_run:
             self._first_run_defaults()
 
@@ -214,8 +215,9 @@ class GraphicsSetup:
 
         tips = "Pick a region on the Layout tab, then drag a box over the video to place it. "
         tips += ("Drag the tower box from its top-left corner down to the lowest point it may reach."
-                 if self.race.has_tower else
-                 "Move the slider to a moment where the in-game leaderboard and map are visible.")
+                 if not self.race.has_hud else
+                 "Hide the in-game leaderboard for the timing tower, or turn the tower off to frame the game's own "
+                 "leaderboard (move the slider to where it and the map are visible).")
         tk.Label(left, text=tips, bg=BG, fg=DIM, font=(FONT, 9), wraplength=PREVIEW_W, justify='left').pack(anchor='w')
         self.status = tk.Label(left, text="", bg=BG, fg=MUTED, font=(FONT, 9), anchor='w')
         self.status.pack(fill='x', pady=(4, 0))
@@ -410,14 +412,17 @@ class GraphicsSetup:
                            font=(FONT, 10)).pack(anchor='w')
         self.region_frame = tk.Frame(f, bg=CARD)
         self.region_frame.pack(fill='x')
-        if self.race.has_tower:
-            note = ("RaceRoom replays show no leaderboard, so the whole timing tower is drawn from the live timing "
-                    "the logger recorded. Rows shrink to fit above the lowest bottom edge "
-                    f"({len(self.race.drivers)} drivers here). Make logos: Graphics/Manufacturers/<make>.png.")
-        else:
+        if self.race.has_hud and not self.cfg['layout']['tower'].get('enabled', True):
             note = ("The leaderboard frame wraps the in-game timing tower. With rows set to 0 its height "
                     f"follows the number of drivers in the race ({len(self.race.drivers)} here): "
                     "rows × row height + padding.")
+        else:
+            note = ("The timing tower is drawn from the live timing the logger recorded"
+                    + ("" if self.race.timing.recorded else " (this race has none, so it uses the log's overtakes "
+                       "and standings)")
+                    + f". Rows shrink to fit above the lowest bottom edge ({len(self.race.drivers)} drivers here). "
+                    "Each row shows the driver's logo from the Drivers tab (Car image, when it is not a car "
+                    "preview), else Graphics/Manufacturers/<make>.png.")
         tk.Label(f, text=note, bg=CARD, fg=DIM, font=(FONT, 9), wraplength=480,
                  justify='left').pack(anchor='w', pady=(12, 0))
         self.show_region_fields()
@@ -964,7 +969,8 @@ class GraphicsSetup:
             return lg['x'] - lg['h'] * 2.6, lg['y'], lg['x'], lg['y'] + lg['h']
         if key == 'popups':
             p = lay['popups']
-            return p['x'], p['bottom'] - 200, p['x'] + p.get('max_w', 780), p['bottom']
+            half = p.get('max_w', 780) / 2
+            return 960 - half, p['bottom'] - 200, 960 + half, p['bottom']
         if key == 'ticker':
             tk_ = lay['ticker']
             return 0, tk_['y'], 1920, tk_['y'] + tk_['h']
@@ -1020,7 +1026,7 @@ class GraphicsSetup:
         elif key == 'logo':
             lay['logo'].update(x=bx1, y=by0, h=by1 - by0)
         elif key == 'popups':
-            lay['popups'].update(x=bx0, bottom=by1)
+            lay['popups'].update(bottom=by1)
         elif key == 'ticker':
             lay['ticker'].update(y=by0, h=max(30, by1 - by0))
         elif key == 'radio':

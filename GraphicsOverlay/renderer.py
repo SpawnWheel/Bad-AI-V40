@@ -21,7 +21,7 @@ POPUP_IN = 0.45
 POPUP_OUT = 0.35
 TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
-CENTRED_TYPES = ('battle',)
+YELLOW_FLAGS = ('yellow', 'double yellow')  # shown by the timing tower turning yellow, not a pop-up
 # type -> (start after pop-in begins, duration) of the held animation
 ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1)}
 START_MOVERS_AFTER = 60.0  # seconds after the green flag
@@ -104,7 +104,7 @@ class OverlayRenderer:
                 if lf is not None and e['t'] > lf + 5:
                     continue
                 items.append({'id': f'auto_fl_{i}', 'type': 'fastest_lap', 'time': e['t'] + 1.0, 'duration': 7.0,
-                              'lane': 'popup', 'auto': True, 'shift': True, 'driver': e['driver'],
+                              'lane': 'top', 'auto': True, 'driver': e['driver'],
                               'data': {k: e.get(k) for k in ('lap_time', 'lap', 'gain', 'prev_driver')}})
         if gf is not None and auto.get('new_leader'):
             passes = [e for e in race.events_video() if e['type'] == 'overtake' and e['pos'] == 1
@@ -203,6 +203,8 @@ class OverlayRenderer:
             # Types no longer offered to the AI (e.g. pit stops, now automatic) are skipped in old plans
             if g.get('type') not in gcfg.POPUP_TYPES or not enabled.get(g.get('type'), True) or g.get('disabled'):
                 continue
+            if g['type'] == 'race_control' and (g.get('data') or {}).get('flag', 'yellow') in YELLOW_FLAGS:
+                continue
             g = dict(g)
             g.setdefault('id', f'plan_{i}')
             g.setdefault('duration', self.cfg.get('popup_duration', 7.0))
@@ -218,12 +220,12 @@ class OverlayRenderer:
                          key=lambda x: x['time']):
             blocking.append((it['time'], it['time'] + it['duration']))
             placed.append(it)
-        # Automatic pop-ups that may move a little (fastest lap) get first pick of the free slots
+        # Automatic pop-ups that may move a little (pit stops, start movers) get first pick of the free slots
         shiftable = sorted([a for a in auto if a.get('shift')], key=lambda x: x['time'])
         for it in shiftable + sorted(planned, key=lambda x: float(x['time'])):
             if self._place(it, blocking, AUTO_MAX_SHIFT if it.get('auto') else MAX_SHIFT):
                 placed.append(it)
-        # Team radio and the leader banner have their own slots, one at a time
+        # Team radio and the top centre slot (leader banner, fastest lap) have their own slots, one at a time
         for lane in ('radio', 'top'):
             lane_blocking = []
             for it in sorted([a for a in auto if a['lane'] == lane], key=lambda x: x['time']):
@@ -331,7 +333,7 @@ class OverlayRenderer:
         frame = self.static.copy()
         if self.tpl.tower:
             self.tpl.tower.draw(frame, t)
-        elif self.cfg['layout']['leaderboard']['enabled'] and not self.race.has_tower:
+        elif self.cfg['layout']['leaderboard']['enabled'] and self.race.has_hud:
             self.tpl.leaderboard_footer(frame, self.race.flag_state_at(t))
         for it in self._active(t):
             if it['lane'] == 'ticker':
@@ -385,8 +387,8 @@ class OverlayRenderer:
             left = (img.width - vis) // 2
             src = img.crop((left, 0, left + vis, img.height))
             x = (W - img.width) / 2 + left
-        elif it['type'] in CENTRED_TYPES:
-            # Head-to-head cards sit centred above the ticker and open out from the middle
+        else:
+            # Pop-ups sit centred above the ticker (clear of the timing tower) and open out from the middle
             pz = self.cfg['layout']['popups']
             y = pz['bottom'] - (img.height - margin) + p_out * 20
             alpha = min(1.0, p_in * 1.4) * (1 - p_out)
@@ -394,16 +396,6 @@ class OverlayRenderer:
             left = (img.width - vis) // 2
             src = img.crop((left, 0, left + vis, img.height))
             x = (W - img.width) / 2 + left
-        else:
-            pz = self.cfg['layout']['popups']
-            x = pz['x'] - margin - (1 - p_in) * 40 - p_out * 30
-            y = pz['bottom'] - (img.height - margin)
-            alpha = min(1.0, p_in * 1.4) * (1 - p_out)
-            src = img
-            if phase == 'in':
-                # Wipe in from the left edge
-                vis = max(1, int(img.width * p_in))
-                src = img.crop((0, 0, vis, img.height))
         if alpha <= 0.01:
             return
         if alpha < 0.999:

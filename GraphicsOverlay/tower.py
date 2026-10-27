@@ -1,9 +1,10 @@
-"""Full timing tower, drawn from recorded live timing (RaceRoom replays show no leaderboard).
+"""Full timing tower, drawn from recorded live timing (RaceRoom and AMS2).
 
-WEC-style: logo and race clock on top, an accent title bar, one row per car (position, make chip,
-car number, name and interval/gap), class bars in multi-class races and a flag/event footer.
+WEC-style: logo and race clock on top, an accent title bar, one row per car (position, team/make
+logo, car number, name and interval/gap), class bars in multi-class races and a flag/event footer.
 The value column cycles through the configured modes, and cars that change places slide
-past each other.
+past each other. The tower is only as wide as its names need (up to the configured width), and
+turns yellow while a yellow flag is out.
 """
 import colorsys
 import hashlib
@@ -13,7 +14,7 @@ from PIL import Image
 
 from . import config as gcfg
 from .drawing import (add_shadow, ease_in, ease_out, ellipsize, fit_font, fit_image, font, h_gradient,
-                      load_image, rgba, round_rect, text_vcenter, text_w)
+                      load_image, logo_outline, rgba, round_outline, round_rect, text_vcenter, text_w)
 from .race_data import norm_key
 from .templates import FLAG_COLORS, contrast_text
 from .timing import FINISH_FINISHED, row_value
@@ -26,8 +27,11 @@ TITLE_H = 28
 FOOTER_H = 30
 CLASS_H = 26
 GAP = 3            # space between rows
+MIN_W = 250
 MODE_LABELS = {'interval': 'INTERVAL', 'gap': 'LEADER', 'name': '', 'team': ''}
 MAKE_DIR = os.path.join(gcfg.GRAPHICS_DIR, 'Manufacturers')
+YELLOW = rgba('#FFD200')
+YELLOW_DARK = rgba('#C99A00')
 # Recognisable chip colours for common makes; anything else gets a stable colour from its name
 MAKE_COLORS = {
     'audi': '#BB0A30', 'bmw': '#1C69D4', 'porsche': '#F2F2F2', 'ferrari': '#DC0000', 'mercedes': '#00A19C',
@@ -72,6 +76,7 @@ class TimingTower:
         self._make_files = gcfg.list_images(MAKE_DIR)
         self.fps = 30.0
         self.geom = self._geometry()
+        self.w = self.geom['w']
 
     # ------------------------------------------------------------------ layout
     def _class_color(self, cls):
@@ -107,7 +112,37 @@ class TimingTower:
         avail = self.lay.get('bottom', 1000) - top - HEADER_H - TITLE_H - FOOTER_H - bars * (CLASS_H + GAP) - 8
         row_h = int(min(self.lay.get('row_h', 34), max(20, avail / max(1, n))))
         body_h = n * row_h + bars * (CLASS_H + GAP)
-        return {'row_h': row_h, 'body_h': body_h, 'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H}
+        cols = self._columns(row_h - GAP)
+        # Only as wide as the longest short name and the value column need
+        f = font(cols['fs'] - 1, 'bold_cond')
+        names_w = max([text_w(f, (self.tpl.meta(nm).get('short') or nm).upper()) for nm in names] or [80])
+        need = cols['name_x'] + names_w + 10 + cols['val_w'] + 4
+        w = int(max(MIN_W, min(self.lay.get('w', 400), need)))
+        return {'row_h': row_h, 'body_h': body_h, 'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H, 'w': w}
+
+    def _columns(self, h):
+        """Column offsets for a row of height h."""
+        fs = max(12, int(h * 0.62))
+        pos_w = int(h * 1.25)
+        tile_w = int(h * 1.6)
+        num_w = int(h * 1.35)
+        x_tile = 4 + pos_w
+        x_num = x_tile + tile_w + 6
+        fv = font(fs - 3, 'semibold_cond')
+        val_w = 0
+        if any(m in ('interval', 'gap') for m in self.modes):
+            val_w = int(max(text_w(fv, v) for v in ('+00.000', '+2 LAPS', 'INTERVAL', 'LEADER')) + 18)
+        return {'fs': fs, 'pos_w': pos_w, 'tile_w': tile_w, 'x_tile': x_tile, 'num_w': num_w, 'x_num': x_num,
+                'name_x': x_num + num_w + 9, 'val_w': val_w}
+
+    def _yellow(self, idx, flag):
+        """'yellow' / 'double yellow' while a yellow is out (flag events, or the recorded sector yellows)."""
+        if flag in ('yellow', 'double yellow'):
+            return flag
+        st = self.timing.state(idx)
+        if st and st.get('yel') and flag not in (None, 'chequered'):
+            return 'yellow'
+        return None
 
     def mode_at(self, t):
         return int(max(0.0, t) // self.cycle_sec) % len(self.modes)
@@ -163,7 +198,7 @@ class TimingTower:
         frame.alpha_composite(img, (int(x - margin), int(y - margin)))
         # Clock under the logo, drawn per frame (it ticks every second)
         f = font(30, 'bold')
-        text_vcenter(frame, x + self.lay['w'] / 2, y + HEADER_H - 22, clock, f, self.th.text, 'm')
+        text_vcenter(frame, x + self.w / 2, y + HEADER_H - 22, clock, f, self.th.text, 'm')
 
     def _rows_for(self, idx):
         st = self.timing.state(idx)
@@ -187,11 +222,12 @@ class TimingTower:
         return slots, bars, groups
 
     def _body(self, idx, mode, prev_i, p_move, p_flash, flag):
-        th, lay = self.th, self.lay
-        w = lay['w']
+        th = self.th
+        w = self.w
         geom = self.geom
+        yellow = self._yellow(idx, flag)
         img = Image.new('RGBA', (w, geom['h']), (0, 0, 0, 0))
-        self._header(img, w)
+        self._header(img, w, yellow)
         body_top = HEADER_H + TITLE_H + 6
         rows = self._rows_for(idx)
         slots, bars, groups = self._slots(rows)
@@ -220,7 +256,9 @@ class TimingTower:
         # Cars moving up are drawn last so they slide over the cars they pass
         for change, y, r in sorted(drawn, key=lambda d: d[0]):
             self._row(img, body_top + y, w, r, mode, values.get(r['name']), change, p_flash)
-        self._footer(img, w, geom['h'] - FOOTER_H, flag)
+        self._footer(img, w, geom['h'] - FOOTER_H, flag, yellow, idx)
+        if yellow:
+            round_outline(img, (0, 0, w, geom['h']), 8, YELLOW[:3] + (230,), 3)
         return img
 
     def _values(self, groups, mode):
@@ -246,7 +284,7 @@ class TimingTower:
                 prev = r
         return out
 
-    def _header(self, img, w):
+    def _header(self, img, w, yellow=None):
         th = self.th
         tpl = self.tpl
         round_rect(img, (0, 0, w, HEADER_H), 8, th.panel_solid, corners=(True, True, False, False))
@@ -259,13 +297,17 @@ class TimingTower:
             text_vcenter(img, w / 2, 28, title, fit_font(title, w - 40, 30, 'bold'), th.text, 'm')
         # Title bar
         y = HEADER_H
-        darker = tuple(int(c * 0.62) for c in th.accent[:3]) + (255,)
-        img.alpha_composite(h_gradient(w, TITLE_H, th.accent, darker), (0, y))
+        if yellow:
+            bar, darker = YELLOW, YELLOW_DARK
+        else:
+            bar, darker = th.accent, tuple(int(c * 0.62) for c in th.accent[:3]) + (255,)
+        img.alpha_composite(h_gradient(w, TITLE_H, bar, darker), (0, y))
         label = 'RACE'
         if len(self.timing.classes) == 1 and self.timing.classes[0] and self.timing.recorded:
             label = self.timing.classes[0].upper()
         f = fit_font(label, w - 40, 20, 'bold_cond')
-        text_vcenter(img, w / 2, y + TITLE_H / 2 + 1, label, f, (255, 255, 255, 255), 'm')
+        text_vcenter(img, w / 2, y + TITLE_H / 2 + 1, label, f,
+                     th.dark_text if yellow else (255, 255, 255, 255), 'm')
 
     def _class_bar(self, img, y, w, cls):
         col = self._class_color(cls)
@@ -279,16 +321,30 @@ class TimingTower:
         meta = self.tpl.meta(name)
         return meta.get('make') or self.timing.entry(name).get('mfr') or ''
 
-    def _make_logo(self, make, size):
-        key = (norm_key(make), size)
+    def _logo_path(self, name, make):
+        """The driver's team/make logo from the Drivers tab (unless that image is a car preview),
+        else Graphics/Manufacturers/<make>.png."""
+        path = self.tpl.logo_path(name)
+        if path:
+            return path
+        mk = norm_key(make)
+        for f in self._make_files:
+            if mk and norm_key(os.path.splitext(f)[0]) == mk:
+                return os.path.join(MAKE_DIR, f)
+        return None
+
+    def _tile(self, name, make, w, h):
+        """Logo fitted to w x h straight on the row (a white outline keeps dark logos readable), or None."""
+        path = self._logo_path(name, make)
+        key = (path, w, h)
         if key not in self._make_logos:
-            logo = None
-            mk = norm_key(make)
-            for f in self._make_files:
-                if mk and norm_key(os.path.splitext(f)[0]) == mk:
-                    logo = fit_image(load_image(os.path.join(MAKE_DIR, f)), size - 6, size - 6)
-                    break
-            self._make_logos[key] = logo
+            tile = None
+            logo = load_image(path) if path else None
+            if logo:
+                tile = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+                lg = logo_outline(fit_image(logo, w - 6, h - 6), 1)
+                tile.alpha_composite(lg, (int((w - lg.width) / 2), int((h - lg.height) / 2)))
+            self._make_logos[key] = tile
         return self._make_logos[key]
 
     def _chip_color(self, name, make):
@@ -316,45 +372,45 @@ class TimingTower:
             bg = tuple(int(bg[i] * (1 - a) + tint[i] * a) for i in range(3)) + (bg[3],)
         round_rect(img, (4, y, w - 4, y + h), 3, bg)
         cy = y + h / 2
-        fs = max(12, int(h * 0.62))
-        x = 4
+        cols = self._columns(h)
+        fs = cols['fs']
         # Position
         pos = r.get('pos_class') if self.timing.multiclass else r.get('pos')
-        pos_w = int(h * 1.25)
-        text_vcenter(img, x + pos_w / 2, cy + 1, str(pos or ''), font(fs, 'bold'), th.text, 'm')
-        x += pos_w
-        # Make chip (logo from Graphics/Manufacturers, else coloured initials)
+        text_vcenter(img, 4 + cols['pos_w'] / 2, cy + 1, str(pos or ''), font(fs, 'bold'), th.text, 'm')
+        # Team/make logo on a light plate, else a coloured chip with the make's initials
         make = self._make(name)
-        chip = self._chip_color(name, make)
-        round_rect(img, (x, y, x + h, y + h), 2, chip)
-        logo = self._make_logo(make, h) if make else None
-        if logo:
-            img.alpha_composite(logo, (int(x + h / 2 - logo.width / 2), int(cy - logo.height / 2)))
+        x, tw = cols['x_tile'], cols['tile_w']
+        tile = self._tile(name, make, tw, h - 2)
+        if tile:
+            img.alpha_composite(tile, (x, y + 1))
         elif make:
+            chip = self._chip_color(name, make)
+            round_rect(img, (x, y + 1, x + tw, y + h - 1), 3, chip)
             ini = initials(make)
-            text_vcenter(img, x + h / 2, cy + 1, ini, fit_font(ini, h - 4, int(h * 0.42), 'bold_cond', 8),
+            text_vcenter(img, x + tw / 2, cy + 1, ini, fit_font(ini, tw - 4, int(h * 0.5), 'bold_cond', 8),
                          contrast_text(chip), 'm')
-        x += h + 6
         # Car number
+        x, num_w = cols['x_num'], cols['num_w']
         num = str(meta.get('number') or self.timing.entry(name).get('num') or '')
-        num_w = int(h * 1.35)
         if num:
             text_vcenter(img, x + num_w / 2, cy + 1, num, fit_font(num, num_w - 2, fs - 2, 'bold_cond', 9),
                          th.text, 'm')
         x += num_w
         round_rect(img, (x, y + 4, x + 2, y + h - 4), 0, (255, 255, 255, 110))
-        x += 9
+        x = cols['name_x']
         # Name / team, and the value box
-        val_w = int(w * 0.27) if mode in ('interval', 'gap') else 0
+        val_w = cols['val_w'] if mode in ('interval', 'gap') else 0
         text_right = w - 4 - val_w - 6
         if mode == 'team':
             label = meta.get('team') or self.timing.entry(name).get('team') or make or meta.get('display', name)
         elif mode == 'name':
-            label = meta.get('display', name).upper()
+            label = meta.get('display', name)
         else:
             label = meta.get('short') or name
-        f = font(fs - 1, 'bold_cond')
-        text_vcenter(img, x, cy + 1, ellipsize(label.upper(), f, text_right - x), f, th.text)
+        label = label.upper()
+        # Full names and teams shrink a little before they are cut short
+        f = fit_font(label, text_right - x, fs - 1, 'bold_cond', max(10, fs - 3))
+        text_vcenter(img, x, cy + 1, ellipsize(label, f, text_right - x), f, th.text)
         finished = r.get('finish') == FINISH_FINISHED
         if val_w:
             vx = w - 4 - val_w
@@ -370,8 +426,27 @@ class TimingTower:
         if finished:
             self.tpl._checker(img, text_right - 16, int(cy - 6), 14, 12, 3)
 
-    def _footer(self, img, w, y, flag_state):
+    def _footer(self, img, w, y, flag_state, yellow=None, idx=None):
         th = self.th
+        champ = self.cfg['championship']
+        event = (champ.get('event_name') or gcfg.clean_track_name(self.race.track)).upper()
+        if yellow:
+            # Yellow band: YELLOW FLAG (and the sectors when recorded) on the left, the event on the right
+            shape = Image.new('RGBA', (w, FOOTER_H), (0, 0, 0, 0))
+            round_rect(shape, (0, 0, w, FOOTER_H), 8, (255, 255, 255, 255), corners=(False, False, True, True))
+            band = h_gradient(w, FOOTER_H, YELLOW, YELLOW_DARK)
+            band.putalpha(shape.getchannel('A'))
+            img.alpha_composite(band, (0, y))
+            label = 'DOUBLE YELLOW' if yellow == 'double yellow' else 'YELLOW FLAG'
+            sectors = (self.timing.state(idx) or {}).get('yel') or []
+            if sectors:
+                label += '  ·  ' + ('SECTOR ' if len(sectors) == 1 else 'SECTORS ') + ' & '.join(map(str, sectors))
+            f = font(16, 'bold_cond')
+            text_vcenter(img, 12, y + 16, label, f, th.dark_text)
+            fe = font(16, 'semibold_cond')
+            lx = 12 + text_w(f, label) + 14
+            text_vcenter(img, w - 12, y + 16, ellipsize(event, fe, w - lx - 12), fe, th.dark_text, 'r')
+            return
         round_rect(img, (0, y, w, y + FOOTER_H), 8, th.panel_solid, corners=(False, False, True, True))
         state = flag_state or 'pre-race'
         col = rgba(FLAG_COLORS.get(state, '#9AA3B2'))
@@ -385,8 +460,6 @@ class TimingTower:
                  'chequered': 'FINISH'}.get(state, state.upper())
         f = font(16, 'bold_cond')
         text_vcenter(img, 42, y + 17, label, f, col if state not in ('chequered', 'pre-race') else th.text)
-        champ = self.cfg['championship']
-        event = (champ.get('event_name') or gcfg.clean_track_name(self.race.track)).upper()
         fe = font(16, 'semibold_cond')
         lx = 42 + text_w(f, label) + 14
         text_vcenter(img, w - 12, y + 17, ellipsize(event, fe, w - lx - 12), fe, th.muted, 'r')
