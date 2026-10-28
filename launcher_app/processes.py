@@ -24,14 +24,53 @@ ANSI_COLOURS = {
 }
 
 
-def python_exe():
-    """python.exe even when the launcher itself runs under pythonw.exe (children need real stdout)."""
-    exe = sys.executable
+_PYTHON = None
+
+
+def _console_python(exe):
+    """python.exe next to a pythonw.exe (children need real stdout)."""
     if os.path.basename(exe).lower() == "pythonw.exe":
         candidate = os.path.join(os.path.dirname(exe), "python.exe")
         if os.path.exists(candidate):
             return candidate
     return exe
+
+
+def _has_packages(exe):
+    """True if this interpreter can import the AI library the steps need."""
+    try:
+        return subprocess.run([exe, "-c", "from google import genai"], capture_output=True, timeout=30,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _default_python():
+    """The Python that Windows' py launcher picks by default (marked * in `py -0p`), or None."""
+    try:
+        out = subprocess.run(["py", "-0p"], capture_output=True, text=True, timeout=15,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[1] == "*" and os.path.exists(parts[-1]):
+            return parts[-1]
+    return None
+
+
+def python_exe():
+    """The interpreter the tools run under: the launcher's own, unless it lacks the packages the steps need
+    (e.g. BAD AI was started with a second Python install) and the default one has them."""
+    global _PYTHON
+    if _PYTHON is None:
+        _PYTHON = _console_python(sys.executable)
+        if not _has_packages(_PYTHON):
+            other = _default_python()
+            if other and os.path.normcase(other) != os.path.normcase(_PYTHON) and _has_packages(other):
+                print(f"{_PYTHON} has no google-genai; running the tools with {other} instead.")
+                _PYTHON = other
+    return _PYTHON
 
 
 def parse_ansi(text):
