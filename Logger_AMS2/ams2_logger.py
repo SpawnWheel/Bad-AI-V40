@@ -281,6 +281,11 @@ VK_F12 = 0x7B
 # Fastest lap events are only announced once the leader has completed this many laps
 FASTEST_LAP_MIN_RACE_LAPS = 5
 
+# The game is read every POLL_INTERVAL seconds at normal speed. A fast-forwarded replay runs the
+# sim clock faster, so the logger reads that much more often to keep the same detail per sim second.
+POLL_INTERVAL = 0.5
+MAX_PLAYBACK_SPEED = 20.0  # caps the rate when a replay jumps to another point in the race
+
 class AMS2EventLogger:
     def __init__(self):
         self.shm = None
@@ -325,6 +330,7 @@ class AMS2EventLogger:
         self.last_track_key = ""
         self.current_track_corners = []
         self.corner_names_dir = self._find_corner_names_dir()
+        self.last_clock_sample = None # (wall time, sim time) at the previous read, to measure replay speed
 
     def _find_corner_names_dir(self):
         """Locate the Corner Names folder."""
@@ -471,6 +477,19 @@ class AMS2EventLogger:
         if self.data is not None and self.data.mCurrentTime >= 0:
             return self.data.mCurrentTime
         return 0.0
+
+    def get_playback_speed(self):
+        """How fast the sim clock ran since the previous read: about 1 when live or in a normal
+        replay, 5 in a 5x fast-forward. AMS2 does not share the replay speed, so it is measured.
+        Never below 1, so paused, rewound or normal play keeps the normal reading rate."""
+        wall_now, sim_now = time.perf_counter(), self.get_session_time()
+        previous, self.last_clock_sample = self.last_clock_sample, (wall_now, sim_now)
+        if previous is None or wall_now <= previous[0]:
+            return 1.0
+        speed = (sim_now - previous[1]) / (wall_now - previous[0])
+        if speed < 1.5:  # timer jitter around normal speed
+            return 1.0
+        return min(speed, MAX_PLAYBACK_SPEED)
 
     def check_f12_key(self):
         """Check if F12 has been pressed (non-blocking, edge-triggered)."""
@@ -1189,7 +1208,7 @@ class AMS2EventLogger:
         try:
             while not self.stop_event.is_set():
                 self.update()
-                self.stop_event.wait(0.5)
+                self.stop_event.wait(POLL_INTERVAL / self.get_playback_speed())
             self.log("SYSTEM", "Logging stopped.")
         except KeyboardInterrupt:
             self.log("SYSTEM", "Logging stopped by user.")
