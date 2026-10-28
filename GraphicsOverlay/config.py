@@ -109,7 +109,7 @@ DEFAULT_CONFIG = {
     'popup_duration': 7.0,
     'drivers': {},
     # Sponsors: name and/or logo each. Title: race card, results and a sponsor card. Timing: the timing
-    # tower, fastest lap and battle forecast ("powered by"). Partner: a sponsor card.
+    # tower, fastest lap and battle forecast. Partner: a sponsor card. Only the logo is shown, no caption.
     'sponsors': {k: {'name': '', 'logo': ''} for k in ('title', 'timing', 'partner')},
     # AI commentator name (as in the commentary) -> {'bio': short line shown under their name}
     'commentators': {},

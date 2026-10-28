@@ -203,16 +203,15 @@ class Templates:
         logo = load_image(gcfg.resolve_path(sp.get('logo'))) if sp.get('logo') else None
         return (name, logo) if name or logo else None
 
-    def sponsor_w(self, kind, h, caption):
+    def sponsor_w(self, kind, h):
         sp = self.sponsor(kind)
         if not sp:
             return 0
         name, logo = sp
-        cw = text_w(font(14, 'semibold_cond'), caption) + 10 if caption else 0
-        return int(cw + (fit_image(logo, h * 4, h).width if logo else text_w(font(h * 0.8, 'bold_cond'), name.upper())))
+        return int(fit_image(logo, h * 4, h).width if logo else text_w(font(h * 0.8, 'bold_cond'), name.upper()))
 
-    def sponsor_mark(self, img, right, cy, kind, h, caption='POWERED BY', color=None):
-        """'POWERED BY' + the sponsor's logo (or name), right-aligned at right. Returns the width used."""
+    def sponsor_mark(self, img, right, cy, kind, h, color=None):
+        """The sponsor's logo (or name without one), right-aligned at right, no caption. Returns the width used."""
         sp = self.sponsor(kind)
         if not sp:
             return 0
@@ -226,11 +225,6 @@ class Templates:
             f = font(h * 0.8, 'bold_cond')
             x -= text_w(f, name.upper())
             text_vcenter(img, x, cy, name.upper(), f, color or self.th.text)
-        if caption:
-            f = font(14, 'semibold_cond')
-            x -= 10
-            text_vcenter(img, x, cy, caption, f, self.th.muted, 'r')
-            x -= text_w(f, caption)
         return int(right - x)
 
     def pos_number(self, img, cx, cy, pos, size=64, color=None):
@@ -970,7 +964,7 @@ class Templates:
         if self.logo:
             lg = fit_image(self.logo, 190, 64)
             img.alpha_composite(lg, (W - lg.width - 26, H - lg.height - 20))
-        self.sponsor_mark(img, W - 26, 40, 'title', 34, 'PRESENTED BY')
+        self.sponsor_mark(img, W - 26, 40, 'title', 34)
         round_outline(img, (0, 0, W, H), 12, (255, 255, 255, 40), 1)
         return img
 
@@ -1127,7 +1121,7 @@ class Templates:
         panel_h = 112 + 24 * max(0, len(lines) - 1)
         badge = self.card_badge(name, panel_h, 76)
         # Only as wide as the name and the line under it, so the logo sits close to them
-        used = max(self.name_block_w(name, 400, 36, 20), self.lines_w(lines, f) + self.sponsor_w('timing', 20, 'POWERED BY')
+        used = max(self.name_block_w(name, 400, 36, 20), self.lines_w(lines, f) + self.sponsor_w('timing', 20)
                    + 20, 180)
         W = 214 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'FASTEST LAP').upper(), label_bg=purple,
@@ -1316,7 +1310,7 @@ class Templates:
             lg = fit_image(self.logo, 130, 54)
             img.alpha_composite(lg, (W - lg.width - 24, int(head_h / 2 - lg.height / 2)))
             right -= lg.width + 24
-        self.sponsor_mark(img, right, head_h / 2, 'title', 34, 'PRESENTED BY', fg)
+        self.sponsor_mark(img, right, head_h / 2, 'title', 34, fg)
         ImageDraw.Draw(img).text((x, 14), (g.get('title') or 'PROVISIONAL CLASSIFICATION').upper(),
                                  font=font(34, 'bold_cond'), fill=fg)
         sub = '  ·  '.join(s.upper() for s in (self.cfg['championship'].get('name'),
@@ -1519,27 +1513,22 @@ class Templates:
         return img
 
     def card_sponsor(self, g):
-        """A sponsor's moment on screen: the caption and their logo (or name), nothing else."""
+        """A sponsor's moment on screen: just their logo (or name without one)."""
         th = self.th
         kind = g.get('data', {}).get('kind', 'title')
         sp = self.sponsor(kind)
         if not sp:
             return None
         name, logo = sp
-        caption = (g.get('title') or {'title': 'BROUGHT TO YOU BY', 'timing': 'OFFICIAL TIMING PARTNER'}
-                   .get(kind, 'OFFICIAL PARTNER')).upper()
-        f_cap = font(20, 'bold_cond')
-        lg = fit_image(logo, 420, 74) if logo else None
-        f_name = font(48, 'bold_cond')
-        body_w = lg.width if lg else text_w(f_name, name.upper())
-        W = int(max(body_w, text_w(f_cap, caption)) + 70)
-        panel_h = 128
+        lg = fit_image(logo, 420, 80) if logo else None
+        f_name = font(52, 'bold_cond')
+        W = int((lg.width if lg else text_w(f_name, name.upper())) + 70)
+        panel_h = 112
         img, top = self.card_canvas(W, panel_h, None)
-        text_vcenter(img, W / 2, top + 22, caption, f_cap, th.muted, 'm')
         if lg:
-            img.alpha_composite(lg, (int((W - lg.width) / 2), int(top + 76 - lg.height / 2)))
+            img.alpha_composite(lg, (int((W - lg.width) / 2), int(top + panel_h / 2 - lg.height / 2)))
         else:
-            text_vcenter(img, W / 2, top + 76, name.upper(), f_name, th.text, 'm')
+            text_vcenter(img, W / 2, top + panel_h / 2, name.upper(), f_name, th.text, 'm')
         round_rect(img, (W / 2 - 30, top + panel_h - 6, W / 2 + 30, top + panel_h - 3), 1, th.accent2)
         return img
 

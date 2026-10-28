@@ -25,7 +25,7 @@ FLASH_STEPS = 10
 HEADER_H = 92
 TITLE_H = 28
 FOOTER_H = 30
-SPONSOR_H = 34    # 'TIMING BY' strip under the footer when a timing sponsor is set
+SPONSOR_H = 34    # timing sponsor's logo strip under the footer when a timing sponsor is set
 CLASS_H = 26
 GAP = 3            # space between rows
 MIN_W = 250
@@ -294,8 +294,8 @@ class TimingTower:
             sy = geom['h'] - self.sponsor_h
             round_rect(img, (0, sy, w, geom['h']), 8, th.panel_solid, corners=(False, False, True, True))
             round_rect(img, (12, sy, w - 12, sy + 1), 0, (255, 255, 255, 40))
-            sw = self.tpl.sponsor_w('timing', 22, 'TIMING BY')
-            self.tpl.sponsor_mark(img, (w + sw) / 2, sy + self.sponsor_h / 2 + 1, 'timing', 22, 'TIMING BY')
+            sw = self.tpl.sponsor_w('timing', 22)
+            self.tpl.sponsor_mark(img, (w + sw) / 2, sy + self.sponsor_h / 2 + 1, 'timing', 22)
         if yellow:
             round_outline(img, (0, 0, w, geom['h']), 8, YELLOW[:3] + (230,), 3)
         return img
