@@ -10,6 +10,7 @@ from .drawing import (add_shadow, cover_image, ease_out, ellipsize, fit_font, fi
 from .race_data import fmt_clock
 
 LABEL_H = 30
+SPONSOR_TAB_H = 58  # sponsor tab on the top right of a card: taller than the label so the logo reads
 MAX_PASSED = 4  # most passed drivers one position-change card stacks
 FASTEST_PURPLE = '#A239FF'
 PODIUM = {1: '#E8B923', 2: '#C3CBD6', 3: '#C9844A'}
@@ -147,16 +148,45 @@ class Templates:
         text_vcenter(img, x + 14, y + LABEL_H / 2 + 1, label, f, fg or contrast_text(bg))
         return w
 
-    def card_canvas(self, w, panel_h, label, top_extra=0, label_bg=None, label_fg=None, stripe=None):
-        """Blank card: label tab on top, dark panel below. Returns (img, panel_top)."""
-        top = max(LABEL_H, top_extra)
+    def card_canvas(self, w, panel_h, label, top_extra=0, label_bg=None, label_fg=None, stripe=None, sponsor=None):
+        """Blank card: label tab on top, dark panel below, and the `sponsor` kind's logo in a tab on the top
+        right when that sponsor is set. Returns (img, panel_top)."""
+        tab = self.sponsor_tab(sponsor) if sponsor else None
+        top = max(LABEL_H, top_extra, tab.height if tab else 0)
         img = Image.new('RGBA', (int(w), int(top + panel_h)), (0, 0, 0, 0))
-        round_rect(img, (0, top, w, top + panel_h), 6, self.th.panel, corners=(False, True, True, True))
+        round_rect(img, (0, top, w, top + panel_h), 6, self.th.panel,
+                   corners=(False, tab is None, True, True))
         if stripe:
             round_rect(img, (0, top, 6, top + panel_h), 0, stripe)
         if label:
             self.label_tab(img, 0, top - LABEL_H, label, label_bg, label_fg)
+        if tab:
+            img.alpha_composite(tab, (int(w - tab.width), int(top - tab.height)))
         return img, top
+
+    def sponsor_tab(self, kind):
+        """The sponsor's logo on its own tab (rounded on top, sitting on the card), or None. The tab is white
+        behind a dark logo and dark behind a light one, so any logo reads."""
+        sp = self.sponsor(kind)
+        if not sp:
+            return None
+        name, logo = sp
+        h = SPONSOR_TAB_H
+        if logo:
+            lg = fit_image(logo, 260, h - 12)
+            w = lg.width + 32
+        else:
+            f = font(26, 'bold_cond')
+            w = int(text_w(f, name.upper()) + 32)
+        light = logo is not None and _is_light(logo)
+        bg = self.th.panel_solid if light else (255, 255, 255, 255)
+        tab = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        round_rect(tab, (0, 0, w, h), 6, bg, corners=(True, True, False, False))
+        if logo:
+            tab.alpha_composite(lg, (int((w - lg.width) / 2), int((h - lg.height) / 2)))
+        else:
+            text_vcenter(tab, w / 2, h / 2, name.upper(), f, contrast_text(bg), 'm')
+        return tab
 
     def name_block(self, img, x, y, name, max_w, big=40, small=24):
         """First name light above an uppercase bold surname."""
@@ -1121,12 +1151,15 @@ class Templates:
         panel_h = 112 + 24 * max(0, len(lines) - 1)
         badge = self.card_badge(name, panel_h, 76)
         # Only as wide as the name and the line under it, so the logo sits close to them
-        used = max(self.name_block_w(name, 400, 36, 20), self.lines_w(lines, f) + self.sponsor_w('timing', 20)
-                   + 20, 180)
+        used = max(self.name_block_w(name, 400, 36, 20), self.lines_w(lines, f), 180)
         W = 214 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
+        tab = self.sponsor_tab('timing')
+        if tab:
+            # Room for the FASTEST LAP label and the sponsor tab side by side
+            W = max(W, int(text_w(font(18, 'bold_cond'), (g.get('title') or 'FASTEST LAP').upper()) + 28 + 16 + tab.width))
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'FASTEST LAP').upper(), label_bg=purple,
                                     top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
-                                    stripe=self.driver_color(name))
+                                    stripe=self.driver_color(name), sponsor='timing')
         # Lap time in the purple block, stopwatch-style
         lap_time = d.get('lap_time', '')
         round_rect(img, (16, top + 14, 196, top + panel_h - 14), 6, purple)
@@ -1134,7 +1167,6 @@ class Templates:
         text_vcenter(img, 106, top + 68, lap_time, fit_font(lap_time, 164, 36, 'bold'), (255, 255, 255, 255), 'm')
         self.name_block(img, 214, top + 10, name, 400, 36, 20)
         self.text_lines(img, 214, top + 80, lines, f, th.muted, 24)
-        self.sponsor_mark(img, W - self.badge_w(badge) - 16, top + panel_h - 20, 'timing', 20)
         if car:
             img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
         self.place_badge(img, badge, top, panel_h)
@@ -1371,7 +1403,8 @@ class Templates:
         closing = d.get('mode', 'closing') == 'closing'
         gap = d['gap_from'] + (d['gap_now'] - d['gap_from']) * e
         W, panel_h = 920, 158
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or ('BATTLE FORECAST' if closing else 'PULLING AWAY')))
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or ('BATTLE FORECAST' if closing else 'PULLING AWAY')),
+                                    sponsor='timing')
         cx = W / 2
         green, red = th.green, th.red
         # Drivers either side: the car behind on the left, the car ahead on the right
@@ -1420,7 +1453,6 @@ class Templates:
         else:
             polygon(img, [(38, ty + 5), (50, ty + 5), (44, ty - 5)], red)
         text_vcenter(img, 58, ty, ('CLOSING ' if closing else 'LOSING ') + trend, font(16, 'semibold_cond'), th.muted)
-        self.sponsor_mark(img, W - 24, top + panel_h - 14, 'timing', 22)
         return img
 
     def card_pit_timer(self, g, anim=1.0):
@@ -1531,6 +1563,15 @@ class Templates:
             text_vcenter(img, W / 2, top + panel_h / 2, name.upper(), f_name, th.text, 'm')
         round_rect(img, (W / 2 - 30, top + panel_h - 6, W / 2 + 30, top + panel_h - 3), 1, th.accent2)
         return img
+
+
+def _is_light(logo):
+    """True for a mostly white/pale logo (it needs a dark tab behind it)."""
+    small = logo.resize((32, max(1, int(32 * logo.height / max(1, logo.width)))))
+    px = [(r, g, b) for r, g, b, a in small.getdata() if a > 128]
+    if not px:
+        return False
+    return sum(0.299 * r + 0.587 * g + 0.114 * b for r, g, b in px) / len(px) > 170
 
 
 def race_time_label(race, t_video):
