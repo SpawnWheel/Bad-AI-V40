@@ -27,6 +27,8 @@ VEHICLE_SUFFIX_RE = re.compile(r'\s*\[[^\]]*\]\s*$')
 WATCH_RE = re.compile(r'Watching (.+?) \(P(\d+)\)')
 PASSIVE_LEAD = 8.0      # stopped/pit alerts can be logged a few seconds after cars start passing
 PIT_EXIT_GRACE = 3.0
+STOPPED_YELLOW_MAX = 10.0  # a stopped car shows a yellow until it moves again, at most this long
+STOPPED_YELLOW_BRIDGE = 3.0  # stoppages closer together than this run as one yellow
 FASTEST_LAP_RE =re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest lap of the race: ([\d:.]+)'
                             r'(?: on lap (\d+))?(?:, ([\d.]+)s quicker than (.+?) ([\d:.]+))?\.\s*$')
 # Radio messages written by the Refinement step: (Radio) Thommo to engineer: "..." Engineer: "..."
@@ -450,7 +452,9 @@ class RaceData:
         """Returns 'green', 'yellow', 'chequered' or None (pre-race).
 
         A yellow lasts until the next green flag in the log, for at most hold seconds: the RaceRoom logger
-        always writes the all-clear, the AMS2 one misses it when the flag drops to none instead of green."""
+        always writes the all-clear, the AMS2 one misses it when the flag drops to none instead of green.
+        A car stopped on track also shows a yellow (the AMS2 logger only sees the flags shown to the
+        player's own car), until it is back on the move or STOPPED_YELLOW_MAX seconds have passed."""
         if hold is None:
             hold = 120 if self.sim == 'Raceroom' else 20
         lf = self.leader_finish_video
@@ -463,11 +467,34 @@ class RaceData:
         for e in self.events:
             if e['type'] == 'flag' and self.to_video(e['t']) <= t_video:
                 last = e
-        if last is None or 'green' in last['flag'].lower():
-            return 'green'
-        if t_video < self.to_video(last['t']) + hold:
+        if last is not None and 'green' not in last['flag'].lower() and t_video < self.to_video(last['t']) + hold:
             return 'double yellow' if 'double' in last['flag'].lower() else 'yellow'
+        t_log = self.to_log(t_video)
+        if any(a <= t_log < b for a, b in self._stopped_yellows()):
+            return 'yellow'
         return 'green'
+
+    def _stopped_yellows(self):
+        """(from, until) in log time for each car stopped on track."""
+        if getattr(self, '_stopped_windows', None) is None:
+            windows = []
+            for i, e in enumerate(self.events):
+                if e['type'] != 'incident':
+                    continue
+                until = e['t'] + STOPPED_YELLOW_MAX
+                for later in self.events[i + 1:]:
+                    if later['t'] >= until:
+                        break
+                    if later['type'] == 'recover' and later['driver'] == e['driver']:
+                        until = later['t']
+                        break
+                if windows and e['t'] - windows[-1][1] < STOPPED_YELLOW_BRIDGE:
+                    # Back-to-back stoppages stay one yellow instead of flickering green in between
+                    windows[-1] = (windows[-1][0], max(windows[-1][1], until))
+                else:
+                    windows.append((e['t'], until))
+            self._stopped_windows = windows
+        return self._stopped_windows
 
     # ------------------------------------------------------------------ stats
     def stats_until(self, t_video):
