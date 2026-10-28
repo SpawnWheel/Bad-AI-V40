@@ -9,8 +9,8 @@
     "name": "Caterham Academy",
     "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 2",
-    "event_name": "Donnington Park",
+    "round": "Round 1",
+    "event_name": "Interlagos",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
     "event_flag": "Graphics/Logos/BritainLogo.png"
@@ -108,7 +108,7 @@
     "pit_stop": true
   },
   "popup_density": "medium",
-  "popup_duration": 7.0,
+  "popup_duration": 8.0,
   "drivers": {
     "[RCV]Dom.Payne": {
       "display": "Dom Payne",
@@ -176,6 +176,7 @@
       "number": "12",
       "country": "RSA",
       "team": "Caterham",
+      "make": "Caterham",
       "color": "#047857",
       "car_image": "Graphics/Logos/caterham.png"
     },
