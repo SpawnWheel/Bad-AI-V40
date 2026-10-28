@@ -812,7 +812,8 @@ class Templates:
         sub_lines = wrap(sub, fsub, W - 120, 3)
         panel_h = 30 + len(lines) * 32 + (len(sub_lines) * 24 + 6 if sub_lines else 0) + 10
         amber = rgba('#FFC400')
-        img, top = self.card_canvas(W, panel_h, 'RACE CONTROL', label_bg=amber, label_fg=th.dark_text,
+        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'RACE CONTROL').upper(), label_bg=amber,
+                                    label_fg=th.dark_text,
                                     stripe=amber)
         flag = d.get('flag', 'yellow')
         fcol = rgba(FLAG_COLORS.get(flag, '#FFD200'))
@@ -1497,42 +1498,53 @@ class Templates:
         return img
 
     def card_gaps(self, g):
-        """The whole field on one line by gap to the leader, with the packs it has split into."""
+        """The whole field on one line by gap to the leader: a marker per car with its three-letter name inside,
+        spread apart where cars are close, and the packs underneath, each named after the car leading it."""
         th = self.th
         d = g.get('data', {})
-        rows = d.get('rows') or []
+        rows = sorted(d.get('rows') or [], key=lambda r: r[1])
         if len(rows) < 2:
             return None
-        W, panel_h = 1180, 176
+        W, panel_h = 1180, 166
+        R = 23                      # marker radius
+        step = 2 * R + 6            # closest two markers may sit
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'GAPS ON TRACK').upper())
         x0, x1 = 60, W - 60
         cap = max(r[1] for r in rows) or 1.0
-        xof = lambda gap: x0 + (x1 - x0) * min(1.0, gap / cap)
-        y = top + 92
-        round_rect(img, (x0 - 20, y - 2, x1 + 20, y + 2), 2, (255, 255, 255, 50))
-        # Packs underneath
+        # True positions, then nudged apart (forwards, then back from the right edge) so no two overlap
+        xs = [x0 + (x1 - x0) * min(1.0, gap / cap) for _, gap in rows]
+        for i in range(1, len(xs)):
+            xs[i] = max(xs[i], xs[i - 1] + step)
+        if xs[-1] > x1:
+            xs[-1] = x1
+            for i in range(len(xs) - 2, -1, -1):
+                xs[i] = min(xs[i], xs[i + 1] - step)
+        x_of = {name: x for (name, _), x in zip(rows, xs)}
+        y = top + 54
+        round_rect(img, (x0 - 30, y - 2, x1 + 30, y + 2), 2, (255, 255, 255, 50))
+        # Packs underneath, named after the car at the front of each
         for i, pack in enumerate(d.get('packs') or []):
-            gaps = [gp for n, gp in rows if n in pack]
-            a, b = xof(min(gaps)) - 16, xof(max(gaps)) + 16
-            round_rect(img, (a, y + 18, b, y + 22), 2, th.accent2 if i == 0 else (255, 255, 255, 120))
-            label = ('LEADING GROUP' if i == 0 else f"GROUP {i + 1}") if len(pack) > 1 else ('LEADER' if i == 0 else 'ALONE')
-            label += f"  ·  {len(pack)}" if len(pack) > 1 else ''
-            text_vcenter(img, (a + b) / 2, y + 40, label, font(16, 'bold_cond'),
-                         th.accent2 if i == 0 else th.muted, 'm')
-        # Markers, labels staggered above the line so close cars stay readable
+            px = [x_of[n] for n in pack if n in x_of]
+            if not px:
+                continue
+            a, b = min(px) - R, max(px) + R
+            lead = self.meta(pack[0])['short'].upper()
+            if len(pack) > 1:
+                label = f"LEADING GROUP  ·  {len(pack)}" if i == 0 else f"{lead} GROUP  ·  {len(pack)}"
+            else:
+                label = 'LEADER' if i == 0 else 'ALONE'
+            col = th.accent2 if i == 0 else (255, 255, 255, 120)
+            round_rect(img, (a, y + R + 12, b, y + R + 16), 2, col)
+            f = fit_font(label, max(b - a, 70) + 40, 16, 'bold_cond', 11)
+            text_vcenter(img, (a + b) / 2, y + R + 34, label, f, th.accent2 if i == 0 else th.muted, 'm')
         f = font(19, 'bold_cond')
-        lanes = [-1e9, -1e9, -1e9]
-        for name, gap in sorted(rows, key=lambda r: r[1]):
-            x = xof(gap)
-            round_rect(img, (x - 8, y - 8, x + 8, y + 8), 8, self.driver_color(name))
-            round_outline(img, (x - 8, y - 8, x + 8, y + 8), 8, (255, 255, 255, 220), 2)
-            label = self.meta(name)['short'].upper()
-            lw = text_w(f, label)
-            lane = next((i for i, end in enumerate(lanes) if x - lw / 2 > end + 8), len(lanes) - 1)
-            lanes[lane] = x + lw / 2
-            ly = y - 26 - lane * 22
-            round_rect(img, (x - 1, ly + 9, x + 1, y - 9), 0, (255, 255, 255, 70))
-            text_vcenter(img, x, ly, label, f, th.text, 'm')
+        for name, _ in rows:
+            x = x_of[name]
+            col = self.driver_color(name)
+            round_rect(img, (x - R, y - R, x + R, y + R), R, col)
+            round_outline(img, (x - R, y - R, x + R, y + R), R, (255, 255, 255, 230), 2)
+            code = ''.join(c for c in self.meta(name)['short'].upper() if c.isalnum())[:3]
+            text_vcenter(img, x, y + 1, code, fit_font(code, 2 * R - 8, 19, 'bold_cond', 11), contrast_text(col), 'm')
         text_vcenter(img, W - 24, top + panel_h - 14, f"LEADER TO LAST  {cap:.1f}s", font(16, 'semibold_cond'),
                      th.muted, 'r')
         return img

@@ -39,9 +39,10 @@ STRIKING = 1.0             # 'striking distance': within this many seconds of th
 GAP_SPACING = 150.0        # seconds between two battle forecasts
 GAP_PAIR_SPACING = 300.0   # ... and between two about the same pair
 GAP_MAX = 6
-START_MOVERS_AFTER = 60.0  # seconds after the green flag
+START_MOVERS_AFTER = 25.0  # seconds after the green flag (with the logger's start report)
 LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening seconds
-LEADER_SETTLE = 8.0        # if the lead swaps again this soon, only the later change gets a banner
+LEADER_HOLD = 5.0          # a new leader has to keep P1 this long before the banner is shown
+LEADER_LOCKOUT = 10.0      # and no other lead change gets a banner this soon after one
 RADIO_SPLIT = (' to ', ' over ', ' on ')
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
@@ -134,12 +135,17 @@ class OverlayRenderer:
         if gf is not None and auto.get('new_leader'):
             passes = [e for e in race.events_video() if e['type'] == 'overtake' and e['pos'] == 1
                       and e['t'] >= gf + LEADER_AFTER and (lf is None or e['t'] <= lf)]
+            last_award, last_leader = -1e9, None
             for i, e in enumerate(passes):
-                if i + 1 < len(passes) and passes[i + 1]['t'] - e['t'] < LEADER_SETTLE:
+                # Awarded once they have held it LEADER_HOLD seconds (and the lockout after the last banner is over)
+                at = max(e['t'] + LEADER_HOLD, last_award + LEADER_LOCKOUT)
+                lost = any(p['t'] <= at for p in passes[i + 1:])
+                if lost or e['driver'] == last_leader or (lf is not None and at > lf):
                     continue
-                items.append({'id': f'auto_leader_{i}', 'type': 'new_leader', 'time': e['t'] + 1.0,
+                items.append({'id': f'auto_leader_{i}', 'type': 'new_leader', 'time': at,
                               'duration': 6.5, 'lane': 'top', 'auto': True, 'driver': e['driver'],
                               'driver2': e['victim'], 'data': {'victims': e['victims'], 'corner': e['corner']}})
+                last_award, last_leader = at, e['driver']
         if auto.get('pit_stops'):
             items.extend(self._pit_items())
         if auto.get('gap_tracker', True):

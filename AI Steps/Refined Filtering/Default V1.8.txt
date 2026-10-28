@@ -122,6 +122,7 @@ The last broadcast's backstory felt repetitive: it was set up early and then res
 * **Never restate the premise.** State it once. After that, every story beat is a new episode: a new fact, a new suspect, a new consequence, a reversal.
 * **Escalate in steps.** Each beat should be bigger, stranger or more personal than the last. Plan the beats as a ladder, not a loop.
 * **Subvert the obvious.** When the audience thinks they know where it's going, turn it: the victim was the schemer, the rumour was true but about the wrong driver, the "sabotage" was a mechanic's birthday present.
+* **Big incidents take over.** After contact, a crash or a big change at the front, the next rambles are about THAT (the fallout, blame, the stewards), not the backstory. The story can pick the incident up, but never talk over it.
 * **Let the track drive it.** The best story beats are triggered by something that just happened on track; tie each reveal to the event in front of it.
 * **Leave room for racing.** Not every ramble is the backstory: roughly half should be about the racing itself (insight, a debate, the strategy), so the story lands harder when it returns.
 * **Be entertaining, not forced.** If a beat only exists to tick a box, cut it. A smaller, funnier idea beats a long, laboured one.
@@ -145,6 +146,8 @@ Begin every replaced ramble with ONE hook type in round brackets, followed by th
   `(Quip) The Rick and Morty Mini is defending like it's been told the multiverse depends on fourth place.`
 * **(Callback)** Bring back an earlier gag or storyline with an escalation. Say what it calls back to.
   `(Callback) The gouda incident again: Born has now banned all dairy from the DNF garage, and the mechanics are not happy.`
+* **(Stewards)** An official stewards' message, in formal race-control language, about an incident that really happened in the log (contact, a collision, a car forced off, an unsafe rejoin). Use it in three beats: (1) soon after the incident, the incident is NOTED, (2) a little later it is UNDER INVESTIGATION, (3) several minutes later, the DECISION. The decision must never change the result or a position: only "No further action - racing incident", a warning (black and white flag), a reprimand or penalty points. Put the beats in rambles that fall after the incident and let the booth argue about it in between.
+  `(Stewards) Incident involving Jaavib and Bill at the Old Hairpin under investigation: contact while battling for the lead.`
 * **(Continue)** The next beat of the conversation started by the previous talking point (see STEP 9): the reply, the twist, the punchline. Never a new topic.
 * **(Radio)** A short, punchy radio quote (in quotation marks) plus who said it and the context.
   `(Radio) Nortje to Born: "Stop telling me the gap, just tell me if Holdany's crying." Born's reply was a long silence.`
