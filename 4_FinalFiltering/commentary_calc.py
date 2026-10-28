@@ -11,12 +11,12 @@ def parse_time(line):
 
 import sys
 
-# The voices speak about 2.85 words a second. Budgeting every gap at that rate filled the whole race with
-# nonstop talk (viewers called it word salad), so only about two thirds of each gap is given words: the rest
-# is breathing room and race sound.
+# The voices speak about 2.85 words a second. Each gap gets words for almost all of it (a short breath before the
+# next event): near-continuous commentary works best, as long as it is conversation rather than padding (the
+# commentary prompt handles that). Two thirds left too much dead air.
 SPEECH_WORDS_PER_SEC = 2.85
-FILL = 0.65
-MAX_WORDS = 45
+FILL = 0.9
+MAX_WORDS = 70
 
 
 def main():

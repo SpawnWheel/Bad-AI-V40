@@ -63,6 +63,8 @@ The output will be:
 00:03:20 - [OVERTAKE] Afred Smith keeps P1 from James Small in Hypercars.
 Look at this example above and use this as what to do for complex battle sequences. You can use logic on what's happening in the battle by the [OVERTAKE] events.
 
+THE START: the first minute is the most frantic part of the race and should be the densest part of the log. Keep the opening overtakes, battles and incidents (merging only what is within 4 seconds), and always keep the "Start report" line (who has gained and lost the most since the grid) and the standings around 25 seconds. Do not put a Commentator's ramble in the first minute while there is racing to call.
+
 The longest time between two events should be 24 seconds. If there is longer than 24 seconds between two events, insert a new event 12 seconds after the one before. These events should say Commentator's ramble. It should not be specific about what they're rambling about. They should have the same format as the existing race events. 
 
 Battle events describe what the cars were measured doing (how close, closing or dropping back, under braking or in the slipstream, and the corner). Keep that wording when you keep or merge a battle event; never replace it with a stock phrase or a made-up move.

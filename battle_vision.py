@@ -16,6 +16,8 @@ TREND_METRES = 2.0     # the gap has to change by this much to count as closing 
 HISTORY_SEC = 12.0
 WATCH_METRES = 40.0    # pairs further apart than this are forgotten
 BRAKING_DECEL = 4.0    # m/s per second of slowing that counts as braking
+START_BATTLE_DELAY = 10.0  # battles are logged from this long after the green flag (the opening lap included)
+START_REPORT_AT = 25.0     # seconds after the green flag for the "who gained/lost at the start" report
 STRAIGHT_SHARE = 0.85  # this share of the car's top speed (so far this race) counts as a straight
 
 
@@ -91,3 +93,27 @@ class BattleVision:
         else:
             move = ', holding station' if count > 1 else ''
         return f"{behind} (P{pos_b}) is {near}{move}{self._where(phase, corner)}."
+
+
+def start_report(grid, positions):
+    """'Start report' line: who gained and lost the most since the grid. grid = names in grid order,
+    positions = {name: current position}. None if nobody has moved."""
+    moves = []
+    for g, name in enumerate(grid, 1):
+        pos = positions.get(name)
+        if pos:
+            moves.append((g - pos, name, g, pos))
+    if not moves or all(m[0] == 0 for m in moves):
+        return None
+    moves.sort(key=lambda m: -m[0])
+    bits = []
+    gainers = [m for m in moves if m[0] > 0][:3]
+    losers = [m for m in reversed(moves) if m[0] < 0][:2]
+    if gainers:
+        bits.append("gained: " + ", ".join(f"{n} P{g} to P{p} (+{d})" for d, n, g, p in gainers))
+    if losers:
+        bits.append("lost: " + ", ".join(f"{n} P{g} to P{p} ({d})" for d, n, g, p in losers))
+    leader = next((n for n, p in positions.items() if p == 1), None)
+    if leader:
+        bits.append(f"{leader} leads")
+    return "Start report: " + "; ".join(bits) + "."

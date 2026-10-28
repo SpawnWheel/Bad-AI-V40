@@ -17,7 +17,7 @@ from leaderboard_recorder import LeaderboardRecorder
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, APP_DIR)
 import racefiles  # noqa: E402
-from battle_vision import BattleVision  # noqa: E402
+from battle_vision import START_BATTLE_DELAY, START_REPORT_AT, BattleVision, start_report  # noqa: E402
 
 # Windows Virtual Key Code for F12
 VK_F12 = 0x7B
@@ -178,6 +178,8 @@ class RaceroomEventLogger:
         self.accidents = {} # name -> sim_time when accident started
         self.battles = {} # (name1, name2) -> {"type": str, "time": float, "count": int}
         self.vision = BattleVision()  # what each close pair is doing, for the battle lines
+        self.start_reported = False
+        self.grid_order = []
         self.distance_history = {} # name -> list of (sim_time, total_distance)
         self.best_laps = {} # name -> (lap_time, lap_number)
         self.last_lap_times = {} # name -> last completed lap time
@@ -377,6 +379,15 @@ class RaceroomEventLogger:
             elif phase == PHASE_CHECKERED and is_race:
                 self.checkered_flag_shown = True
             self.last_phase = phase
+
+        # Start report: who has gained and lost the most, plus the standings, shortly after the green flag
+        if (is_race and phase == PHASE_GREEN and self.green_flag_time is not None and not self.start_reported
+                and sim_now - self.green_flag_time >= START_REPORT_AT):
+            self.start_reported = True
+            report = start_report(self.grid_order, {d["name"]: d["pos"] for d in drivers})
+            if report:
+                self.log("SESSION", report)
+            self.log_leaderboard(drivers, "Current Standings", sim_now)
 
         # Periodic Leaderboard Updates (every 4 minutes)
         if is_race and phase == PHASE_GREEN and self.last_leaderboard_time is not None:
@@ -667,7 +678,8 @@ class RaceroomEventLogger:
             # Ignore drivers who have finished, are on the opening lap, or are in the pits
             if name1 in self.finished_participants or name2 in self.finished_participants:
                 continue
-            if ahead["laps"] < 1 or behind["laps"] < 1:
+            # From a few seconds after the green flag (the opening lap is the most frantic)
+            if self.green_flag_time is None or sim_now - self.green_flag_time < START_BATTLE_DELAY:
                 continue
             if ahead["pit"] or behind["pit"]:
                 continue
@@ -758,6 +770,7 @@ class RaceroomEventLogger:
     def log_starting_grid(self, drivers):
         grid = sorted(drivers, key=lambda x: x["pos"])
         grid_str = " | ".join(f"P{d['pos']}: {d['name']} [{d['car']}]" for d in grid)
+        self.grid_order = [d['name'] for d in grid]
         self.log("LEADERBOARD", f"Starting Grid Order: {grid_str}")
         # Who drives for whom, so the commentators can mention teams and manufacturers
         teams = []

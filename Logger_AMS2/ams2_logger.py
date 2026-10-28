@@ -11,7 +11,7 @@ from leaderboard_recorder_ams2 import AMS2LeaderboardRecorder
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import racefiles  # noqa: E402
-from battle_vision import BattleVision  # noqa: E402
+from battle_vision import START_BATTLE_DELAY, START_REPORT_AT, BattleVision, start_report  # noqa: E402
 
 def sanitize_filename(name):
     name = name.replace(":", "_").replace("/", "_").replace("\\", "_").replace(" ", "_")
@@ -281,6 +281,11 @@ VK_F12 = 0x7B
 # Fastest lap events are only announced once the leader has completed this many laps
 FASTEST_LAP_MIN_RACE_LAPS = 5
 
+# The game is read every POLL_INTERVAL seconds at normal speed. A fast-forwarded replay runs the
+# sim clock faster, so the logger reads that much more often to keep the same detail per sim second.
+POLL_INTERVAL = 0.5
+MAX_PLAYBACK_SPEED = 20.0  # caps the rate when a replay jumps to another point in the race
+
 class AMS2EventLogger:
     def __init__(self):
         self.shm = None
@@ -309,6 +314,9 @@ class AMS2EventLogger:
         self.last_movement_time = {} # name -> sim_time of last movement
         self.battles = {} # (name1, name2) -> {"type": str, "time": float (sim_time), "count": int}
         self.vision = BattleVision()  # what each close pair is doing, for the battle lines
+        self.green_flag_time = None
+        self.start_reported = False
+        self.grid_order = []
         self.checkered_flag_shown = False
         self.starting_grid_pending = False
         self.starting_grid_pending_sim_time = None # Sim time when grid became pending
@@ -325,6 +333,7 @@ class AMS2EventLogger:
         self.last_track_key = ""
         self.current_track_corners = []
         self.corner_names_dir = self._find_corner_names_dir()
+        self.last_clock_sample = None # (wall time, sim time) at the previous read, to measure replay speed
 
     def _find_corner_names_dir(self):
         """Locate the Corner Names folder."""
@@ -472,6 +481,19 @@ class AMS2EventLogger:
             return self.data.mCurrentTime
         return 0.0
 
+    def get_playback_speed(self):
+        """How fast the sim clock ran since the previous read: about 1 when live or in a normal
+        replay, 5 in a 5x fast-forward. AMS2 does not share the replay speed, so it is measured.
+        Never below 1, so paused, rewound or normal play keeps the normal reading rate."""
+        wall_now, sim_now = time.perf_counter(), self.get_session_time()
+        previous, self.last_clock_sample = self.last_clock_sample, (wall_now, sim_now)
+        if previous is None or wall_now <= previous[0]:
+            return 1.0
+        speed = (sim_now - previous[1]) / (wall_now - previous[0])
+        if speed < 1.5:  # timer jitter around normal speed
+            return 1.0
+        return min(speed, MAX_PLAYBACK_SPEED)
+
     def check_f12_key(self):
         """Check if F12 has been pressed (non-blocking, edge-triggered)."""
         try:
@@ -524,6 +546,8 @@ class AMS2EventLogger:
             self.checkered_flag_shown = False
             self.finished_participants.clear()
             self.vision.reset()
+            self.green_flag_time = None
+            self.start_reported = False
             self.starting_grid_pending = False
             self.starting_grid_pending_sim_time = None
             self.green_flag_fired = False
@@ -582,8 +606,23 @@ class AMS2EventLogger:
                 self.log_starting_grid(sim_time=sim_now)
                 if not self.green_flag_logged:
                     self.log("SESSION", "Green Flag! The race begins!", sim_time=sim_now)
+                    self.green_flag_time = sim_now
                     self.green_flag_logged = True
                 self.starting_grid_pending = False
+
+        # Start report: who has gained and lost the most, plus the standings, shortly after the green flag
+        if (self.green_flag_time is not None and not self.start_reported and self.data.mRaceState == 2
+                and sim_now - self.green_flag_time >= START_REPORT_AT):
+            self.start_reported = True
+            positions = {}
+            for i in range(self.data.mNumParticipants):
+                p = self.data.mParticipantInfo[i]
+                if p.mIsActive and p.mRacePosition > 0:
+                    positions[self.decode(p.mName)] = p.mRacePosition
+            report = start_report(self.grid_order, positions)
+            if report:
+                self.log("SESSION", report, sim_time=sim_now)
+            self.log_periodic_leaderboard()
 
         # Periodic Leaderboard Updates (every 4 minutes). None once the leader has the chequered flag:
         # the game's positions are scrambled while the rest of the field finishes.
@@ -893,8 +932,8 @@ class AMS2EventLogger:
                 if name1 in self.finished_participants or name2 in self.finished_participants:
                     continue
 
-                # COOLDOWN: No battles for the first lap
-                if lap1 <= 1 or lap2 <= 1:
+                # COOLDOWN: battles from a few seconds after the green flag (the opening lap is the most frantic)
+                if self.green_flag_time is None or sim_now - self.green_flag_time < START_BATTLE_DELAY:
                     continue
                 
                 # Ignore cars in pits
@@ -1157,6 +1196,7 @@ class AMS2EventLogger:
         grid.sort(key=lambda x: x["pos"])
             
         grid_str = " | ".join([f"P{item['pos']}: {item['name']} [{item['car']}]" for item in grid])
+        self.grid_order = [item['name'] for item in grid]
         self.log("LEADERBOARD", f"Starting Grid Order: {grid_str}", sim_time=sim_time)
 
     def log_safety_car_leaderboard(self, label):
@@ -1189,7 +1229,7 @@ class AMS2EventLogger:
         try:
             while not self.stop_event.is_set():
                 self.update()
-                self.stop_event.wait(0.5)
+                self.stop_event.wait(POLL_INTERVAL / self.get_playback_speed())
             self.log("SYSTEM", "Logging stopped.")
         except KeyboardInterrupt:
             self.log("SYSTEM", "Logging stopped by user.")

@@ -29,7 +29,7 @@ CODES = {
     'CRC': 'cr', 'PRY': 'py', 'PAR': 'py', 'BOL': 'bo', 'CYP': 'cy', 'GEO': 'ge', 'BLR': 'by', 'AND': 'ad',
     'LIE': 'li', 'SMR': 'sm', 'BIH': 'ba', 'MNE': 'me', 'MKD': 'mk', 'ALB': 'al', 'KAZ': 'kz', 'AZE': 'az',
     'ARM': 'am', 'MDA': 'md', 'JAM': 'jm', 'PRI': 'pr', 'PUR': 'pr', 'DOM': 'do', 'CUB': 'cu',
-    'ENG': 'gb-eng', 'SCO': 'gb-sct', 'WAL': 'gb-wls', 'NIR': 'gb-nir',
+    'ENG': 'gb-eng', 'SCO': 'gb-sct', 'SCT': 'gb-sct', 'WAL': 'gb-wls', 'WLS': 'gb-wls', 'NIR': 'gb-nir',
 }
 
 
