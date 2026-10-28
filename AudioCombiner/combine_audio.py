@@ -119,11 +119,17 @@ def level_clip(audio, target_dbfs=-27.0, max_peak_dbfs=-6.0, max_gain_db=12.0, m
     return audio
 
 
-# Bus compressor + limiter applied (via ffmpeg) to the stitched timeline so the
-# different commentators' voices sit at a consistent level in the final mix.
+# Broadcast voice chain applied (via ffmpeg) to the stitched timeline: cut the rumble and the boxy low mids,
+# lift the presence and air so the voices cut through the game audio, compress firmly so every word lands,
+# then bring the whole track to broadcast loudness (-16 LUFS) under a limiter.
 COMPRESSOR_FILTER = (
-    "acompressor=threshold=-30dB:ratio=3:attack=5:release=150:knee=4:makeup=6dB,"
-    "alimiter=limit=-1dB:attack=5:release=50:level=disabled"
+    "highpass=f=90,"
+    "equalizer=f=300:t=q:w=1.2:g=-2.5,"
+    "equalizer=f=3200:t=q:w=1.0:g=3.5,"
+    "equalizer=f=9000:t=q:w=0.8:g=1.5,"
+    "acompressor=threshold=-24dB:ratio=4:attack=3:release=90:knee=3:makeup=2dB,"
+    "loudnorm=I=-16:TP=-1.5:LRA=7,aresample=48000,"
+    "alimiter=limit=-1dB:attack=3:release=40:level=disabled"
 )
 
 

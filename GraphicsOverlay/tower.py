@@ -140,7 +140,8 @@ class TimingTower:
         w = int(max(MIN_W, min(self.lay.get('w', 400), need)))
         if self.cover:
             w = max(w, int(self.cover[2] - self.x))
-        return {'row_h': row_h, 'body_h': body_h, 'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H, 'w': w}
+        return {'row_h': row_h, 'body_h': body_h, 'w': w,
+                'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H}
 
     def _columns(self, h):
         """Column offsets for a row of height h."""
@@ -201,12 +202,12 @@ class TimingTower:
             anim = min(steps, int(local / SWAP_DUR * steps))
             flash = min(FLASH_STEPS, int(local / FLASH_DUR * FLASH_STEPS))
         return (idx, self.mode_at(t), prev_i, anim, flash, self.timing.clock_text(idx, t),
-                self.race.flag_state_at(t))
+                self.race.flag_state_at(t), self.timing.lap_text(idx, t))
 
     # ------------------------------------------------------------------ drawing
     def draw(self, frame, t):
         k = self.key(t)
-        idx, mode_i, prev_i, anim, flash, clock, flag = k
+        idx, mode_i, prev_i, anim, flash, clock, flag, lap = k
         body_key = k[:5] + (flag,)
         if body_key not in self._cache:
             if len(self._cache) > 400:
@@ -218,9 +219,14 @@ class TimingTower:
         img, margin = self._cache[body_key]
         x, y = self.x, self.y
         frame.alpha_composite(img, (int(x - margin), int(y - margin)))
-        # Clock under the logo, drawn per frame (it ticks every second)
+        # Clock under the logo, drawn per frame (it ticks every second), with the lap beside it
         f = font(30, 'bold')
-        text_vcenter(frame, x + self.w / 2, y + HEADER_H - 22, clock, f, self.th.text, 'm')
+        if lap:
+            text_vcenter(frame, x + 16, y + HEADER_H - 22, clock, fit_font(clock, self.w * 0.58, 30, 'bold'),
+                         self.th.text)
+            text_vcenter(frame, x + self.w - 16, y + HEADER_H - 22, lap, font(26, 'bold_cond'), self.th.accent2, 'r')
+        else:
+            text_vcenter(frame, x + self.w / 2, y + HEADER_H - 22, clock, f, self.th.text, 'm')
 
     def _rows_for(self, idx):
         st = self.timing.state(idx)
@@ -313,13 +319,19 @@ class TimingTower:
         th = self.th
         tpl = self.tpl
         round_rect(img, (0, 0, w, HEADER_H), 8, th.panel_solid, corners=(True, True, False, False))
+        # With a timing sponsor the top row splits in two: the championship logo centred on the left half,
+        # the sponsor's logo on its own panel filling the right half
+        plate = tpl.sponsor_plate('timing', w / 2 - 14, 46) if tpl.sponsor('timing') else None
+        left_w = w / 2 if plate else w
+        if plate:
+            img.alpha_composite(plate, (int(w / 2 + 4), 7))
         if tpl.logo:
-            lg = fit_image(tpl.logo, w - 60, 40)
-            img.alpha_composite(lg, (int(w / 2 - lg.width / 2), int(30 - lg.height / 2)))
+            lg = fit_image(tpl.logo, left_w - (28 if plate else 60), 40)
+            img.alpha_composite(lg, (int(left_w / 2 - lg.width / 2), int(30 - lg.height / 2)))
         else:
             champ = self.cfg['championship']
             title = (champ.get('short_name') or champ.get('name') or 'LIVE TIMING').upper()
-            text_vcenter(img, w / 2, 28, title, fit_font(title, w - 40, 30, 'bold'), th.text, 'm')
+            text_vcenter(img, left_w / 2, 28, title, fit_font(title, left_w - 40, 30, 'bold'), th.text, 'm')
         # Title bar
         y = HEADER_H
         if yellow:

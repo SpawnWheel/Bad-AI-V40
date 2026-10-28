@@ -539,7 +539,37 @@ class GraphicsSetup:
                                     self.schedule_preview())).grid(row=r, column=1, sticky='w', padx=8)
 
         r += 1
-        tk.Label(f, text="Extra logos (sponsors, car maker…)", bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
+        tk.Label(f, text="Sponsors (name and/or logo)", bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
+            row=r, column=0, columnspan=3, sticky='w', pady=(16, 4))
+        sponsors = self.cfg.setdefault('sponsors', {})
+        for kind, label in (('title', 'Title sponsor (race card, results)'),
+                            ('timing', 'Timing sponsor (tower, forecasts)'), ('partner', 'Official partner')):
+            r += 1
+            sp = sponsors.setdefault(kind, {'name': '', 'logo': ''})
+            self.label(f, label, row=r, column=0, sticky='w', pady=3)
+            row = tk.Frame(f, bg=CARD)
+            row.grid(row=r, column=1, columnspan=2, sticky='w', padx=8, pady=3)
+            name_var = tk.StringVar(value=sp.get('name', ''))
+            name_var.trace_add('write', lambda *a, sp=sp, v=name_var: (sp.__setitem__('name', v.get()),
+                                                                        self.schedule_preview()))
+            self.entry(row, name_var, 14).pack(side='left', ipady=3)
+            logo_var = tk.StringVar(value=sp.get('logo', ''))
+
+            def set_logo(path, sp=sp, v=logo_var):
+                if path is None:
+                    return
+                path = '' if path == '(none)' else path
+                v.set(path)
+                sp['logo'] = path
+                self.schedule_preview()
+            cb = ttk.Combobox(row, textvariable=logo_var, width=26,
+                              values=['(none)'] + [f"Graphics/Logos/{x}" for x in gcfg.list_images(gcfg.LOGO_DIR)])
+            cb.pack(side='left', padx=6)
+            cb.bind("<<ComboboxSelected>>", lambda e, v=logo_var, s=set_logo: s(v.get()))
+            styled_button(row, "Browse…", lambda s=set_logo: s(self.browse_image(gcfg.LOGO_DIR))).pack(side='left')
+
+        r += 1
+        tk.Label(f, text="Extra logos (fixed on screen)", bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
             row=r, column=0, columnspan=3, sticky='w', pady=(16, 4))
         self.extra_list = tk.Listbox(f, height=4, bg=INPUT, fg=FG, selectbackground=ACCENT, relief='flat',
                                      highlightthickness=0, width=46)

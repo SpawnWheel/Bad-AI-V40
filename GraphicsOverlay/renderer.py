@@ -4,6 +4,8 @@ Only frames whose content differs are rendered: static stretches become a single
 PNG with a long duration in an ffmpeg concat list, which ffmpeg composites over
 the race video in the same pass as the final encode.
 """
+import bisect
+import math
 import multiprocessing
 import os
 import shutil
@@ -23,8 +25,20 @@ TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
 YELLOW_FLAGS = ('yellow', 'double yellow')  # shown by the timing tower turning yellow, not a pop-up
 # type -> (start after pop-in begins, duration) of the held animation
+# (commentators, chequered and pit timers run for their whole time on screen, see _anim_timing)
 ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1), 'commentators': (0.2, 1.4),
-            'title_card': (0.0, 1.6)}
+            'title_card': (0.0, 1.6), 'chequered': (0.0, 1.0), 'gap_tracker': (0.6, 2.2), 'pit_timer': (0.0, 1.0)}
+ANIM_RATE = {'commentators': 15, 'chequered': 15, 'pit_timer': 10}  # steps per second, else the video fps
+TOWER_OFF_AFTER = 3.0      # the timing tower comes off this long after the winner crosses the line
+FASTEST_LAP_FROM = 5       # fastest laps only count from this lap (early laps are in traffic and on cold tyres)
+PIT_TIMER_LEAD = 1.2       # the pit timer card is up this long before the car stops in its box
+UNDERCUT_GAP = 3.0         # a stop with a rival this close (seconds) is an undercut/overcut story
+GAP_WINDOW_LAPS = 2.0      # closing/pulling away is measured over this many laps
+GAP_CHANGE = 1.0           # ... and needs the interval to change by at least this much
+STRIKING = 1.0             # 'striking distance': within this many seconds of the car ahead
+GAP_SPACING = 150.0        # seconds between two battle forecasts
+GAP_PAIR_SPACING = 300.0   # ... and between two about the same pair
+GAP_MAX = 6
 START_MOVERS_AFTER = 60.0  # seconds after the green flag
 LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening seconds
 LEADER_SETTLE = 8.0        # if the lead swaps again this soon, only the later change gets a banner
@@ -45,6 +59,10 @@ class OverlayRenderer:
         self.fps = float(fps)
         self.race = race or gcfg.build_race(project_path, self.cfg)
         gcfg.ensure_drivers(self.cfg, self.race.drivers, self.race.entries())
+        if multiprocessing.parent_process() is None:
+            # Missing flags are downloaded once, before the render workers start
+            from .flags import ensure as ensure_flags
+            ensure_flags(gcfg.driver_meta(self.cfg, n).get('country') for n in self.race.drivers)
         self.tpl = Templates(self.cfg, self.race)
         if self.tpl.tower:
             self.tpl.tower.fps = self.fps
@@ -70,7 +88,8 @@ class OverlayRenderer:
                 # A little longer on screen when there are bios to read
                 dur = min(12.0, 6.0 + 2.0 * sum(1 for b in bios.values() if b))
                 items.append({'id': 'auto_comm', 'type': 'commentators', 'time': gf + 10.5, 'duration': dur,
-                              'lane': 'popup', 'auto': True, 'data': {'names': names, 'bios': bios}})
+                              'lane': 'popup', 'auto': True,
+                              'data': {'names': names, 'bios': bios, 'anim_dur': dur - 0.2 - POPUP_OUT}})
         tk = cfg['layout']['ticker']
         if tk['enabled']:
             if gf is not None and auto.get('start_ticker') and race.grid:
@@ -105,6 +124,8 @@ class OverlayRenderer:
             for i, e in enumerate(race.events_video()):
                 if e['type'] != 'fastest_lap' or (gf is not None and e['t'] < gf):
                     continue
+                if e.get('lap') is not None and e['lap'] < FASTEST_LAP_FROM:
+                    continue
                 if lf is not None and e['t'] > lf + 5:
                     continue
                 items.append({'id': f'auto_fl_{i}', 'type': 'fastest_lap', 'time': e['t'] + 1.0, 'duration': 7.0,
@@ -121,12 +142,16 @@ class OverlayRenderer:
                               'driver2': e['victim'], 'data': {'victims': e['victims'], 'corner': e['corner']}})
         if auto.get('pit_stops'):
             items.extend(self._pit_items())
+        if auto.get('gap_tracker', True):
+            items.extend(self._gap_items())
+        if auto.get('sponsors', True):
+            items.extend(self._sponsor_items())
         if auto.get('radio'):
             items.extend(self._radio_items())
         if lf is not None and auto.get('chequered'):
             winner = race.finish[0][1]
-            items.append({'id': 'auto_cheq', 'type': 'chequered', 'time': lf + 0.5, 'duration': 7.0,
-                          'lane': 'popup', 'auto': True, 'driver': winner})
+            items.append({'id': 'auto_cheq', 'type': 'chequered', 'time': lf + 0.3, 'duration': 9.0,
+                          'lane': 'top', 'auto': True, 'driver': winner})
         if lf is not None and auto.get('results'):
             rows = []
             for pos, name in race.final_classification():
@@ -142,23 +167,120 @@ class OverlayRenderer:
         return items
 
     def _pit_items(self):
-        """One pop-up per pit entry; cars entering within a few seconds of each other share a card."""
+        """Pit stop timers for the stops that matter: the front-runners, and undercut/overcut fights with a
+        rival close by. The card comes up as the car reaches its box and the stationary time ticks up."""
         race = self.race
         gf, lf = race.green_flag_video, race.leader_finish_video
-        groups = []
-        for e in race.events_video():
-            if e['type'] != 'pit_in' or (gf is not None and e['t'] < gf) or (lf is not None and e['t'] > lf):
-                continue
-            if groups and e['t'] - groups[-1][-1]['t'] <= PIT_GROUP_GAP and len(groups[-1]) < PIT_GROUP_MAX:
-                if e['driver'] not in [x['driver'] for x in groups[-1]]:
-                    groups[-1].append(e)
-            else:
-                groups.append([e])
+        tm = race.timing
         items = []
-        for i, grp in enumerate(groups):
-            items.append({'id': f'auto_pit_{i}', 'type': 'pit_stop', 'time': grp[-1]['t'] + 1.0,
-                          'duration': 6.0 + 0.5 * (len(grp) - 1), 'lane': 'popup', 'auto': True, 'shift': True,
-                          'driver': grp[0]['driver'], 'data': {'drivers': [x['driver'] for x in grp]}})
+        for i, stop in enumerate(race.pits):
+            stationary = race.stop_stationary(stop)
+            if not stationary or stationary > 90 or stop['box'] is None:
+                continue
+            box = race.to_video(stop['box'])
+            if (gf is not None and box < gf) or (lf is not None and box > lf):
+                continue
+            name = stop['driver']
+            pos = stop.get('pos_before')
+            label = None
+            st = tm.state(tm.index_at(race.to_video(stop['enter']) - 1)) if tm.recorded else None
+            me = next((k for k, r in enumerate(st['rows']) if r['name'] == name), None) if st else None
+            if me is not None:
+                rows = st['rows']
+                r = rows[me]
+                pos = r['pos']
+                ahead = rows[me - 1] if me > 0 else None
+                behind = rows[me + 1] if me + 1 < len(rows) else None
+                if ahead and (r.get('interval') or 99) < UNDERCUT_GAP and ahead.get('stops') == r.get('stops'):
+                    label = f"UNDERCUT ON {self.tpl.meta(ahead['name'])['short'].upper()}"
+                elif (behind and (behind.get('interval') or 99) < UNDERCUT_GAP
+                      and (behind.get('stops') or 0) > (r.get('stops') or 0)):
+                    label = f"RESPONDS TO {self.tpl.meta(behind['name'])['short'].upper()}"
+            if label is None and not (pos and pos <= 3):
+                continue
+            items.append({'id': f'auto_pit_{i}', 'type': 'pit_timer', 'time': box - PIT_TIMER_LEAD,
+                          'duration': PIT_TIMER_LEAD + stationary + 3.5, 'lane': 'popup', 'auto': True,
+                          'driver': name, 'title': label or 'PIT STOP',
+                          'data': {'pos': pos, 'stationary': stationary}, 'rank': (label is None, pos or 99)})
+        # A timer has to run while the car is stopped, so it can't move: when stops overlap, the undercut
+        # fights and then the higher-placed car win
+        kept = []
+        for it in sorted(items, key=lambda x: x['rank']):
+            if all(it['time'] >= k['time'] + k['duration'] + LANE_GAP or k['time'] >= it['time'] + it['duration'] + LANE_GAP
+                   for k in kept):
+                kept.append(it)
+        return sorted(kept, key=lambda x: x['time'])
+
+    def _gap_items(self):
+        """Battle forecasts from the recorded timing: a car closing on the one ahead (or dropping away from it)
+        by at least GAP_CHANGE seconds over GAP_WINDOW_LAPS laps."""
+        race = self.race
+        tm = race.timing
+        gf, lf = race.green_flag_video, race.leader_finish_video
+        if not tm.recorded or gf is None:
+            return []
+        lap = tm.lap_time() or ((race.track_length_m or 4000) / 45.0)
+        window = lap * GAP_WINDOW_LAPS
+        items, last_any, last_pair = [], -1e9, {}
+        for i, st in enumerate(tm.states):
+            t = race.to_video(st['t'])
+            if t < gf + max(90.0, lap * 1.5) or (lf is not None and t > lf - 5) or t - last_any < GAP_SPACING:
+                continue
+            j = bisect.bisect_right(tm.times, st['t'] - window) - 1
+            if j < 0:
+                continue
+            old_rows = tm.states[j]['rows']
+            then = {r['name']: r for r in old_rows}
+            then_ahead = {b['name']: a['name'] for a, b in zip(old_rows, old_rows[1:])}
+            laps = (st['t'] - tm.states[j]['t']) / lap
+            best = None
+            for a, r in zip(st['rows'], st['rows'][1:]):
+                old = then.get(r['name'])
+                if not old or then_ahead.get(r['name']) != a['name']:
+                    continue
+                if any(x.get('pit') or x.get('finish') or (x.get('laps_down') or 0) for x in (a, r, old)):
+                    continue
+                if old.get('stops') != r.get('stops') or then[a['name']].get('stops') != a.get('stops'):
+                    continue  # a pit stop in the window, not on-track pace
+                now_gap, old_gap = r.get('interval'), old.get('interval')
+                if now_gap is None or old_gap is None:
+                    continue
+                rate = (old_gap - now_gap) / max(0.5, laps)
+                if old_gap - now_gap >= GAP_CHANGE and 0.3 <= now_gap <= 3.0:
+                    mode = 'closing'
+                elif now_gap - old_gap >= GAP_CHANGE and old_gap <= 1.5 and now_gap <= 4.0:
+                    mode = 'pulling'
+                else:
+                    continue
+                if t - last_pair.get((r['name'], a['name']), -1e9) < GAP_PAIR_SPACING:
+                    continue
+                if best is None or a['pos'] < best[1]['pos']:
+                    best = (r, a, old_gap, now_gap, rate, mode)
+            if best is None:
+                continue
+            r, a, old_gap, now_gap, rate, mode = best
+            laps_to = max(0, math.ceil((now_gap - STRIKING) / rate)) if mode == 'closing' and rate > 0 else None
+            items.append({'id': f'auto_gap_{i}', 'type': 'gap_tracker', 'time': t + 0.5, 'duration': 9.0,
+                          'lane': 'popup', 'auto': True, 'shift': True, 'driver': r['name'], 'driver2': a['name'],
+                          'data': {'mode': mode, 'gap_from': old_gap, 'gap_now': now_gap, 'rate': rate,
+                                   'laps_to': laps_to, 'pos_behind': r['pos'], 'pos_ahead': a['pos']}})
+            last_any = t
+            last_pair[(r['name'], a['name'])] = t
+            if len(items) >= GAP_MAX:
+                break
+        return items
+
+    def _sponsor_items(self):
+        """Each sponsor gets one moment on screen, spread through the race."""
+        gf, lf = self.race.green_flag_video, self.race.leader_finish_video
+        if gf is None or lf is None:
+            return []
+        kinds = [k for k in ('title', 'timing', 'partner') if self.tpl.sponsor(k)]
+        items = []
+        for n, kind in enumerate(kinds):
+            t = gf + (lf - gf) * (n + 1) / (len(kinds) + 1)
+            items.append({'id': f'auto_sponsor_{kind}', 'type': 'sponsor', 'time': t, 'duration': 5.5,
+                          'lane': 'popup', 'auto': True, 'shift': True, 'data': {'kind': kind}})
         return items
 
     def _radio_items(self):
@@ -285,9 +407,14 @@ class OverlayRenderer:
             return 'out', int((local - (it['duration'] - t_out)) * self.fps)
         return 'hold', 0
 
+    def tower_shown(self, t):
+        """The timing tower comes off a few seconds after the leader takes the chequered flag."""
+        lf = self.race.leader_finish_video
+        return self.tpl.tower is not None and (lf is None or t < lf + TOWER_OFF_AFTER)
+
     def frame_key(self, t):
         key = [self.race.flag_state_at(t)]
-        if self.tpl.tower:
+        if self.tower_shown(t):
             key.append(self.tpl.tower.key(t))
         for it in self._active(t):
             if it['lane'] == 'ticker':
@@ -304,7 +431,11 @@ class OverlayRenderer:
         if it['type'] == 'overtake':
             # Passing several cars at once takes a little longer to play out
             dur += 0.3 * (len(Templates.overtake_victims(it)) - 1)
-        return start, dur, max(1, int(dur * self.fps))
+        elif it['type'] in ('commentators', 'chequered'):
+            dur = max(0.5, it['duration'] - start - POPUP_OUT)
+        elif it['type'] == 'pit_timer':
+            start, dur = PIT_TIMER_LEAD, max(0.1, it['data']['stationary'])
+        return start, dur, max(1, int(dur * ANIM_RATE.get(it['type'], self.fps)))
 
     def _anim_step(self, it, t):
         """Frame index of a card's held animation (None for static cards)."""
@@ -336,7 +467,8 @@ class OverlayRenderer:
     def render_frame(self, t):
         frame = self.static.copy()
         if self.tpl.tower:
-            self.tpl.tower.draw(frame, t)
+            if self.tower_shown(t):
+                self.tpl.tower.draw(frame, t)
         elif self.cfg['layout']['leaderboard']['enabled'] and self.race.has_hud:
             self.tpl.leaderboard_footer(frame, self.race.flag_state_at(t))
         for it in self._active(t):
@@ -515,8 +647,10 @@ def overlay_filter(fps, video_size, base_size=(1920, 1080), overlay_input=2):
     scale = ''
     if tuple(video_size) != tuple(base_size):
         scale = f",scale={video_size[0]}:{video_size[1]}"
-    return (f"[{overlay_input}:v]fps={fps},format=rgba{scale}[ov];"
-            f"[0:v][ov]overlay=0:0:eof_action=pass:format=auto[vout]")
+    # Convert (and scale) each overlay image once, before fps repeats it for every video frame, and in the
+    # video's own pixel format so the overlay filter blends without converting every frame again
+    return (f"[{overlay_input}:v]format=rgba{scale},format=yuva420p,fps={fps}[ov];"
+            f"[0:v][ov]overlay=0:0:eof_action=pass:format=yuv420[vout]")
 
 
 def graphics_enabled(project_path):

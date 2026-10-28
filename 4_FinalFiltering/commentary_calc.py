@@ -11,6 +11,14 @@ def parse_time(line):
 
 import sys
 
+# The voices speak about 2.85 words a second. Budgeting every gap at that rate filled the whole race with
+# nonstop talk (viewers called it word salad), so only about two thirds of each gap is given words: the rest
+# is breathing room and race sound.
+SPEECH_WORDS_PER_SEC = 2.85
+FILL = 0.65
+MAX_WORDS = 45
+
+
 def main():
     print("--- Race Event Word Count Calculator ---")
     
@@ -73,7 +81,7 @@ def main():
                     duration = total_seconds
                 break
         
-        word_count = min(int(round(duration * 2.85)), 80)
+        word_count = max(3, min(int(round(duration * SPEECH_WORDS_PER_SEC * FILL)), MAX_WORDS))
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"

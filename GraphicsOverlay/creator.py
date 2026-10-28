@@ -50,35 +50,73 @@ def build_facts(race, cfg):
         st = race.stats_until(cp)
         as_of = fmt_clock(cp)
 
-        def add(label, value, driver=None, note=''):
+        def add(label, value, driver=None, note='', short=''):
             facts.append({'id': f"F{len(facts) + 1}", 'as_of': as_of, 'as_of_sec': cp, 'label': label,
-                          'value': value, 'driver': driver, 'note': note})
+                          'value': value, 'driver': driver, 'note': note, 'short': short or label})
 
-        add('Overtakes in the race so far', st['total_overtakes'])
+        # Race-wide counts ("N overtakes so far", "% of the race led") are left out on purpose: they read the
+        # same every race. These are about one driver or the shape of the field.
         if st['overtakes_by']:
             top, n = max(st['overtakes_by'].items(), key=lambda kv: kv[1])
-            add('Most overtakes by one driver', n, top)
-        add('Lead changes so far', st['lead_changes'])
-        if st['lead_time']:
-            leader, secs = max(st['lead_time'].items(), key=lambda kv: kv[1])
-            race_secs = max(1, cp - gf)
-            add('Share of the race spent leading', f"{min(100, round(100 * secs / race_secs))}%", leader,
-                f"{fmt_clock(secs)} of {fmt_clock(race_secs)}")
+            if n >= 3:
+                add('Most overtakes by one driver', n, top, short='MOST OVERTAKES')
+        if st['lead_changes'] >= 3:
+            add('Lead changes so far', st['lead_changes'], short='LEAD CHANGES')
         movers = race.movers_at(cp)
-        if movers and movers[0][1] > 0:
-            add('Positions gained since the start', f"+{movers[0][1]}", movers[0][0])
-        if movers and movers[-1][1] < 0:
-            add('Positions lost since the start', str(movers[-1][1]), movers[-1][0])
+        if movers and movers[0][1] >= 2:
+            add('Positions gained since the start', f"+{movers[0][1]}", movers[0][0], short='PLACES GAINED')
+        if movers and movers[-1][1] <= -2:
+            add('Positions lost since the start', str(movers[-1][1]), movers[-1][0], short='PLACES LOST')
         stops = [(s, race.stop_stationary(s)) for s in race.pits if race.to_video(s['enter']) <= cp]
         stops = [(s, v) for s, v in stops if v]
         if stops:
             best = min(stops, key=lambda x: x[1])
-            add('Quickest pit stop (stationary)', f"{best[1]:.0f}s", best[0]['driver'])
+            add('Quickest pit stop (stationary)', f"{best[1]:.1f}s", best[0]['driver'], short='QUICKEST STOP')
         if st['incidents_by']:
             who, n = max(st['incidents_by'].items(), key=lambda kv: kv[1])
             if n > 1:
-                add('Times stopped or slow on track', n, who)
+                add('Times stopped or slow on track', n, who, short='TIMES STOPPED')
+        rows, packs = race.timing.spread_at(cp)
+        if len(rows) >= 2:
+            lead_gap = rows[1][1] - rows[0][1]
+            add("Leader's margin over P2", f"{lead_gap:.1f}s", rows[0][0], note=f"P2 is {rows[1][0]}",
+                short="LEADER'S MARGIN")
+            add('Leader to last car still racing', f"{rows[-1][1]:.0f}s", short='FIELD SPREAD')
+            if len(packs) > 1:
+                add('Separate groups on track (split at 1.5s)', len(packs),
+                    note=' / '.join(f"{len(p)} car{'s' if len(p) > 1 else ''}" for p in packs), short='GROUPS ON TRACK')
+            biggest = max(packs, key=len)
+            if len(biggest) >= 3:
+                add('Cars in the biggest pack', len(biggest), note=', '.join(biggest), short='CARS IN ONE PACK')
     return facts
+
+
+def pace_lines(race):
+    """'NAME best 1:23.456, last 1:24.001' per car near the end of each standings period, from the recorded
+    timing, for the strategy/pace insights. [] without recorded timing."""
+    tm = race.timing
+    if not tm.recorded:
+        return []
+    out = []
+    for t_log, _ in race.snapshots:
+        st = tm.state(tm.index_at(race.to_video(t_log)))
+        if not st:
+            continue
+        cars = []
+        for r in st['rows']:
+            bits = [f"P{r['pos']} {r['name']}"]
+            if r.get('best'):
+                bits.append(f"best {r['best']:.3f}")
+            if r.get('last'):
+                bits.append(f"last {r['last']:.3f}")
+            if r.get('stops'):
+                bits.append(f"{r['stops']} stop{'s' if r['stops'] > 1 else ''}")
+            cars.append(' '.join(bits))
+        rows, packs = tm.spread_at(race.to_video(t_log))
+        groups = ' | '.join(', '.join(p) for p in packs)
+        out.append(f"{fmt_clock(race.to_video(t_log))} PACE {'; '.join(cars)}\n"
+                   f"{fmt_clock(race.to_video(t_log))} GROUPS (split at 1.5s) {groups}")
+    return out
 
 
 # ---------------------------------------------------------------- AI brief
@@ -111,6 +149,12 @@ def build_brief(project_path, cfg, race, renderer):
     lines.append(f"Championship: {champ.get('name') or 'n/a'} | {champ.get('season', '')} {champ.get('round', '')}")
     lines.append(f"Track: {gcfg.clean_track_name(race.track)} ({race.track_layout}), "
                  f"{(race.track_length_m or 0) / 1000:.3f} km")
+    cars = sorted({e.get('car') for e in (race.entries() or {}).values() if e.get('car')})
+    if cars:
+        lines.append(f"Car: {', '.join(cars)}")
+    lap = race.timing.lap_time() if race.timing.recorded else None
+    if lap:
+        lines.append(f"Typical race lap: {int(lap // 60)}:{lap % 60:06.3f}")
     if race.green_flag_video is not None:
         lines.append(f"Green flag at video time {fmt_clock(race.green_flag_video)}")
     if race.leader_finish_video is not None:
@@ -178,6 +222,11 @@ def build_brief(project_path, cfg, race, renderer):
             timeline.append((t, f"CAMERA now following {name}"))
     timeline.sort(key=lambda x: x[0])
     lines.extend(f"{fmt_clock(t)} {txt}" for t, txt in timeline)
+
+    pace = pace_lines(race)
+    if pace:
+        lines.append('\n=== PACE AND GROUPS at each standings update (lap times in seconds) ===')
+        lines.extend(pace)
 
     lines.append('\n=== FACTS (for "stat" graphics: reference fact_id, only at or after its as_of time) ===')
     for f in build_facts(race, cfg):
@@ -306,7 +355,7 @@ def resolve_entry(raw, cfg, race, resolve, facts):
             return None, f"unknown fact_id {raw.get('fact_id')!r}"
         if t < fact['as_of_sec'] - 1:
             g['time'] = t = fact['as_of_sec'] + 1
-        data = {'value': fact['value'], 'label': fact['label']}
+        data = {'value': fact['value'], 'label': fact['label'], 'short': fact.get('short', '')}
         if not g['title']:
             g['title'] = fact['label']
         drv = d1 or fact.get('driver')
@@ -329,6 +378,17 @@ def resolve_entry(raw, cfg, race, resolve, facts):
             return None, 'headline needs a title'
         if d1:
             g['driver'] = d1
+
+    elif typ == 'gaps':
+        rows, packs = race.timing.spread_at(t)
+        if len(rows) < 3:
+            return None, 'no gaps recorded at that moment'
+        data = {'rows': rows, 'packs': packs}
+
+    elif typ == 'insight':
+        if not g['title']:
+            return None, 'insight needs a title'
+        g['text'] = g['text'][:130]
 
     if typ == 'race_control':
         data['race_time'] = race_time_label(race, g['time'])

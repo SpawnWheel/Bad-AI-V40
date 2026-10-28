@@ -12,7 +12,7 @@ PAD_BEFORE_SEC = 0.5
 PAD_AFTER_SEC = 0.5
 
 # Volume of the original game audio underneath the commentary (0 = commentary only)
-GAME_AUDIO_VOLUME = 0.20
+GAME_AUDIO_VOLUME = 0.30
 
 # The stitched timeline is built on digital silence, so anything above this is commentary
 SILENCE_THRESHOLD_DBFS = -60.0
@@ -32,6 +32,9 @@ ENCODERS = {
     'h264': ('h264_nvenc', 'libx264'),
     'hevc': ('hevc_nvenc', 'libx265'),
 }
+# Quality targets (lower = better and bigger); ~20 is visually clean for racing footage
+NVENC_CQ = 20
+X264_CRF = 19
 
 
 def probe_video(video_path):
@@ -88,11 +91,13 @@ def find_commentary_bounds(audio_path):
 def build_audio_filter(has_game_audio):
     commentary = "[1:a]aresample=48000,aformat=channel_layouts=stereo"
     if has_game_audio and GAME_AUDIO_VOLUME > 0:
+        # The game ducks under the commentators while they talk and comes back up in the gaps.
         # amix follows the game audio's length; adding apad here deadlocks ffmpeg
         return (
             f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,volume={GAME_AUDIO_VOLUME}[game];"
-            f"{commentary}[comm];"
-            "[game][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
+            f"{commentary},asplit=2[comm][key];"
+            "[game][key]sidechaincompress=threshold=0.03:ratio=5:attack=15:release=450:makeup=1[ducked];"
+            "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
         )
     # Pad the commentary with silence so it covers the trailing clip padding
     return f"{commentary},apad[aout]"
@@ -100,8 +105,12 @@ def build_audio_filter(has_game_audio):
 
 def build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay=None):
     bitrate = info['video_bitrate']
-    cmd = [
-        "ffmpeg", "-y", "-hide_banner", "-stats", "-loglevel", "error",
+    nvenc = encoder.endswith('_nvenc')
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-stats", "-loglevel", "error"]
+    if nvenc:
+        # Decode on the GPU too (frames come back to the CPU for the overlay); falls back on its own
+        cmd += ["-hwaccel", "cuda"]
+    cmd += [
         # Seek both inputs by the same amount so the existing sync is preserved
         "-ss", f"{clip_start:.3f}", "-i", video_path,
         "-ss", f"{clip_start:.3f}", "-i", audio_path,
@@ -120,12 +129,17 @@ def build_command(video_path, audio_path, output_path, info, clip_start, clip_du
         "-map", video_map, "-map", "[aout]",
         "-c:v", encoder,
     ]
-    if encoder.endswith('_nvenc'):
-        cmd += ["-preset", "p5", "-tune", "hq", "-rc", "vbr"]
+    # Constant quality rather than the source's bitrate: re-encoding a game capture at the same bitrate
+    # turned fast motion (grass, gravel, camera cuts) into blocks. The cap keeps the file size sane.
+    cap = max(int(bitrate * 2.5), 30_000_000)
+    if nvenc:
+        cmd += ["-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(NVENC_CQ), "-b:v", "0",
+                "-spatial-aq", "1", "-temporal-aq", "1", "-aq-strength", "8", "-rc-lookahead", "32",
+                "-bf", "3", "-b_ref_mode", "middle", "-profile:v", "high"]
     else:
-        cmd += ["-preset", "medium"]
+        cmd += ["-preset", "medium", "-crf", str(X264_CRF)]
     cmd += [
-        "-b:v", str(bitrate), "-maxrate", str(int(bitrate * 1.5)), "-bufsize", str(bitrate * 2),
+        "-maxrate", str(cap), "-bufsize", str(cap * 2),
         "-r", info['frame_rate'], "-fps_mode", "cfr", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", str(info['audio_bitrate']),
         "-movflags", "+faststart",
