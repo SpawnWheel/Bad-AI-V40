@@ -361,7 +361,23 @@ def parse_ai_json(text):
     end = text.rfind('}')
     if start == -1 or end == -1:
         raise ValueError('No JSON object found in the AI response')
-    return json.loads(text[start:end + 1])
+    text = text[start:end + 1]
+    try:
+        return json.loads(text)
+    except ValueError as e:
+        try:
+            return json.loads(repair_json(text))
+        except ValueError:
+            raise e
+
+
+def repair_json(text):
+    """Fixes the slips models make in long JSON replies: a missing comma at the end of a line and
+    trailing commas before a closing bracket. JSON strings cannot span lines, so working line by line
+    never touches the text inside them."""
+    # A value ends a line and the next line starts a new key or item, with no comma between them
+    text = re.sub(r'("|\d|\}|\]|true|false|null)([ \t]*\r?\n\s*)(?=["{\[])', r'\1,\2', text)
+    return re.sub(r',(\s*[}\]])', r'\1', text)
 
 
 # ---------------------------------------------------------------- rule-based fallback

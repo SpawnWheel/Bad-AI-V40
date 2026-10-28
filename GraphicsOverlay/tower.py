@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config as gcfg
 from .drawing import (add_shadow, ease_in, ease_out, ellipsize, fit_font, fit_image, font, h_gradient,
-                      load_image, logo_outline, rgba, round_outline, round_rect, text_vcenter, text_w)
+                      load_image, rgba, round_outline, round_rect, text_vcenter, text_w)
 from .race_data import norm_key
 from .templates import FLAG_COLORS, contrast_text
 from .timing import FINISH_FINISHED, row_value
@@ -75,10 +75,26 @@ class TimingTower:
         self._make_logos = {}
         self._make_files = gcfg.list_images(MAKE_DIR)
         self.fps = 30.0
+        # AMS2 must be recorded with its own leaderboard up, so there the tower is fully opaque and grows to
+        # cover the in-game board (the Leaderboard region in Graphics Setup marks where it is)
+        self.cover = self._hud_rect() if self.race.has_hud else None
+        self.opaque = self.cover is not None
+        self.panel = self.th.panel_solid if self.opaque else self.th.panel
+        self.row_bg = self.th.panel_hi[:3] + (255,) if self.opaque else self.th.panel_hi
+        self.x, self.y = self.lay['x'], self.lay['y']
+        if self.cover:
+            self.x, self.y = min(self.x, self.cover[0]), min(self.y, self.cover[1])
         self.geom = self._geometry()
         self.w = self.geom['w']
 
     # ------------------------------------------------------------------ layout
+    def _hud_rect(self):
+        """(x0, y0, x1, y1) of the game's own leaderboard, with a few pixels to spare."""
+        lb = self.cfg['layout']['leaderboard']
+        rows = lb.get('rows') or max(1, len(self.race.drivers))
+        m = 4
+        return (lb['x'] - m, lb['y'] - m, lb['x'] + lb['w'] + m, lb['y'] + rows * lb['row_h'] + lb['pad'] + m)
+
     def _class_color(self, cls):
         custom = (self.lay.get('class_colors') or {}).get(cls)
         if custom:
@@ -108,9 +124,13 @@ class TimingTower:
         groups = self._visible(rows)
         n = sum(len(m) for _, m in groups)
         bars = len(groups) if self.timing.multiclass else 0
-        top = self.lay['y']
+        top = self.y
         avail = self.lay.get('bottom', 1000) - top - HEADER_H - TITLE_H - FOOTER_H - bars * (CLASS_H + GAP) - 8
         row_h = int(min(self.lay.get('row_h', 34), max(20, avail / max(1, n))))
+        fixed_h = HEADER_H + TITLE_H + 6 + 4 + FOOTER_H + bars * (CLASS_H + GAP)
+        if self.cover and top + fixed_h + n * row_h < self.cover[3]:
+            # Taller rows until the tower reaches below the in-game board
+            row_h = int(-(-(self.cover[3] - top - fixed_h) // max(1, n)))
         body_h = n * row_h + bars * (CLASS_H + GAP)
         cols = self._columns(row_h - GAP)
         # Only as wide as the longest short name and the value column need
@@ -118,6 +138,8 @@ class TimingTower:
         names_w = max([text_w(f, (self.tpl.meta(nm).get('short') or nm).upper()) for nm in names] or [80])
         need = cols['name_x'] + names_w + 10 + cols['val_w'] + 4
         w = int(max(MIN_W, min(self.lay.get('w', 400), need)))
+        if self.cover:
+            w = max(w, int(self.cover[2] - self.x))
         return {'row_h': row_h, 'body_h': body_h, 'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H, 'w': w}
 
     def _columns(self, h):
@@ -194,7 +216,7 @@ class TimingTower:
             p_flash = None if flash is None else flash / FLASH_STEPS
             self._cache[body_key] = add_shadow(self._body(idx, self.modes[mode_i], prev_i, p_move, p_flash, flag))
         img, margin = self._cache[body_key]
-        x, y = self.lay['x'], self.lay['y']
+        x, y = self.x, self.y
         frame.alpha_composite(img, (int(x - margin), int(y - margin)))
         # Clock under the logo, drawn per frame (it ticks every second)
         f = font(30, 'bold')
@@ -227,6 +249,9 @@ class TimingTower:
         geom = self.geom
         yellow = self._yellow(idx, flag)
         img = Image.new('RGBA', (w, geom['h']), (0, 0, 0, 0))
+        if self.opaque:
+            # Solid all the way through, so nothing of the game's board shows between the bands
+            round_rect(img, (0, 0, w, geom['h']), 8, th.panel_solid)
         self._header(img, w, yellow)
         body_top = HEADER_H + TITLE_H + 6
         rows = self._rows_for(idx)
@@ -238,7 +263,7 @@ class TimingTower:
             prev_pos = {r['name']: r['pos'] for r in prev_rows}
         e = ease_out(p_move) if p_move < 1 else 1.0
         # Panel behind the rows
-        round_rect(img, (0, body_top - 3, w, body_top + geom['body_h'] + 3), 0, th.panel)
+        round_rect(img, (0, body_top - 3, w, body_top + geom['body_h'] + 3), 0, self.panel)
         for cls, by in bars:
             self._class_bar(img, body_top + by, w, cls)
         values = self._values(groups, mode)
@@ -334,7 +359,7 @@ class TimingTower:
         return None
 
     def _tile(self, name, make, w, h):
-        """Logo fitted to w x h straight on the row (a white outline keeps dark logos readable), or None."""
+        """Logo fitted to w x h straight on the row, or None."""
         path = self._logo_path(name, make)
         key = (path, w, h)
         if key not in self._make_logos:
@@ -342,7 +367,7 @@ class TimingTower:
             logo = load_image(path) if path else None
             if logo:
                 tile = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-                lg = logo_outline(fit_image(logo, w - 6, h - 6), 1)
+                lg = fit_image(logo, w - 4, h - 4)
                 tile.alpha_composite(lg, (int((w - lg.width) / 2), int((h - lg.height) / 2)))
             self._make_logos[key] = tile
         return self._make_logos[key]
@@ -365,7 +390,7 @@ class TimingTower:
         name = r['name']
         meta = self.tpl.meta(name)
         # Row background, tinted for a car that just gained (green) or lost (red) places
-        bg = th.panel_hi
+        bg = self.row_bg
         if change and p_flash is not None:
             tint = th.green if change > 0 else th.red
             a = (1 - ease_in(p_flash)) * 0.55

@@ -60,10 +60,19 @@ def main():
         try:
             ask = creator.make_gemini_asker(api_key, model, thinking,
                                             int(os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", 32768)))
-            response = ask(full_prompt)
-            with open(os.path.join(project_path, "graphics_ai_response.json"), 'w', encoding='utf-8') as f:
-                f.write(response)
-            data = creator.parse_ai_json(response)
+            data = None
+            for attempt in range(2):
+                response = ask(full_prompt)
+                with open(os.path.join(project_path, "graphics_ai_response.json"), 'w', encoding='utf-8') as f:
+                    f.write(response)
+                try:
+                    data = creator.parse_ai_json(response)
+                    break
+                except ValueError as e:
+                    # A reply that is not valid JSON is usually a one-off slip: ask once more
+                    if attempt:
+                        raise
+                    print(f"The AI's reply was not valid JSON ({e}); asking again...")
             raw_entries = data.get('graphics', [])
             driver_info = data.get('driver_info') or {}
             print(f"AI proposed {len(raw_entries)} graphics.")

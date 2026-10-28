@@ -218,29 +218,6 @@ def with_opacity(img, opacity):
 
 
 
-def logo_outline(logo, width=2, color=(255, 255, 255, 255)):
-    """Logo with a crisp outline around its shape, so dark logos still read on a dark panel
-    without a plate behind them. Returns a new image padded by the outline width."""
-    # Grown by a round brush at 4x (a square one turns circles into octagons), then scaled down
-    ss = 4
-    r = width * ss
-    out = Image.new('RGBA', (logo.width + width * 2, logo.height + width * 2), (0, 0, 0, 0))
-    size = (out.width * ss, out.height * ss)
-    shape = Image.new('L', size, 0)
-    shape.paste(logo.getchannel('A').resize((logo.width * ss, logo.height * ss), Image.LANCZOS)
-                .point(lambda v: 255 if v > 60 else 0), (r, r))
-    grown = shape.copy()
-    for dx in range(-r, r + 1):
-        for dy in range(-r, r + 1):
-            if (dx or dy) and dx * dx + dy * dy <= r * r:
-                grown = ImageChops.lighter(grown, ImageChops.offset(shape, dx, dy))
-    edge = Image.new('RGBA', out.size, color)
-    edge.putalpha(grown.resize(out.size, Image.LANCZOS))
-    out.alpha_composite(edge)
-    out.alpha_composite(logo, (width, width))
-    return out
-
-
 def wave_cloth(img, phase=0.0, amp=None, wavelength=None, shade=0.28):
     """img rippled like a flag in the wind: columns shift up and down along a sine and the folds
     are lit and shaded. Returns a new image the same size (edges stay covered)."""

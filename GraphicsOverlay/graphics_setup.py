@@ -39,7 +39,7 @@ PREVIEW_W, PREVIEW_H = 960, 540
 SCALE = 1920 / PREVIEW_W
 
 REGIONS = {
-    'leaderboard': ('Leaderboard frame (tower off)', '#22c55e'),
+    'leaderboard': ('In-game leaderboard (the tower covers it)', '#22c55e'),
     'map': ('Track map frame', '#38bdf8'),
     'logo': ('Championship logo', '#f59e0b'),
     'popups': ('Pop-up graphics (centred)', '#ec4899'),

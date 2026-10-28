@@ -5,7 +5,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from . import config as gcfg
 from .drawing import (add_shadow, cover_image, ellipsize, fit_font, fit_image, font, h_gradient, load_image,
-                      logo_outline, polygon, rgba, round_outline, round_rect, text_vcenter, text_w, wave_cloth,
+                      polygon, rgba, round_outline, round_rect, text_vcenter, text_w, wave_cloth,
                       wrap)
 from .race_data import fmt_clock
 
@@ -83,14 +83,14 @@ class Templates:
         return path if path and not self._is_car_preview(path) and os.path.exists(path) else ''
 
     def badge(self, name, h):
-        """Team/make logo with a white outline, sized to sit inside a card (never over its edge).
+        """Team/make logo as it is, sized to sit inside a card (never over its edge).
         No tile or colour strip behind it."""
         path = self.logo_path(name)
         logo = load_image(path) if path else None
         if logo is None:
             return None
         h = int(h)
-        return logo_outline(fit_image(logo, int(h * 1.5) - 4, h - 4), 2)
+        return fit_image(logo, int(h * 1.5), h)
 
     def card_badge(self, name, panel_h, max_h=88):
         """Badge for the right-hand end of a card, or None."""
