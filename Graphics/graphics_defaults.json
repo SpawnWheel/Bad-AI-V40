@@ -6,13 +6,14 @@
     1080
   ],
   "championship": {
-    "name": "Super Touring ",
-    "short_name": "",
-    "season": "",
-    "round": "",
-    "event_name": "Zolder",
-    "logo": "Graphics/Logos/Raceroom.png",
-    "logo_tint_white": true
+    "name": "Caterham Academy",
+    "short_name": "RCV",
+    "season": "Season 15",
+    "round": "Round 2",
+    "event_name": "Donnington Park",
+    "logo": "Graphics/Logos/RCVWhite.png",
+    "logo_tint_white": false,
+    "event_flag": "Graphics/Logos/BritainLogo.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -115,6 +116,7 @@
       "number": "1",
       "country": "GBR",
       "team": "Itchy & Scratchy Racing",
+      "make": "Caterham",
       "color": "#07f8f8",
       "car_image": "Graphics/Logos/ItchyScratchy.png"
     },
@@ -122,8 +124,9 @@
       "display": "ATI Boy",
       "short": "ATIBOY",
       "number": "420",
-      "country": "GBR",
+      "country": "NLD",
       "team": "Cheech and Chong",
+      "make": "Caterham",
       "color": "#48824d",
       "car_image": "Graphics/Logos/cheechchong.png"
     },
@@ -133,6 +136,7 @@
       "number": "52",
       "country": "GBR",
       "team": "Foxy Stoat Racing",
+      "make": "Caterham",
       "color": "#F97316",
       "car_image": "Graphics/Logos/stoat.png"
     },
@@ -141,10 +145,10 @@
       "short": "BORN",
       "number": "88",
       "country": "RSA",
-      "team": "",
-      "make": "BMW",
+      "team": "Red Bull",
+      "make": "Caterham",
       "color": "#1a0cc0",
-      "car_image": "Graphics/Logos/bmw.png"
+      "car_image": "Graphics/Logos/redbull.png"
     },
     "[RCV]thommo": {
       "display": "Thommo",
@@ -152,6 +156,7 @@
       "number": "58",
       "country": "GBR",
       "team": "Ping",
+      "make": "Caterham",
       "color": "#ebf9fa",
       "car_image": "Graphics/Logos/ping.png"
     },
@@ -161,6 +166,7 @@
       "number": "00",
       "country": "USA",
       "team": "Silent Assassin",
+      "make": "Caterham",
       "color": "#000000",
       "car_image": "Graphics/Logos/silentassasin2.png"
     },
@@ -179,6 +185,7 @@
       "number": "121",
       "country": "RSA",
       "team": "Back to the Future",
+      "make": "Caterham",
       "color": "#e8eb67",
       "car_image": "Graphics/Logos/BackToFuture.png"
     },
@@ -188,6 +195,7 @@
       "number": "27",
       "country": "GBR",
       "team": "Beavertown Neck Oil",
+      "make": "Caterham",
       "color": "#18d7e7",
       "car_image": "Graphics/Logos/Beavertown.png"
     },
@@ -197,6 +205,7 @@
       "number": "77",
       "country": "GBR",
       "team": "McLaren Mini",
+      "make": "Caterham",
       "color": "#f4b92f",
       "car_image": "Graphics/Logos/McLaren.webp"
     },
@@ -215,6 +224,7 @@
       "number": "137",
       "country": "GBR",
       "team": "Rick and Morty",
+      "make": "Caterham",
       "color": "#215cc0",
       "car_image": "Graphics/Logos/rickmorty.png"
     },
@@ -233,6 +243,7 @@
       "number": "85",
       "country": "ESP",
       "team": "John Player Special",
+      "make": "Caterham",
       "color": "#c4a31e",
       "car_image": "Graphics/Logos/jps.png"
     },
@@ -245,236 +256,44 @@
       "color": "#e10600",
       "car_image": "Graphics/Logos/mini.png"
     },
-    "Le Ma": {
-      "display": "Le Ma",
-      "short": "MA",
-      "number": "1",
-      "country": "",
-      "team": "Nescafé Blend 37 - Williams Renault",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
+    "Bill(AuchAye)_[SR-50]": {
+      "display": "Bill",
+      "short": "BILL",
+      "number": "5",
+      "country": "SCT",
+      "team": "Thistle Racing",
+      "make": "Caterham",
+      "color": "#d909b5",
+      "car_image": "Graphics/Logos/ThistleRacing.png"
     },
-    "Bert Wemmenhove": {
-      "display": "Bert Wemmenhove",
-      "short": "WEMMENHOVE",
-      "number": "3",
-      "country": "",
-      "team": "Williams Renault Dealer Racing",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
+    "[RCV]RayFin": {
+      "display": "Rayfin",
+      "short": "RAYFIN",
+      "number": "55",
+      "country": "GBR",
+      "team": "Canadian Eagle",
+      "make": "Caterham",
+      "color": "#0bc8d7",
+      "car_image": "Graphics/Logos/EagleRacing.png"
     },
-    "Jaume Femenias": {
-      "display": "Jaume Femenias",
-      "short": "FEMENIAS",
-      "number": "3",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "David Phillips": {
-      "display": "David Phillips",
-      "short": "PHILLIPS",
-      "number": "1",
-      "country": "",
-      "team": "BMW Fina Bastos Team",
-      "make": "BMW",
-      "color": "",
-      "car_image": "Graphics/Logos/bmw.png"
-    },
-    "Iván mohnhk": {
-      "display": "Iván Mohnhk",
-      "short": "MOHNHK",
-      "number": "21",
-      "country": "",
-      "team": "DC Cook Motorsport",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
-    },
-    "Beñat Aginako": {
-      "display": "Beñat Aginako",
-      "short": "AGINAKO",
-      "number": "4",
+    "Bill(AuchAye)_": {
+      "display": "Bill",
+      "short": "BILL",
+      "number": "",
       "country": "",
       "team": "",
-      "make": "Ford",
+      "make": "",
       "color": "",
-      "car_image": "Graphics/Logos/ford.png"
-    },
-    "Quel Lombarte": {
-      "display": "Quel Lombarte",
-      "short": "LOMBARTE",
-      "number": "14",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Mathias Hagel": {
-      "display": "Mathias Hagel",
-      "short": "HAGEL",
-      "number": "4",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Fabian Widlinski": {
-      "display": "Fabian Widlinski",
-      "short": "WIDLINSKI",
-      "number": "21",
-      "country": "",
-      "team": "GDL Racing",
-      "make": "BMW",
-      "color": "",
-      "car_image": "Graphics/Logos/bmw.png"
-    },
-    "Daniel Rodrigo": {
-      "display": "Daniel Rodrigo",
-      "short": "RODRIGO",
-      "number": "3",
-      "country": "",
-      "team": "Williams Renault Dealer Racing",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
-    },
-    "Mec Stuyvesant": {
-      "display": "Mec Stuyvesant",
-      "short": "STUYVESANT",
-      "number": "1",
-      "country": "",
-      "team": "Nescafé Blend 37 - Williams Renault",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
-    },
-    "Robert Fox": {
-      "display": "Robert Fox",
-      "short": "FOX",
-      "number": "7",
-      "country": "",
-      "team": "Audi Canarias",
-      "make": "Audi",
-      "color": "",
-      "car_image": "Graphics/Logos/audi.png"
-    },
-    "Vincenzo Santoni": {
-      "display": "Vincenzo Santoni",
-      "short": "SANTONI",
-      "number": "3",
-      "country": "",
-      "team": "ROC Competition",
-      "make": "Audi",
-      "color": "",
-      "car_image": "Graphics/Logos/audi.png"
-    },
-    "Joonas Kajuutti": {
-      "display": "Joonas Kajuutti",
-      "short": "KAJUUTTI",
-      "number": "10",
-      "country": "",
-      "team": "Team Magnus Krokström",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Werner Spelkens": {
-      "display": "Werner Spelkens",
-      "short": "SPELKENS",
-      "number": "89",
-      "country": "",
-      "team": "Belgium Race Invest",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Skater Warm": {
-      "display": "Skater Warm",
-      "short": "WARM",
-      "number": "4",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Pawel Dabrowski": {
-      "display": "Pawel Dabrowski",
-      "short": "DABROWSKI",
-      "number": "14",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "paul absolom": {
-      "display": "Paul Absolom",
-      "short": "ABSOLOM",
-      "number": "7",
-      "country": "",
-      "team": "Audi Canarias",
-      "make": "Audi",
-      "color": "",
-      "car_image": "Graphics/Logos/audi.png"
-    },
-    "nacho garrido": {
-      "display": "Nacho Garrido",
-      "short": "GARRIDO",
-      "number": "11",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Spenny Proc": {
-      "display": "Spenny Proc",
-      "short": "PROC",
-      "number": "22",
-      "country": "",
-      "team": "Williams Renault Dealer Racing",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
-    },
-    "Marko Djujich": {
-      "display": "Marko Djujich",
-      "short": "DJUJICH",
-      "number": "37",
-      "country": "",
-      "team": "Nescafé Blend 37 - Williams Renault",
-      "make": "Renault",
-      "color": "",
-      "car_image": "Graphics/Logos/Renault.png"
-    },
-    "Tudanca Mario": {
-      "display": "Tudanca Mario",
-      "short": "MARIO",
-      "number": "3",
-      "country": "",
-      "team": "Volvo S40 Racing",
-      "make": "Volvo",
-      "color": "",
-      "car_image": "Graphics/Logos/volvo.png"
-    },
-    "Alessandro Gortan": {
-      "display": "Alessandro Gortan",
-      "short": "GORTAN",
-      "number": "4",
-      "country": "",
-      "team": "",
-      "make": "Ford",
-      "color": "",
-      "car_image": "Graphics/Logos/ford.png"
+      "car_image": "Graphics/CarPreviews/Bill.dds"
     }
   },
-  "championship_preset": "Super Touring - Raceroom"
+  "commentators": {
+    "Martin Haven": {
+      "bio": "Veteran motorsport broadcaster and lead voice of the FIA World Endurance Championship."
+    },
+    "Anthony Davidson": {
+      "bio": "2014 FIA World Endurance Champion and former Formula 1 driver"
+    }
+  },
+  "championship_preset": "RCV Caterham - Season 15"
 }
