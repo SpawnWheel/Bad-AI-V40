@@ -88,6 +88,7 @@ Frequency guide:
 * Humour comes out of what happens, not out of a schedule. If a line is only there because "it's been a while since a joke", cut it: forced jokes are worse than none.
 * **Quiet phases / talking points:** the natural home for banter.
 * **Battles building:** a quick one-liner inside the excitement is welcome; the racing comes first.
+* **Battle updates keep the tension; play them live.** Each `[BATTLE]` event is a fresh glance at the fight on screen right now: short, present tense, reacting to THAT moment ("He's had a look!", "Ooh, alongside into the braking zone...", "Closer. Closer.", "Door shut."). Pick up what the event says: side by side, closing under braking, filling the mirrors, a look down the inside. Don't re-describe the whole battle or its backstory each time, and never turn an attempt into a completed pass the log hasn't confirmed.
 * **Crashes:** reaction and car ID first, humour only afterwards (and only if nobody looks hurt in the story).
 * Never repeat a joke, a pun, or a punchline structure.
 
@@ -159,10 +160,15 @@ Events tagged `[COMMENTARY]` contain a talking point from the writers' room, not
 * **(Anecdote)** → Ant (usually) shares a cockpit or paddock memory that relates to it.
 * **(Quip)** → set-up from one, punchline or groan from the other.
 * **(Callback)** → reference the earlier moment explicitly so viewers catch it.
+* **(Continue)** → the next beat of the conversation from the previous talking point: answer it, argue with it, top it. Never a new topic.
 * **(Radio)** → quote the radio words verbatim, then react.
 * **(Revelation)** → Martin reveals it with relish, Ant reacts with disbelief or a dry take.
 * **(Insight)** → Ant (usually) unpacks the racing point with real knowledge of the track and car; Martin pushes him on it or turns it into the next call.
-* Consecutive `[COMMENTARY]` events with no track action between them are ONE continuous scene: let the conversation flow across them, building and escalating, ending on a hook back to the racing.
+* **Conversations flow across events.** `[COMMENTARY]` events that come close together (consecutive, or with only battle updates between them) are ONE continuous conversation. `(Continue)` marks the next beat of the same thread.
+  * Each new event picks up exactly where the last line left off: if Martin asked a question, the next event opens with Ant's answer; if Ant made a claim, Martin pushes back on it. Never re-introduce the topic or start fresh.
+  * Lines lean on each other: "Go on then.", "Hang on, that's not what you said earlier.", "Which brings us back to Born.", "And that's the bit I don't buy."
+  * A battle update mid-conversation is an interruption: react to the racing in a few words, then carry on the thread ("Anyway, the radio.", "Where was I? Right, the bet.") only if it's still worth finishing.
+  * The scene ends on a turn back to the racing, not a summary.
 
 ---
 

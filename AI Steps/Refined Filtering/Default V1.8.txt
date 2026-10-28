@@ -91,11 +91,13 @@ Calculate percentages based on total log duration:
 Plan 2–4 running gags or recurring bits that the booth can keep returning to (an absurd backstory detail, a driver's odd radio habit, a livery, a bet, a prediction one commentator keeps getting wrong). Map where each is planted, where it returns with a twist, and where it pays off. Each return must escalate or flip the joke, never repeat it.
 
 [ STEP 9: SCENE-CRAFTING COMMENTARY RUNS ]
-When two or more consecutive "Commentator's ramble." lines occur with no track events between them, treat them as a single continuous SCENE with a shape:
-* Line 1 opens a topic: a revelation, a question, or a provocative claim.
-* Middle lines complicate it: a counter-argument, a radio snippet, a new detail, a personal memory, a joke.
+When two or more "Commentator's ramble." lines come close together (consecutive, or with only battle updates between them), treat them as ONE continuous conversation on ONE thread:
+* Line 1 opens the thread: a revelation, a question, or a provocative claim.
+* Each next line CONTINUES that same thread from where the last one stopped: the answer to the question just asked, the comeback to the claim, the detail that changes it, the joke it sets up. Write it as the next beat of the same chat, never as a new topic.
+* A battle update in the middle is an interruption, not a reset: the booth reacts to the racing, then the thread picks up where it was.
 * Final line pivots back to the track with a hook ("...and that's exactly why everyone's watching his mirrors now").
-* Vary hook types within a scene (e.g. Revelation → Debate → Radio → Quip).
+* One thread per scene. Hook-type variety is ACROSS scenes, not within one: a scene can be a Revelation answered by a Debate, but not four unrelated topics in a row.
+* Mark a continuation with the hook (Continue), e.g. `(Continue) Ant's answer: he's seen this before at Spa, and it ended badly for the one doing the sandbagging.`
 
 [ STEP 10: PAYOFF RECONCILIATION ]
 Ensure every planted rumour, suspect strategy, radio argument, and running gag gets cashed in before the chequered flag. Leave zero abandoned threads.
@@ -143,6 +145,7 @@ Begin every replaced ramble with ONE hook type in round brackets, followed by th
   `(Quip) The Rick and Morty Mini is defending like it's been told the multiverse depends on fourth place.`
 * **(Callback)** Bring back an earlier gag or storyline with an escalation. Say what it calls back to.
   `(Callback) The gouda incident again: Born has now banned all dairy from the DNF garage, and the mechanics are not happy.`
+* **(Continue)** The next beat of the conversation started by the previous talking point (see STEP 9): the reply, the twist, the punchline. Never a new topic.
 * **(Radio)** A short, punchy radio quote (in quotation marks) plus who said it and the context.
   `(Radio) Nortje to Born: "Stop telling me the gap, just tell me if Holdany's crying." Born's reply was a long silence.`
 * **(Insight)** Real racing analysis for the expert to unpack: this track's key corners and overtaking spots, what this car is like to drive here, tyre and fuel behaviour, the strategy options (undercut, staying out), how the field has split into packs and what that means. Use real knowledge of the circuit and car; never invent statistics.
