@@ -319,19 +319,19 @@ class TimingTower:
         th = self.th
         tpl = self.tpl
         round_rect(img, (0, 0, w, HEADER_H), 8, th.panel_solid, corners=(True, True, False, False))
-        # With a timing sponsor, the championship logo moves left and the sponsor's logo sits top right
-        sponsor_w = tpl.sponsor_mark(img, w - 14, 30, 'timing', 28) if tpl.sponsor('timing') else 0
+        # With a timing sponsor the top row splits in two: the championship logo centred on the left half,
+        # the sponsor's logo on its own panel filling the right half
+        plate = tpl.sponsor_plate('timing', w / 2 - 14, 46) if tpl.sponsor('timing') else None
+        left_w = w / 2 if plate else w
+        if plate:
+            img.alpha_composite(plate, (int(w / 2 + 4), 7))
         if tpl.logo:
-            if sponsor_w:
-                lg = fit_image(tpl.logo, w - sponsor_w - 48, 40)
-                img.alpha_composite(lg, (14, int(30 - lg.height / 2)))
-            else:
-                lg = fit_image(tpl.logo, w - 60, 40)
-                img.alpha_composite(lg, (int(w / 2 - lg.width / 2), int(30 - lg.height / 2)))
+            lg = fit_image(tpl.logo, left_w - (28 if plate else 60), 40)
+            img.alpha_composite(lg, (int(left_w / 2 - lg.width / 2), int(30 - lg.height / 2)))
         else:
             champ = self.cfg['championship']
             title = (champ.get('short_name') or champ.get('name') or 'LIVE TIMING').upper()
-            text_vcenter(img, w / 2, 28, title, fit_font(title, w - 40, 30, 'bold'), th.text, 'm')
+            text_vcenter(img, left_w / 2, 28, title, fit_font(title, left_w - 40, 30, 'bold'), th.text, 'm')
         # Title bar
         y = HEADER_H
         if yellow:

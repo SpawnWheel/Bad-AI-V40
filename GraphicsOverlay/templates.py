@@ -164,29 +164,37 @@ class Templates:
             img.alpha_composite(tab, (int(w - tab.width), int(top - tab.height)))
         return img, top
 
+    def sponsor_plate(self, kind, w, h, corners=None):
+        """w x h panel with the sponsor's logo (or name) fitted inside, or None. The panel is white behind a
+        dark logo and dark behind a light one, so any logo reads."""
+        sp = self.sponsor(kind)
+        if not sp:
+            return None
+        name, logo = sp
+        bg = self.th.panel_hi[:3] + (255,) if logo is not None and _is_light(logo) else (255, 255, 255, 255)
+        plate = Image.new('RGBA', (int(w), int(h)), (0, 0, 0, 0))
+        round_rect(plate, (0, 0, w, h), 6, bg, corners=corners)
+        if logo:
+            lg = fit_image(logo, w - 24, h - 12)
+            plate.alpha_composite(lg, (int((w - lg.width) / 2), int((h - lg.height) / 2)))
+        else:
+            label = name.upper()
+            text_vcenter(plate, w / 2, h / 2, label, fit_font(label, w - 20, int(h * 0.55), 'bold_cond'),
+                         contrast_text(bg), 'm')
+        return plate
+
     def sponsor_tab(self, kind):
-        """The sponsor's logo on its own tab (rounded on top, sitting on the card), or None. The tab is white
-        behind a dark logo and dark behind a light one, so any logo reads."""
+        """The sponsor's logo on its own tab (rounded on top, sitting on a card's top right), or None."""
         sp = self.sponsor(kind)
         if not sp:
             return None
         name, logo = sp
         h = SPONSOR_TAB_H
         if logo:
-            lg = fit_image(logo, 260, h - 12)
-            w = lg.width + 32
+            w = fit_image(logo, 260, h - 12).width + 32
         else:
-            f = font(26, 'bold_cond')
-            w = int(text_w(f, name.upper()) + 32)
-        light = logo is not None and _is_light(logo)
-        bg = self.th.panel_solid if light else (255, 255, 255, 255)
-        tab = Image.new('RGBA', (w, h), (0, 0, 0, 0))
-        round_rect(tab, (0, 0, w, h), 6, bg, corners=(True, True, False, False))
-        if logo:
-            tab.alpha_composite(lg, (int((w - lg.width) / 2), int((h - lg.height) / 2)))
-        else:
-            text_vcenter(tab, w / 2, h / 2, name.upper(), f, contrast_text(bg), 'm')
-        return tab
+            w = int(text_w(font(int(h * 0.55), 'bold_cond'), name.upper()) + 32)
+        return self.sponsor_plate(kind, w, h, corners=(True, True, False, False))
 
     def name_block(self, img, x, y, name, max_w, big=40, small=24):
         """First name light above an uppercase bold surname."""
