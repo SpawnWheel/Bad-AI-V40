@@ -583,8 +583,10 @@ class AMS2EventLogger:
                     self.green_flag_logged = True
                 self.starting_grid_pending = False
 
-        # Periodic Leaderboard Updates (every 4 minutes)
-        if self.data.mRaceState == 2 and self.last_leaderboard_time is not None:
+        # Periodic Leaderboard Updates (every 4 minutes). None once the leader has the chequered flag:
+        # the game's positions are scrambled while the rest of the field finishes.
+        if (self.data.mRaceState == 2 and self.last_leaderboard_time is not None
+                and not self.checkered_flag_shown):
             if sim_now - self.last_leaderboard_time > 240: # 4 minutes of sim time
                 self.log_periodic_leaderboard()
                 self.last_leaderboard_time = sim_now

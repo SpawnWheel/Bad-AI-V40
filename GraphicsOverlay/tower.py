@@ -25,6 +25,7 @@ FLASH_STEPS = 10
 HEADER_H = 92
 TITLE_H = 28
 FOOTER_H = 30
+SPONSOR_H = 34    # 'TIMING BY' strip under the footer when a timing sponsor is set
 CLASS_H = 26
 GAP = 3            # space between rows
 MIN_W = 250
@@ -132,6 +133,7 @@ class TimingTower:
             # Taller rows until the tower reaches below the in-game board
             row_h = int(-(-(self.cover[3] - top - fixed_h) // max(1, n)))
         body_h = n * row_h + bars * (CLASS_H + GAP)
+        self.sponsor_h = SPONSOR_H if self.tpl.sponsor('timing') else 0
         cols = self._columns(row_h - GAP)
         # Only as wide as the longest short name and the value column need
         f = font(cols['fs'] - 1, 'bold_cond')
@@ -140,7 +142,8 @@ class TimingTower:
         w = int(max(MIN_W, min(self.lay.get('w', 400), need)))
         if self.cover:
             w = max(w, int(self.cover[2] - self.x))
-        return {'row_h': row_h, 'body_h': body_h, 'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H, 'w': w}
+        return {'row_h': row_h, 'body_h': body_h, 'w': w,
+                'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H + self.sponsor_h}
 
     def _columns(self, h):
         """Column offsets for a row of height h."""
@@ -201,12 +204,12 @@ class TimingTower:
             anim = min(steps, int(local / SWAP_DUR * steps))
             flash = min(FLASH_STEPS, int(local / FLASH_DUR * FLASH_STEPS))
         return (idx, self.mode_at(t), prev_i, anim, flash, self.timing.clock_text(idx, t),
-                self.race.flag_state_at(t))
+                self.race.flag_state_at(t), self.timing.lap_text(idx, t))
 
     # ------------------------------------------------------------------ drawing
     def draw(self, frame, t):
         k = self.key(t)
-        idx, mode_i, prev_i, anim, flash, clock, flag = k
+        idx, mode_i, prev_i, anim, flash, clock, flag, lap = k
         body_key = k[:5] + (flag,)
         if body_key not in self._cache:
             if len(self._cache) > 400:
@@ -218,9 +221,14 @@ class TimingTower:
         img, margin = self._cache[body_key]
         x, y = self.x, self.y
         frame.alpha_composite(img, (int(x - margin), int(y - margin)))
-        # Clock under the logo, drawn per frame (it ticks every second)
+        # Clock under the logo, drawn per frame (it ticks every second), with the lap beside it
         f = font(30, 'bold')
-        text_vcenter(frame, x + self.w / 2, y + HEADER_H - 22, clock, f, self.th.text, 'm')
+        if lap:
+            text_vcenter(frame, x + 16, y + HEADER_H - 22, clock, fit_font(clock, self.w * 0.58, 30, 'bold'),
+                         self.th.text)
+            text_vcenter(frame, x + self.w - 16, y + HEADER_H - 22, lap, font(26, 'bold_cond'), self.th.accent2, 'r')
+        else:
+            text_vcenter(frame, x + self.w / 2, y + HEADER_H - 22, clock, f, self.th.text, 'm')
 
     def _rows_for(self, idx):
         st = self.timing.state(idx)
@@ -281,7 +289,13 @@ class TimingTower:
         # Cars moving up are drawn last so they slide over the cars they pass
         for change, y, r in sorted(drawn, key=lambda d: d[0]):
             self._row(img, body_top + y, w, r, mode, values.get(r['name']), change, p_flash)
-        self._footer(img, w, geom['h'] - FOOTER_H, flag, yellow, idx)
+        self._footer(img, w, geom['h'] - FOOTER_H - self.sponsor_h, flag, yellow, idx)
+        if self.sponsor_h:
+            sy = geom['h'] - self.sponsor_h
+            round_rect(img, (0, sy, w, geom['h']), 8, th.panel_solid, corners=(False, False, True, True))
+            round_rect(img, (12, sy, w - 12, sy + 1), 0, (255, 255, 255, 40))
+            sw = self.tpl.sponsor_w('timing', 22, 'TIMING BY')
+            self.tpl.sponsor_mark(img, (w + sw) / 2, sy + self.sponsor_h / 2 + 1, 'timing', 22, 'TIMING BY')
         if yellow:
             round_outline(img, (0, 0, w, geom['h']), 8, YELLOW[:3] + (230,), 3)
         return img

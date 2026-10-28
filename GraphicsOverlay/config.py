@@ -36,6 +36,8 @@ POPUP_TYPES = {
     'stat': 'Data stat card',
     'movers': 'Positions gained since start',
     'headline': 'Paddock news / storyline',
+    'gaps': 'Gaps on track (the field and its packs)',
+    'insight': 'Track guide / strategy / analysis',
 }
 
 # Graphics the renderer adds on its own from the race data
@@ -45,11 +47,13 @@ AUTO_TYPES = {
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',
-    'fastest_lap': 'Fastest lap of the race (top centre, from lap 5)',
+    'fastest_lap': 'Fastest lap of the race (top centre, laps from lap 5 only)',
     'new_leader': 'New race leader banner (top centre, from 20 seconds into the race)',
-    'pit_stops': 'Pit stop pop-up when a car pits (cars pitting together share one)',
+    'pit_stops': 'Pit stop timer for the stops that matter (front-runners, undercuts)',
+    'gap_tracker': 'Battle forecast when a car closes on (or pulls away from) the one ahead',
+    'sponsors': 'One sponsor card per sponsor during the race',
     'radio': 'Team radio quotes (middle right)',
-    'chequered': 'Chequered flag banner',
+    'chequered': 'Chequered flag banner (top centre; the timing tower comes off)',
     'results': 'Final classification panel',
 }
 
@@ -104,6 +108,9 @@ DEFAULT_CONFIG = {
     'popup_density': 'medium',
     'popup_duration': 7.0,
     'drivers': {},
+    # Sponsors: name and/or logo each. Title: race card, results and a sponsor card. Timing: the timing
+    # tower, fastest lap and battle forecast ("powered by"). Partner: a sponsor card.
+    'sponsors': {k: {'name': '', 'logo': ''} for k in ('title', 'timing', 'partner')},
     # AI commentator name (as in the commentary) -> {'bio': short line shown under their name}
     'commentators': {},
 }

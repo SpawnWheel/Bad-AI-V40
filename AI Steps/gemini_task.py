@@ -3,6 +3,48 @@ import sys
 from google import genai
 from google.genai import types
 
+# Prompt folder -> the race file holding what that step wrote last time
+PREVIOUS_OUTPUT = {"Commentary": "08_commentary.txt", "Refined Filtering": "06_events_spiced.txt"}
+PREVIOUS_RACES = 2
+PREVIOUS_MAX_CHARS = 20000
+
+
+def previous_broadcasts(prompt_file, project_path):
+    """The commentary (or storylines) of the last few races, for the AI to avoid repeating. '' if none."""
+    folder = os.path.basename(os.path.dirname(os.path.abspath(prompt_file)))
+    name = PREVIOUS_OUTPUT.get(folder)
+    if not name or not project_path:
+        return ""
+    races_dir = os.path.dirname(os.path.abspath(project_path))
+    here = os.path.normcase(os.path.abspath(project_path))
+    found = []
+    try:
+        for d in os.listdir(races_dir):
+            path = os.path.join(races_dir, d, name)
+            if os.path.normcase(os.path.join(races_dir, d)) != here and os.path.isfile(path):
+                found.append(path)
+    except OSError:
+        return ""
+    found.sort(key=os.path.getmtime, reverse=True)
+    parts = []
+    for path in found[:PREVIOUS_RACES]:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            continue
+        if folder == "Refined Filtering":
+            # Only the talking points, not the race events around them
+            text = "\n".join(l for l in text.splitlines() if "[COMMENTARY]" in l)
+        parts.append(f"--- {os.path.basename(os.path.dirname(path))} ---\n{text[:PREVIOUS_MAX_CHARS]}")
+    if not parts:
+        return ""
+    print(f"Loaded {len(parts)} previous race(s) to avoid repeating them.")
+    return ("\n\nPREVIOUS BROADCASTS (already aired to the same viewers - do NOT reuse any of their jokes, puns, "
+            "storylines, revelations, running gags, metaphors or distinctive phrases; find new ones):\n"
+            + "\n\n".join(parts))
+
+
 def run_ai_step():
     # 1. Read API Key
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -64,6 +106,9 @@ def run_ai_step():
                 print(f"Loaded race notes from: {project_notes_path}")
         except Exception as e:
             print(f"Found {os.path.basename(project_notes_path)} but failed to read it: {e}")
+
+    # 4c. What aired in the last races, so the writers and the booth don't recycle jokes and storylines
+    extra_context += previous_broadcasts(prompt_file, project_path)
 
     # 5. Construct the Input for the Model
     full_prompt = f"{prompt_text}{extra_context}\n\n{data_content}"

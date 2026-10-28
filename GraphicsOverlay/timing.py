@@ -129,6 +129,59 @@ class Timing:
         gf = race.green_flag_video
         return _hms(t_video - gf) if gf is not None and t_video >= gf else '00:00:00'
 
+    def lap_text(self, idx, t_video):
+        """'LAP 7' (the leader's lap) next to the clock in timed races; '' where the clock already shows
+        the lap, before the start, after the finish or without recorded timing."""
+        st = self.state(idx)
+        if not st or not self.recorded or (st.get('laps') and st.get('fmt') == LENGTH_LAPS):
+            return ''
+        gf, lf = self.race.green_flag_video, self.race.leader_finish_video
+        if gf is None or t_video < gf or (lf is not None and t_video >= lf):
+            return ''
+        lead = st['rows'][0].get('laps')
+        return f"LAP {lead + 1}" if lead is not None else ''
+
+    def laps_at(self, name, t_video):
+        """Laps completed by a car at a moment, or None without recorded timing."""
+        st = self.state(self.index_at(t_video))
+        if not st or not self.recorded:
+            return None
+        return next((r.get('laps') for r in st['rows'] if r['name'] == name), None)
+
+    def spread_at(self, t_video, split=1.5):
+        """([(name, gap to the leader)], [[names] per pack]) for the cars still racing, the packs split
+        wherever the interval to the car ahead is more than `split` seconds. ([], []) without gaps."""
+        st = self.state(self.index_at(t_video))
+        rows = []
+        if st and self.recorded:
+            for r in st['rows']:
+                if r.get('pit') or r.get('finish') or (r.get('laps_down') or 0) > 0:
+                    continue
+                rows.append((r['name'], 0.0 if r['pos'] == 1 else r.get('gap')))
+        else:
+            snap = self.race.snapshot_at(t_video)
+            total = 0.0
+            for pos, name, gap in (snap[1] if snap else []):
+                try:
+                    total += 0.0 if pos == 1 else float(gap.rstrip('s').lstrip('+'))
+                except ValueError:
+                    continue
+                rows.append((name, total))
+        rows = [(n, g) for n, g in rows if g is not None]
+        packs = []
+        prev = None
+        for name, gap in rows:
+            if prev is None or gap - prev > split:
+                packs.append([])
+            packs[-1].append(name)
+            prev = gap
+        return rows, packs
+
+    def lap_time(self):
+        """A typical racing lap in seconds (median of the best laps), or None."""
+        best = sorted({r.get('best') for s in self.states[-40:] for r in s['rows'] if r.get('best')})
+        return best[len(best) // 2] if best else None
+
 
 def _hms(sec):
     sec = max(0, int(sec))

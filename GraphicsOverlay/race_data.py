@@ -179,7 +179,9 @@ class RaceData:
                             name = VEHICLE_SUFFIX_RE.sub('', m.group(2)).strip()
                             rows.append((int(m.group(1)), name, m.group(3).strip()))
                             self._add_driver(name)
-                    if rows:
+                    # Older AMS2 logs carry a scrambled leaderboard after the chequered flag; the finish
+                    # order comes from the FINISH lines instead
+                    if rows and not self.finish:
                         rows.sort()
                         self.snapshots.append((t, rows))
                         order = [r[1] for r in rows]
