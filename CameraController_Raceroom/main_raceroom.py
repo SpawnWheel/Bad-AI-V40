@@ -1035,14 +1035,16 @@ class RaceroomCameraController:
                 project_path = possible_project_path
 
         if project_path:
-            notes_path = os.path.join(project_path, "project_notes.txt")
+            notes_path = camera_gemini.notes_file(project_path, "race_notes", "project_notes.txt")
             if os.path.exists(notes_path):
                 try:
                     with open(notes_path, 'r', encoding='utf-8') as f:
-                        extra_context = f"\n\nProject Specific Instructions:\n{f.read().strip()}"
-                    self.log_message(f"Loaded project notes from: {os.path.basename(notes_path)}")
+                        notes = "\n".join(l for l in f.read().splitlines() if not l.lstrip().startswith("#")).strip()
+                    if notes:
+                        extra_context = f"\n\nProject Specific Instructions:\n{notes}"
+                    self.log_message(f"Loaded race notes from: {os.path.basename(notes_path)}")
                 except Exception as e:
-                    self.log_message(f"Warning: Failed to read project notes: {e}")
+                    self.log_message(f"Warning: Failed to read race notes: {e}")
             extra_context += self._director_instructions(project_path)
 
         settings = self.data["settings"]
@@ -1058,8 +1060,8 @@ class RaceroomCameraController:
                                self._on_gemini_answer, self._on_gemini_error)
 
     def _director_instructions(self, project_path):
-        """Director Notes from the launcher (camera_instructions.txt); # lines are comments."""
-        path = os.path.join(project_path, "camera_instructions.txt")
+        """Camera notes from the launcher (camera_notes.txt); # lines are comments."""
+        path = camera_gemini.notes_file(project_path, "camera_notes", "camera_instructions.txt")
         if not os.path.exists(path):
             return ""
         try:
@@ -1098,10 +1100,8 @@ class RaceroomCameraController:
             for change in changes:
                 self.log_message(f"Camera rule: {change}")
 
-            output_filename = f"camera_sequence_raceroom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            project_path = os.environ.get("R3E_PROJECT_PATH")
-            if project_path:
-                output_filename = os.path.join(project_path, output_filename)
+            output_filename = camera_gemini.output_path(
+                "camera_sequence", f"camera_sequence_raceroom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
             with open(output_filename, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, indent=4)
             self._on_generation_success(output_filename)
@@ -1121,11 +1121,7 @@ class RaceroomCameraController:
         """Generate the director notes .txt file directly from the sequence data,
         without requiring playback."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        txt_filename = f"director_notes_raceroom_{timestamp}.txt"
-
-        project_path = os.environ.get("R3E_PROJECT_PATH")
-        if project_path:
-            txt_filename = os.path.join(project_path, txt_filename)
+        txt_filename = camera_gemini.output_path("director_notes", f"director_notes_raceroom_{timestamp}.txt")
 
         try:
             with open(txt_filename, "w", encoding="utf-8") as f:
@@ -1140,8 +1136,8 @@ class RaceroomCameraController:
     def _update_project_state(self, slot, filepath):
         """Update the project_state.json so the launcher picks up the new file."""
         project_path = os.environ.get("R3E_PROJECT_PATH")
-        if not project_path:
-            return
+        if not project_path or os.path.exists(os.path.join(project_path, "race.json")):
+            return # Race folders use fixed file names, so the launcher needs no state file
         state_path = os.path.join(project_path, "project_state.json")
         try:
             state = {}
@@ -1204,9 +1200,9 @@ class RaceroomCameraController:
         self.current_camera = None
 
         # Create session log file
-        filename = f"director_notes_raceroom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        project_path = os.environ.get("R3E_PROJECT_PATH")
-        self.session_log_filename = os.path.join(project_path, filename) if project_path else filename
+        self.session_log_filename = camera_gemini.output_path(
+            "director_notes", f"director_notes_raceroom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+        open(self.session_log_filename, "w", encoding="utf-8").close() # Notes are appended as the sequence plays
 
         self.play_btn.config(text="Stop Sequence")
         threading.Thread(target=self._run_sequence, daemon=True).start()

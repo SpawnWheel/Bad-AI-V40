@@ -6,8 +6,12 @@ import datetime
 import sys
 import random
 import json
+import threading
 
 from leaderboard_recorder_ams2 import AMS2LeaderboardRecorder
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import racefiles  # noqa: E402
 
 def sanitize_filename(name):
     name = name.replace(":", "_").replace("/", "_").replace("\\", "_").replace(" ", "_")
@@ -281,8 +285,10 @@ class AMS2EventLogger:
     def __init__(self):
         self.shm = None
         self.data = None
-        self.log_file = None
+        self.recording = None # The race being logged (practice and qualifying are not recorded)
+        self.track_header = [] # (category, message) describing the loaded track, repeated at the top of each race log
         self.recorder = None # Live timing for the timing tower graphic (the log only has 4-minute standings)
+        self.stop_event = threading.Event()
         self.last_leaderboard_time = None # Track periodic leaderboard updates (sim time)
         self.last_session_state = None
         self.last_race_state = None
@@ -402,26 +408,25 @@ class AMS2EventLogger:
             print(f"Could not connect to AMS2: {e}")
             return False
 
-    def start_logging(self):
-        project_path = os.environ.get("R3E_PROJECT_PATH")
-        if project_path:
-            log_dir = os.path.join(project_path, "Logs")
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
-        else:
-            log_dir = "."
-
-        now = datetime.datetime.now()
-        filename = f"Race_{now.strftime('%Y%m%d_%H%M%S')}.txt"
-        filepath = os.path.join(log_dir, filename)
-        
-        self.log_file = open(filepath, "w", encoding="utf-8")
-        self.log("SYSTEM", f"New log file started: {os.path.abspath(filepath)}")
+    def begin_race(self):
+        """A race session started: record it into its own race folder."""
+        self.end_race()
+        track = f"{self.decode(self.data.mTrackLocation)} - {self.decode(self.data.mTrackVariation)}".strip(" -")
+        self.recording = racefiles.RaceRecording("AMS2", track or "AMS2")
+        for category, message in self.track_header:
+            self.recording.write(f"{datetime.timedelta(seconds=0)} - [{category}] {message}", 0)
         try:
-            self.recorder = AMS2LeaderboardRecorder(filepath, self)
-            print(f"Recording live timing for the timing tower graphic: {self.recorder.path}")
+            self.recorder = AMS2LeaderboardRecorder(self.recording.log_path, self)
         except OSError as e:
             print(f"Live timing is not recorded ({e}); the race log is unaffected.")
+
+    def end_race(self):
+        if self.recorder:
+            self.recorder.close()
+            self.recorder = None
+        if self.recording:
+            self.recording.finish()
+            self.recording = None
 
     def log(self, category, message, sim_time=None, print_to_console=True, write_to_file=True):
         if sim_time is not None:
@@ -430,13 +435,17 @@ class AMS2EventLogger:
             # Always use sim time, even for system messages
             ts_val = max(0, int(self.get_session_time()))
         timestamp = str(datetime.timedelta(seconds=ts_val))
-        
+
+        if category == "TRACK" and message.startswith("Track Loaded"):
+            self.track_header = []
+        if category == "TRACK" or "corner landmarks" in message:
+            self.track_header.append((category, message))
+
         log_line = f"{timestamp} - [{category}] {message}"
         if print_to_console:
-            print(log_line)
-        if write_to_file and self.log_file:
-            self.log_file.write(log_line + "\n")
-            self.log_file.flush()
+            print(log_line, flush=True)
+        if write_to_file and self.recording:
+            self.recording.write(log_line, ts_val)
 
     def decode(self, b_arr):
         try:
@@ -497,9 +506,18 @@ class AMS2EventLogger:
             self.load_track_corners(track_loc, track_var)
 
         # Session and State
-        if self.data.mSessionState != self.last_session_state:
+        # A restarted race goes back to "not started" without changing the session: record it afresh
+        restarted = (self.data.mSessionState == 5 and self.last_session_state == 5 and self.green_flag_fired
+                     and self.data.mRaceState == 1 and self.last_race_state != 1)
+        if self.data.mSessionState != self.last_session_state or restarted:
             session_name = SESSION_STATES.get(self.data.mSessionState, "Unknown")
-            self.log("SESSION", f"Session Changed: We are now in {session_name}.", sim_time=sim_now)
+            if self.data.mSessionState == 5:
+                self.begin_race()
+            else:
+                self.end_race()
+                racefiles.emit_status(state="waiting", session=session_name)
+            self.log("SESSION", "Race restarted." if restarted else f"Session Changed: We are now in {session_name}.",
+                     sim_time=sim_now)
 
             self.last_session_state = self.data.mSessionState
             self.checkered_flag_shown = False
@@ -1179,19 +1197,19 @@ class AMS2EventLogger:
     def run(self):
         if not self.connect():
             return
-        
-        self.start_logging()
+
+        racefiles.watch_for_stop(self.stop_event)
+        print("Waiting for an AMS2 race... (only race sessions are recorded)", flush=True)
+        racefiles.emit_status(state="waiting_sim", sim="AMS2")
         try:
-            while True:
+            while not self.stop_event.is_set():
                 self.update()
-                time.sleep(0.5)
+                self.stop_event.wait(0.5)
+            self.log("SYSTEM", "Logging stopped.")
         except KeyboardInterrupt:
             self.log("SYSTEM", "Logging stopped by user.")
         finally:
-            if self.log_file:
-                self.log_file.close()
-            if self.recorder:
-                self.recorder.close()
+            self.end_race()
 
 if __name__ == "__main__":
     logger = AMS2EventLogger()

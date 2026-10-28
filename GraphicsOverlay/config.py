@@ -6,21 +6,26 @@ import re
 import shutil
 import time
 
+import sys
+
 from . import race_data
 
 APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if APP_ROOT not in sys.path:
+    sys.path.insert(0, APP_ROOT)
+import racefiles  # noqa: E402
 GRAPHICS_DIR = os.path.join(APP_ROOT, 'Graphics')
 CAR_PREVIEW_DIR = os.path.join(GRAPHICS_DIR, 'CarPreviews')
 LOGO_DIR = os.path.join(GRAPHICS_DIR, 'Logos')
 FLAG_DIR = os.path.join(GRAPHICS_DIR, 'Flags')
 IMAGE_EXTS = ('.png', '.dds', '.jpg', '.jpeg', '.webp', '.bmp', '.tga')
 
-CONFIG_NAME = 'graphics_config.json'
+CONFIG_NAME = racefiles.FILES['graphics_config']
 # Branding, layout and driver links shared by every new project (one league, many races)
 DEFAULTS_PATH = os.path.join(GRAPHICS_DIR, 'graphics_defaults.json')
 # Race-specific settings that are never carried over to other projects
 PROJECT_ONLY_KEYS = ('sync',)
-PLAN_NAME = 'graphics_plan.json'
+PLAN_NAME = racefiles.FILES['graphics_plan']
 
 # Popup types the Graphic Creator can schedule (label shown in the setup page)
 POPUP_TYPES = {
@@ -171,23 +176,22 @@ def latest_file(folder, prefix):
 
 
 def project_files(project_path):
-    """Resolves the pipeline files the graphics need from project_state.json."""
-    st = load_project_state(project_path)
-
+    """The pipeline files the graphics need, by their fixed names in the race folder."""
     def existing(key):
-        p = st.get(key)
-        return p if p and os.path.exists(p) else None
+        p = racefiles.race_file(project_path, key)
+        return p if os.path.exists(p) else None
 
+    video = racefiles.read_race(project_path).get('video')
     return {
-        'raw_log': existing('raw_log'),
-        'director_notes': existing('director_notes') or latest_file(project_path, 'director_notes'),
-        'video_file': existing('video_file'),
-        'final_audio': existing('final_audio'),
-        'commentary_text': existing('commentary_text'),
+        'raw_log': existing('race_log'),
+        'director_notes': existing('director_notes'),
+        'video_file': video if video and os.path.exists(video) else None,
+        'final_audio': existing('commentary_audio'),
+        'commentary_text': existing('commentary'),
         # Video-timed logs used to detect the sync offset
-        'video_timed': [p for p in (existing('refined_log'), existing('post_filtered_log'),
-                                    existing('calc_log'), existing('commentary_text')) if p],
-        'project_notes': os.path.join(project_path, 'project_notes.txt'),
+        'video_timed': [p for p in (existing('events_reviewed'), existing('events_spiced'),
+                                    existing('events_timed'), existing('commentary')) if p],
+        'project_notes': racefiles.race_file(project_path, 'race_notes'),
     }
 
 

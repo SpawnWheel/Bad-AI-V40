@@ -151,7 +151,8 @@ class RaceEngineerApp:
             shm_tag=telem_cfg.get("shm_name", "$pcars2$"),
             tyre_pressure_unit=str(telem_cfg.get("tyre_pressure_unit", "auto")),
             invert_brake_bias=invert_bias,
-            sim=str(telem_cfg.get("sim", "auto")),
+            # The launcher's sim buttons pick the sim for this run
+            sim=os.environ.get("RACE_ENGINEER_SIM") or str(telem_cfg.get("sim", "auto")),
             r3e_data_path=telem_cfg.get("r3e_data_path") or None,
             r3e_brake_bias_is_rear_share=bool(telem_cfg.get("r3e_brake_bias_is_rear_share", True)),
         )
@@ -574,6 +575,20 @@ def main():
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
+
+    # Run from the launcher (no console): it asks for a clean stop by writing "stop" or closing stdin
+    if os.environ.get("BADAI_MANAGED"):
+        def wait_for_stop():
+            try:
+                for line in sys.stdin:
+                    if line.strip().lower() == "stop":
+                        break
+            except (OSError, ValueError):
+                pass
+            app.stop()
+
+        threading.Thread(target=wait_for_stop, name="StopWatcher", daemon=True).start()
+
     app.start()
 
 

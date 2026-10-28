@@ -14,7 +14,9 @@ if not default_input_file and len(sys.argv) > 1:
 
 default_output_folder = "outputs test"
 r3e_project_path = os.environ.get("R3E_PROJECT_PATH")
-if r3e_project_path:
+if os.environ.get("BADAI_OUTPUT"):
+    default_output_folder = os.environ["BADAI_OUTPUT"]
+elif r3e_project_path:
     default_output_folder = os.path.join(r3e_project_path, "AudioClipsRAW")
 
 # Get initial list of speakers to show in the UI if possible
@@ -63,14 +65,18 @@ def run_tts_process(input_file, output_folder, model_size, xvec_only, temperatur
     if limit and int(limit) > 0:
         args.extend(["--limit", str(int(limit))])
 
-    # Run the process and capture output
+    # Run the process and capture output (as UTF-8, so progress bars and names read correctly)
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
     process = subprocess.Popen(
         args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,
-        universal_newlines=True
+        env=env
     )
 
     output_log = ""

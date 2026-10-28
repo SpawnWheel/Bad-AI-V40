@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import racefiles  # noqa: E402
 from GraphicsOverlay import config as gcfg  # noqa: E402
 from GraphicsOverlay import creator  # noqa: E402
 from GraphicsOverlay.renderer import OverlayRenderer  # noqa: E402
@@ -22,7 +23,7 @@ def main():
         return
 
     if not os.path.exists(os.path.join(project_path, gcfg.CONFIG_NAME)):
-        print("Note: no graphics_config.json yet - run Graphics Setup first for names, logos and layout.")
+        print("Note: no graphics setup yet - run Graphics Setup first for names, logos and layout.")
     cfg = gcfg.load_config(project_path)
     race = gcfg.build_race(project_path, cfg)
     if not race.drivers:
@@ -39,14 +40,12 @@ def main():
     with open(prompt_file, 'r', encoding='utf-8') as f:
         prompt_text = f.read()
 
-    notes = ''
-    notes_path = os.path.join(project_path, "project_notes.txt")
-    if os.path.exists(notes_path):
-        with open(notes_path, 'r', encoding='utf-8') as f:
-            notes = f.read().strip()
+    notes = racefiles.notes_text(racefiles.race_file(project_path, "race_notes"))
     full_prompt = f"{prompt_text}\n\nProject Specific Notes:\n{notes or '(none)'}\n\n{brief}"
 
-    with open(os.path.join(project_path, "graphics_prompt_debug.txt"), 'w', encoding='utf-8') as f:
+    debug_dir = os.path.join(project_path, racefiles.DEBUG_DIR)
+    os.makedirs(debug_dir, exist_ok=True)
+    with open(os.path.join(debug_dir, "graphics_prompt.txt"), 'w', encoding='utf-8') as f:
         f.write(full_prompt)
 
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -63,7 +62,7 @@ def main():
             data = None
             for attempt in range(2):
                 response = ask(full_prompt)
-                with open(os.path.join(project_path, "graphics_ai_response.json"), 'w', encoding='utf-8') as f:
+                with open(os.path.join(debug_dir, "graphics_ai_response.json"), 'w', encoding='utf-8') as f:
                     f.write(response)
                 try:
                     data = creator.parse_ai_json(response)
@@ -88,7 +87,7 @@ def main():
         changed = creator.merge_driver_info(cfg, driver_info)
         if changed:
             gcfg.save_config(project_path, cfg)
-            print(f"Filled {changed} missing driver details from the project notes.")
+            print(f"Filled {changed} missing driver details from the race notes.")
 
     plan = creator.build_plan(project_path, cfg, race, raw_entries, source)
     path = creator.save_plan(project_path, plan)

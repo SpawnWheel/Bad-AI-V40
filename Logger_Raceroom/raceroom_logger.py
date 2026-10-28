@@ -4,6 +4,8 @@ import os
 import datetime
 import random
 import json
+import sys
+import threading
 
 from r3e_shared import (
     R3ESharedMemory, decode, VERSION_MAJOR, SESSION_NAMES, SESSION_RACE,
@@ -14,6 +16,8 @@ from r3e_shared import (
 from leaderboard_recorder import LeaderboardRecorder
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, APP_DIR)
+import racefiles  # noqa: E402
 
 # Windows Virtual Key Code for F12
 VK_F12 = 0x7B
@@ -131,8 +135,10 @@ class RaceroomEventLogger:
         self.header = None
         self.lookup = R3ELookup()
         self.clock = SimClock()
-        self.log_file = None
+        self.recording = None # The race being logged (practice and qualifying are not recorded)
+        self.track_header = [] # (category, message) describing the loaded track, repeated at the top of each race log
         self.recorder = None # Live timing for the leaderboard graphic (replays share no driver data)
+        self.stop_event = threading.Event()
         self.wall_clock_noted = False
         self.version_warned = False
 
@@ -211,31 +217,38 @@ class RaceroomEventLogger:
 
     # ------------------------------------------------------------------ logging
 
-    def start_logging(self):
-        project_path = os.environ.get("R3E_PROJECT_PATH")
-        if project_path:
-            log_dir = os.path.join(project_path, "Logs")
-            os.makedirs(log_dir, exist_ok=True)
-        else:
-            log_dir = "."
-
-        filename = f"Race_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        filepath = os.path.join(log_dir, filename)
-        self.log_file = open(filepath, "w", encoding="utf-8")
-        self.log("SYSTEM", f"New log file started: {os.path.abspath(filepath)}")
+    def begin_race(self, track_display):
+        """A race session started: record it into its own race folder."""
+        self.end_race()
+        self.recording = racefiles.RaceRecording("RaceRoom", track_display)
+        for category, message in self.track_header:
+            self._write(category, message, 0)
         try:
-            self.recorder = LeaderboardRecorder(filepath, self.lookup, decode)
-            print(f"Recording live timing for the leaderboard graphic: {self.recorder.path}")
+            self.recorder = LeaderboardRecorder(self.recording.log_path, self.lookup, decode)
         except Exception as e:
             print(f"Live timing for the leaderboard graphic is off ({e}); the race log is unaffected.")
 
+    def end_race(self):
+        if self.recorder:
+            self.recorder.close()
+            self.recorder = None
+        if self.recording:
+            self.recording.finish()
+            self.recording = None
+
+    def _write(self, category, message, ts_val):
+        log_line = f"{datetime.timedelta(seconds=ts_val)} - [{category}] {message}"
+        if self.recording:
+            self.recording.write(log_line, ts_val)
+        return log_line
+
     def log(self, category, message, sim_time=None):
         ts_val = max(0, int(self.clock.elapsed if sim_time is None else sim_time))
-        log_line = f"{datetime.timedelta(seconds=ts_val)} - [{category}] {message}"
-        print(log_line)
-        if self.log_file:
-            self.log_file.write(log_line + "\n")
-            self.log_file.flush()
+        if category == "TRACK" and message.startswith("Track Loaded"):
+            self.track_header = []
+        if category == "TRACK" or "corner landmarks" in message:
+            self.track_header.append((category, message))
+        print(self._write(category, message, ts_val), flush=True)
 
     def check_f12_key(self):
         """Check if F12 has been pressed (non-blocking, edge-triggered)."""
@@ -324,7 +337,13 @@ class RaceroomEventLogger:
                 self.clock.reset()
                 sim_now = 0.0
             self.last_session_key = session_key
-            self.log("SESSION", f"Session Changed: We are now in {SESSION_NAMES.get(header.session_type, 'Unknown')}.")
+            session_name = SESSION_NAMES.get(header.session_type, "Unknown")
+            if header.session_type == SESSION_RACE:
+                self.begin_race(f"{track_name} - {layout_name}".strip(" -") or "RaceRoom")
+            else:
+                self.end_race()
+                racefiles.emit_status(state="waiting", session=session_name)
+            self.log("SESSION", f"Session Changed: We are now in {session_name}.")
             self.last_phase = None
             self.green_flag_fired = False
             self.green_flag_time = None
@@ -771,29 +790,29 @@ class RaceroomEventLogger:
     # ------------------------------------------------------------------ run loop
 
     def run(self):
-        print("Waiting for RaceRoom... (start a session or open a replay)")
+        racefiles.watch_for_stop(self.stop_event)
+        print("Waiting for RaceRoom... (only race sessions are recorded)", flush=True)
+        racefiles.emit_status(state="waiting_sim", sim="RaceRoom")
         while not self.shm.read()[0]:
-            time.sleep(1.0)
+            if self.stop_event.wait(1.0):
+                return
         header = self.shm.read()[0]
-        print("Press F12 on the final lap if the race end isn't detected automatically. Ctrl+C to stop.")
+        print("Press F12 on the final lap if the race end isn't detected automatically.", flush=True)
 
-        self.start_logging()
         self.log("SYSTEM", f"Connected to RaceRoom shared memory (version {header.version_major}.{header.version_minor})")
         if header.game_in_replay == 1:
             self.log("SYSTEM", "Warning: RaceRoom does not share driver data during replays. Log the race live instead.")
         try:
-            while True:
+            while not self.stop_event.is_set():
                 if not self.update():
-                    time.sleep(1.0) # Game closed or between sessions
+                    self.stop_event.wait(1.0) # Game closed or between sessions
                     continue
-                time.sleep(POLL_INTERVAL)
+                self.stop_event.wait(POLL_INTERVAL)
+            self.log("SYSTEM", "Logging stopped.")
         except KeyboardInterrupt:
             self.log("SYSTEM", "Logging stopped by user.")
         finally:
-            if self.log_file:
-                self.log_file.close()
-            if self.recorder:
-                self.recorder.close()
+            self.end_race()
             self.shm.close()
 
 

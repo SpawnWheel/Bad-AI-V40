@@ -42,29 +42,28 @@ def run_ai_step():
         print(f"Error reading data file: {e}")
         return
 
-    # 4b. Optional: Read Project Specific Notes (project_notes.txt)
+    # 4b. Optional: the race notes (race_notes.txt; older projects call it project_notes.txt)
     project_path = os.environ.get("R3E_PROJECT_PATH")
     project_notes_path = None
-    
-    if project_path:
-        possible_path = os.path.join(project_path, "project_notes.txt")
-        if os.path.exists(possible_path):
-            project_notes_path = possible_path
 
-    if not project_notes_path:
-        data_dir = os.path.dirname(os.path.abspath(data_filename))
-        possible_path = os.path.join(data_dir, "project_notes.txt")
-        if os.path.exists(possible_path):
-             project_notes_path = possible_path
+    folders = [project_path] if project_path else []
+    folders.append(os.path.dirname(os.path.abspath(data_filename)))
+    for folder in folders:
+        for name in ("race_notes.txt", "project_notes.txt"):
+            possible_path = os.path.join(folder, name)
+            if not project_notes_path and os.path.exists(possible_path):
+                project_notes_path = possible_path
 
     extra_context = ""
-    if project_notes_path and os.path.exists(project_notes_path):
+    if project_notes_path:
         try:
             with open(project_notes_path, 'r', encoding='utf-8') as f:
-                extra_context = f"\n\nProject Specific Instructions:\n{f.read().strip()}"
-            print(f"Loaded project context from: {project_notes_path}")
+                notes = "\n".join(l for l in f.read().splitlines() if not l.lstrip().startswith("#")).strip()
+            if notes:
+                extra_context = f"\n\nProject Specific Instructions:\n{notes}"
+                print(f"Loaded race notes from: {project_notes_path}")
         except Exception as e:
-            print(f"Found project_notes.txt but failed to read: {e}")
+            print(f"Found {os.path.basename(project_notes_path)} but failed to read it: {e}")
 
     # 5. Construct the Input for the Model
     full_prompt = f"{prompt_text}{extra_context}\n\n{data_content}"
@@ -152,7 +151,9 @@ def run_ai_step():
         else:
             out_name = f"{prefix}{base_name}{suffix}"
         
-        if project_path:
+        if os.environ.get("BADAI_OUTPUT"):
+            output_filename = os.environ["BADAI_OUTPUT"]
+        elif project_path:
             output_filename = os.path.join(project_path, out_name)
         else:
             output_filename = out_name

@@ -514,6 +514,12 @@ class RefinementApp(QMainWindow):
         self.update_event_nav_buttons()
 
     def save_log(self):
+        # From the launcher: always save the reviewed events to the race's fixed file
+        fixed_path = os.environ.get("BADAI_OUTPUT")
+        if fixed_path:
+            self.write_log(fixed_path)
+            return
+
         # Determine initial directory and filename
         initial_dir = ""
         initial_file = ""
@@ -529,6 +535,10 @@ class RefinementApp(QMainWindow):
         
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Log", save_path, "Text Files (*.txt)")
         if file_path:
+            self.write_log(file_path)
+
+    def write_log(self, file_path):
+        if file_path:
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
                     for row in range(self.table.rowCount()):
@@ -537,7 +547,8 @@ class RefinementApp(QMainWindow):
                         f.write(f"{time_text} - {event_text}\n")
 
                 self.current_log_file_path = file_path
-                QMessageBox.information(self, "Success", "Log saved successfully.")
+                print(f"Reviewed events saved: {file_path}", flush=True)
+                QMessageBox.information(self, "Success", f"Log saved successfully.\n\n{os.path.basename(file_path)}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save log: {e}")
 

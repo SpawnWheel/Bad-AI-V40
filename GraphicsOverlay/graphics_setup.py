@@ -666,7 +666,7 @@ class GraphicsSetup:
         btns = tk.Frame(f, bg=CARD)
         btns.pack(fill='x', pady=(8, 0))
         styled_button(btns, "Re-match car images", self.rematch_images).pack(side='left')
-        styled_button(btns, "AI fill from project notes", self.ai_fill_drivers, primary=True).pack(side='left', padx=6)
+        styled_button(btns, "AI fill from race notes", self.ai_fill_drivers, primary=True).pack(side='left', padx=6)
         styled_button(btns, "Show on preview", self.preview_selected_driver).pack(side='left')
         self.refresh_driver_tree()
 
@@ -771,12 +771,9 @@ class GraphicsSetup:
         if not api_key:
             messagebox.showwarning("No API key", "Set the Gemini API key in the launcher Settings first.")
             return
-        notes = ''
-        if os.path.exists(self.files['project_notes']):
-            with open(self.files['project_notes'], 'r', encoding='utf-8') as fh:
-                notes = fh.read()
+        notes = gcfg.racefiles.notes_text(self.files['project_notes'])
         model = os.environ.get("GEMINI_MODEL_NAME") or self._launcher_setting('gemini_model') or 'gemini-3.8-flash'
-        self.set_status("Asking the AI to read the project notes…")
+        self.set_status("Asking the AI to read the race notes…")
 
         def work():
             try:
@@ -1131,13 +1128,14 @@ class GraphicsSetup:
         script = os.path.join(gcfg.APP_ROOT, "VideoCombiner", "combine_video.py")
         env = os.environ.copy()
         env["R3E_PROJECT_PATH"] = self.project_path
-        out = os.path.join(self.project_path, "graphics_preview.mp4")
+        out = os.path.join(self.project_path, "debug", "graphics_preview.mp4")
         if os.path.exists(out):
             try:
                 os.remove(out)
             except OSError:
                 pass
-        flags = subprocess.CREATE_NEW_CONSOLE if sys.platform == 'win32' else 0
+        # No console window: when run from the launcher, the render's progress shows in its activity log
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
         proc = subprocess.Popen([sys.executable, script, self.video, audio, "--preview", f"{start:.2f}", "30"],
                                 cwd=os.path.dirname(script), env=env, creationflags=flags)
         self.set_status("Rendering a 30 second test clip…")
