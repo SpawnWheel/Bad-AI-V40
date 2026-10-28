@@ -4,7 +4,6 @@ import time
 import os
 import datetime
 import sys
-import random
 import json
 import threading
 
@@ -12,6 +11,7 @@ from leaderboard_recorder_ams2 import AMS2LeaderboardRecorder
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import racefiles  # noqa: E402
+from battle_vision import BattleVision  # noqa: E402
 
 def sanitize_filename(name):
     name = name.replace(":", "_").replace("/", "_").replace("\\", "_").replace(" ", "_")
@@ -308,6 +308,7 @@ class AMS2EventLogger:
         self.accidents = {} # name -> sim_time when accident started
         self.last_movement_time = {} # name -> sim_time of last movement
         self.battles = {} # (name1, name2) -> {"type": str, "time": float (sim_time), "count": int}
+        self.vision = BattleVision()  # what each close pair is doing, for the battle lines
         self.checkered_flag_shown = False
         self.starting_grid_pending = False
         self.starting_grid_pending_sim_time = None # Sim time when grid became pending
@@ -522,6 +523,7 @@ class AMS2EventLogger:
             self.last_session_state = self.data.mSessionState
             self.checkered_flag_shown = False
             self.finished_participants.clear()
+            self.vision.reset()
             self.starting_grid_pending = False
             self.starting_grid_pending_sim_time = None
             self.green_flag_fired = False
@@ -902,6 +904,7 @@ class AMS2EventLogger:
                 # Use lap distance to check proximity
                 dist_diff = abs(dist1 - dist2)
                 battle_key = tuple(sorted([name1, name2]))
+                self.vision.observe(battle_key, sim_now, dist_diff, name2, speed2)
                 battle_info = self.battles.get(battle_key)
                 
                 # Check last overtake times for suppression
@@ -919,6 +922,8 @@ class AMS2EventLogger:
                     continue
 
                 # Tighten side-by-side threshold to 2.5m (approx one car length/overlap)
+                behind, ahead = name2, name1  # sorted by position
+                corner = self.get_corner_at_distance(dist2)
                 if dist_diff < 2.5:
                     # Use 15s cooldown
                     sbs_cooldown = 15.0
@@ -926,42 +931,20 @@ class AMS2EventLogger:
                     # But if we were already side-by-side, we must respect the cooldown
                     if not battle_info or battle_info["type"] != "Side by side" or (sim_now - battle_info["time"] > sbs_cooldown):
                         count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Side by side") else 1
-                        if count > 1:
-                            self.log("BATTLE", f"{name2} (P{pos2}) and {name1} (P{pos1}) are still battling side by side!", sim_time=self.get_session_time())
-                        else:
-                            self.log("BATTLE", f"Side by side! {name2} (P{pos2}) is fighting {name1} (P{pos1})!", sim_time=self.get_session_time())
+                        was_drafting = bool(battle_info) and battle_info["type"] == "Drafting"
+                        self.log("BATTLE", self.vision.side_by_side(battle_key, sim_now, behind, pos2, ahead, pos1, speed2,
+                                                                    corner, was_drafting, count),
+                                 sim_time=self.get_session_time())
                         self.battles[battle_key] = {"type": "Side by side", "time": sim_now, "count": count}
                 elif dist_diff < 15.0:
                     draft_cooldown = 15.0
                     # Check if we are already in a battle of ANY type within the cooldown
                     if not battle_info or (sim_now - battle_info["time"] > draft_cooldown):
                         count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Drafting") else 1
-                        # Determine who is drafting whom
-                        drafter, leader = (name2, name1) if dist1 > dist2 else (name1, name2)
-                        d_pos, l_pos = (pos2, pos1) if dist1 > dist2 else (pos1, pos2)
-                        
-                        messages = [
-                            f"{drafter} (P{d_pos}) is in the draft of {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is still pressuring {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is looking for a way to make the pass on {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is still battling with {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is glued to the back of {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is stalking {leader} (P{l_pos}) through the corners.",
-                            f"{drafter} (P{d_pos}) is trying to force a mistake from {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is right in the wheel tracks of {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is refusing to let {leader} (P{l_pos}) escape.",
-                            f"{drafter} (P{d_pos}) is all over the back of {leader} (P{l_pos}), looking for an opening.",
-                            f"{drafter} (P{d_pos}) is closing in on {leader} (P{l_pos}) under braking.",
-                            f"{drafter} (P{d_pos}) is keeping the pressure on {leader} (P{l_pos}) lap after lap.",
-                            f"{drafter} (P{d_pos}) has the pace to challenge {leader} (P{l_pos}) here.",
-                            f"{drafter} (P{d_pos}) is filling the mirrors of {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is using the slipstream to stay right with {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is biding their time behind {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is probing for a gap on {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is turning up the heat on {leader} (P{l_pos}).",
-                            f"{drafter} (P{d_pos}) is nose to tail with {leader} (P{l_pos}), waiting for the moment to strike."
-                        ]
-                        self.log("BATTLE", random.choice(messages), sim_time=self.get_session_time())
+                        # Describe what the pair is actually doing (see battle_vision.py)
+                        self.log("BATTLE", self.vision.drafting(battle_key, sim_now, dist_diff, behind, pos2, ahead, pos1,
+                                                                speed2, corner, count),
+                                 sim_time=self.get_session_time())
                         self.battles[battle_key] = {"type": "Drafting", "time": sim_now, "count": count}
                 else:
                     # Do NOT clear the battle immediately if they spread out.

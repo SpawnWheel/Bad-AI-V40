@@ -65,6 +65,8 @@ Look at this example above and use this as what to do for complex battle sequenc
 
 The longest time between two events should be 24 seconds. If there is longer than 24 seconds between two events, insert a new event 12 seconds after the one before. These events should say Commentator's ramble. It should not be specific about what they're rambling about. They should have the same format as the existing race events. 
 
+Battle events describe what the cars were measured doing (how close, closing or dropping back, under braking or in the slipstream, and the corner). Keep that wording when you keep or merge a battle event; never replace it with a stock phrase or a made-up move.
+
 With Battle events, if it's the second battle event between the same two drivers in succession, these should also include the events, as well as a Commentator's Ramble in the same event. 
 
 

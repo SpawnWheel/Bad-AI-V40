@@ -2,7 +2,6 @@ import ctypes
 import time
 import os
 import datetime
-import random
 import json
 import sys
 import threading
@@ -18,6 +17,7 @@ from leaderboard_recorder import LeaderboardRecorder
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, APP_DIR)
 import racefiles  # noqa: E402
+from battle_vision import BattleVision  # noqa: E402
 
 # Windows Virtual Key Code for F12
 VK_F12 = 0x7B
@@ -177,6 +177,7 @@ class RaceroomEventLogger:
         self.last_overtake_time = {} # name -> sim_time of last overtake
         self.accidents = {} # name -> sim_time when accident started
         self.battles = {} # (name1, name2) -> {"type": str, "time": float, "count": int}
+        self.vision = BattleVision()  # what each close pair is doing, for the battle lines
         self.distance_history = {} # name -> list of (sim_time, total_distance)
         self.best_laps = {} # name -> (lap_time, lap_number)
         self.last_lap_times = {} # name -> last completed lap time
@@ -674,6 +675,7 @@ class RaceroomEventLogger:
             dist_diff = abs(self.total_distance(ahead) - self.total_distance(behind))
             battle_key = tuple(sorted([name1, name2]))
             battle_info = self.battles.get(battle_key)
+            self.vision.observe(battle_key, sim_now, dist_diff, name2, behind["speed"])
 
             since_ot = min(sim_now - self.last_overtake_time.get(name1, -1e9),
                            sim_now - self.last_overtake_time.get(name2, -1e9))
@@ -682,40 +684,20 @@ class RaceroomEventLogger:
             if abs(ahead["speed"] - behind["speed"]) > 10.0 or since_ot < 20.0:
                 continue
 
+            corner = self.get_corner_at_distance(behind["dist"])
             if dist_diff < 2.5:
                 if not battle_info or battle_info["type"] != "Side by side" or (sim_now - battle_info["time"] > 15.0):
                     count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Side by side") else 1
-                    if count > 1:
-                        self.log("BATTLE", f"{name2} (P{pos2}) and {name1} (P{pos1}) are still battling side by side!")
-                    else:
-                        self.log("BATTLE", f"Side by side! {name2} (P{pos2}) is fighting {name1} (P{pos1})!")
+                    was_drafting = bool(battle_info) and battle_info["type"] == "Drafting"
+                    self.log("BATTLE", self.vision.side_by_side(battle_key, sim_now, name2, pos2, name1, pos1,
+                                                                behind["speed"], corner, was_drafting, count))
                     self.battles[battle_key] = {"type": "Side by side", "time": sim_now, "count": count}
             elif dist_diff < 15.0:
                 if not battle_info or (sim_now - battle_info["time"] > 15.0):
                     count = battle_info["count"] + 1 if (battle_info and battle_info["type"] == "Drafting") else 1
-                    drafter, d_pos, leader, l_pos = name2, pos2, name1, pos1
-                    messages = [
-                        f"{drafter} (P{d_pos}) is in the draft of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is still pressuring {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is looking for a way to make the pass on {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is still battling with {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is glued to the back of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is stalking {leader} (P{l_pos}) through the corners.",
-                        f"{drafter} (P{d_pos}) is trying to force a mistake from {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is right in the wheel tracks of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is refusing to let {leader} (P{l_pos}) escape.",
-                        f"{drafter} (P{d_pos}) is all over the back of {leader} (P{l_pos}), looking for an opening.",
-                        f"{drafter} (P{d_pos}) is closing in on {leader} (P{l_pos}) under braking.",
-                        f"{drafter} (P{d_pos}) is keeping the pressure on {leader} (P{l_pos}) lap after lap.",
-                        f"{drafter} (P{d_pos}) has the pace to challenge {leader} (P{l_pos}) here.",
-                        f"{drafter} (P{d_pos}) is filling the mirrors of {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is using the slipstream to stay right with {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is biding their time behind {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is probing for a gap on {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is turning up the heat on {leader} (P{l_pos}).",
-                        f"{drafter} (P{d_pos}) is nose to tail with {leader} (P{l_pos}), waiting for the moment to strike."
-                    ]
-                    self.log("BATTLE", random.choice(messages))
+                    # Describe what the pair is actually doing (see battle_vision.py)
+                    self.log("BATTLE", self.vision.drafting(battle_key, sim_now, dist_diff, name2, pos2, name1, pos1,
+                                                            behind["speed"], corner, count))
                     self.battles[battle_key] = {"type": "Drafting", "time": sim_now, "count": count}
 
     # ------------------------------------------------------------------ leaderboards
