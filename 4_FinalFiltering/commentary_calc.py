@@ -83,7 +83,9 @@ def main():
     base_name, ext = os.path.splitext(os.path.basename(file_path))
     
     project_path = os.environ.get("R3E_PROJECT_PATH")
-    if project_path:
+    if os.environ.get("BADAI_OUTPUT"):
+        output_path = os.environ["BADAI_OUTPUT"]
+    elif project_path:
         output_path = os.path.join(project_path, f"{base_name}_forCommentary{ext}")
     else:
         output_path = f"{base_name}_forCommentary{ext}"

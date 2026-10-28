@@ -19,6 +19,8 @@ Logger_Raceroom/Race_*.txt
 CameraController_Raceroom/director_notes_*.txt
 CameraController_Raceroom/camera_sequence_*.json
 Projects/
+Races/
+launcher_errors.log
 TTS/TTSFast/Output*/
 AudioCombiner/*.wav
 Combiner/combined_race_log.txt

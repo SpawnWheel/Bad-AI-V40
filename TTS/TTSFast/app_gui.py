@@ -14,7 +14,9 @@ if not default_input_file and len(sys.argv) > 1:
 
 default_output_folder = "outputs test"
 r3e_project_path = os.environ.get("R3E_PROJECT_PATH")
-if r3e_project_path:
+if os.environ.get("BADAI_OUTPUT"):
+    default_output_folder = os.environ["BADAI_OUTPUT"]
+elif r3e_project_path:
     default_output_folder = os.path.join(r3e_project_path, "AudioClipsRAW")
 
 # Get initial list of speakers to show in the UI if possible

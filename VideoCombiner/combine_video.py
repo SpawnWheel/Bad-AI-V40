@@ -225,7 +225,10 @@ if __name__ == "__main__":
 
     project_path = os.environ.get("R3E_PROJECT_PATH")
     if preview and project_path:
-        output_file = os.path.join(project_path, "graphics_preview.mp4")
+        output_file = os.path.join(project_path, "debug", "graphics_preview.mp4")
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    elif os.environ.get("BADAI_OUTPUT"):
+        output_file = os.environ["BADAI_OUTPUT"]
     elif project_path:
         output_file = os.path.join(project_path, f"{os.path.basename(project_path)}_final.mp4")
     else:

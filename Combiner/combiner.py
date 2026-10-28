@@ -81,7 +81,9 @@ if __name__ == "__main__":
         
     output_name = "combined_race_log.txt"
     project_path = os.environ.get("R3E_PROJECT_PATH")
-    if project_path:
+    if os.environ.get("BADAI_OUTPUT"):
+        output_path = os.environ["BADAI_OUTPUT"]
+    elif project_path:
         output_path = os.path.join(project_path, output_name)
     else:
         output_path = output_name

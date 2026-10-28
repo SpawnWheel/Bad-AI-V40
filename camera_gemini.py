@@ -4,6 +4,7 @@ Streams the response so the model's thinking appears live in a "Gemini Thinking"
 and returns the final answer text to the caller on the Tk thread.
 """
 import json
+import os
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -11,9 +12,29 @@ from tkinter import ttk
 from google import genai
 from google.genai import types
 
+import racefiles
+
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_THINKING = "HIGH"
 THINKING_LEVELS = ["HIGH", "MEDIUM", "LOW", "MINIMAL", "NONE"]
+
+
+def output_path(race_key, legacy_name):
+    """Where the camera controller saves a file. In a race folder every file has one fixed name
+    (the previous version is copied to history/); older projects keep their timestamped names."""
+    project_path = os.environ.get("R3E_PROJECT_PATH")
+    if project_path and os.path.exists(os.path.join(project_path, racefiles.RACE_JSON)):
+        path = racefiles.race_file(project_path, race_key)
+        racefiles.save_to_history(path)
+        return path
+    return os.path.join(project_path, legacy_name) if project_path else legacy_name
+
+
+def notes_file(project_path, race_key, legacy_name):
+    """The race's notes file (race_notes / camera_notes), or an older project's name for it."""
+    path = racefiles.race_file(project_path, race_key)
+    legacy = os.path.join(project_path, legacy_name)
+    return path if os.path.exists(path) or not os.path.exists(legacy) else legacy
 
 
 def extract_json(text):
