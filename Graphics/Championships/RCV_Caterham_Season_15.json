@@ -9,8 +9,8 @@
     "name": "Caterham Academy",
     "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 2",
-    "event_name": "Donnington Park",
+    "round": "Round 1",
+    "event_name": "Interlagos",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
     "event_flag": "Graphics/Logos/BritainLogo.png"
@@ -93,6 +93,8 @@
     "fastest_lap": true,
     "new_leader": true,
     "pit_stops": true,
+    "gap_tracker": true,
+    "sponsors": true,
     "radio": true,
     "chequered": true,
     "results": true
@@ -105,10 +107,12 @@
     "stat": true,
     "movers": true,
     "headline": true,
+    "gaps": true,
+    "insight": true,
     "pit_stop": true
   },
   "popup_density": "medium",
-  "popup_duration": 7.0,
+  "popup_duration": 8.0,
   "drivers": {
     "[RCV]Dom.Payne": {
       "display": "Dom Payne",
@@ -176,6 +180,7 @@
       "number": "12",
       "country": "RSA",
       "team": "Caterham",
+      "make": "Caterham",
       "color": "#047857",
       "car_image": "Graphics/Logos/caterham.png"
     },
@@ -285,6 +290,20 @@
       "make": "",
       "color": "",
       "car_image": "Graphics/CarPreviews/Bill.dds"
+    }
+  },
+  "sponsors": {
+    "title": {
+      "name": "",
+      "logo": "Graphics/Logos/Goodyear.png"
+    },
+    "timing": {
+      "name": "",
+      "logo": "Graphics/Logos/Rolex.png"
+    },
+    "partner": {
+      "name": "",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
     }
   },
   "commentators": {

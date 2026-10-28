@@ -93,6 +93,8 @@
     "fastest_lap": true,
     "new_leader": true,
     "pit_stops": true,
+    "gap_tracker": true,
+    "sponsors": true,
     "radio": true,
     "chequered": true,
     "results": true
@@ -105,6 +107,8 @@
     "stat": true,
     "movers": true,
     "headline": true,
+    "gaps": true,
+    "insight": true,
     "pit_stop": true
   },
   "popup_density": "medium",
@@ -286,6 +290,20 @@
       "make": "",
       "color": "",
       "car_image": "Graphics/CarPreviews/Bill.dds"
+    }
+  },
+  "sponsors": {
+    "title": {
+      "name": "",
+      "logo": "Graphics/Logos/Goodyear.png"
+    },
+    "timing": {
+      "name": "",
+      "logo": "Graphics/Logos/Rolex.png"
+    },
+    "partner": {
+      "name": "",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
     }
   },
   "commentators": {
