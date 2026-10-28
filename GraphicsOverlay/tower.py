@@ -25,7 +25,6 @@ FLASH_STEPS = 10
 HEADER_H = 92
 TITLE_H = 28
 FOOTER_H = 30
-SPONSOR_H = 34    # timing sponsor's logo strip under the footer when a timing sponsor is set
 CLASS_H = 26
 GAP = 3            # space between rows
 MIN_W = 250
@@ -133,7 +132,6 @@ class TimingTower:
             # Taller rows until the tower reaches below the in-game board
             row_h = int(-(-(self.cover[3] - top - fixed_h) // max(1, n)))
         body_h = n * row_h + bars * (CLASS_H + GAP)
-        self.sponsor_h = SPONSOR_H if self.tpl.sponsor('timing') else 0
         cols = self._columns(row_h - GAP)
         # Only as wide as the longest short name and the value column need
         f = font(cols['fs'] - 1, 'bold_cond')
@@ -143,7 +141,7 @@ class TimingTower:
         if self.cover:
             w = max(w, int(self.cover[2] - self.x))
         return {'row_h': row_h, 'body_h': body_h, 'w': w,
-                'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H + self.sponsor_h}
+                'h': HEADER_H + TITLE_H + 6 + body_h + 4 + FOOTER_H}
 
     def _columns(self, h):
         """Column offsets for a row of height h."""
@@ -289,13 +287,7 @@ class TimingTower:
         # Cars moving up are drawn last so they slide over the cars they pass
         for change, y, r in sorted(drawn, key=lambda d: d[0]):
             self._row(img, body_top + y, w, r, mode, values.get(r['name']), change, p_flash)
-        self._footer(img, w, geom['h'] - FOOTER_H - self.sponsor_h, flag, yellow, idx)
-        if self.sponsor_h:
-            sy = geom['h'] - self.sponsor_h
-            round_rect(img, (0, sy, w, geom['h']), 8, th.panel_solid, corners=(False, False, True, True))
-            round_rect(img, (12, sy, w - 12, sy + 1), 0, (255, 255, 255, 40))
-            sw = self.tpl.sponsor_w('timing', 22)
-            self.tpl.sponsor_mark(img, (w + sw) / 2, sy + self.sponsor_h / 2 + 1, 'timing', 22)
+        self._footer(img, w, geom['h'] - FOOTER_H, flag, yellow, idx)
         if yellow:
             round_outline(img, (0, 0, w, geom['h']), 8, YELLOW[:3] + (230,), 3)
         return img
@@ -327,9 +319,15 @@ class TimingTower:
         th = self.th
         tpl = self.tpl
         round_rect(img, (0, 0, w, HEADER_H), 8, th.panel_solid, corners=(True, True, False, False))
+        # With a timing sponsor, the championship logo moves left and the sponsor's logo sits top right
+        sponsor_w = tpl.sponsor_mark(img, w - 14, 30, 'timing', 28) if tpl.sponsor('timing') else 0
         if tpl.logo:
-            lg = fit_image(tpl.logo, w - 60, 40)
-            img.alpha_composite(lg, (int(w / 2 - lg.width / 2), int(30 - lg.height / 2)))
+            if sponsor_w:
+                lg = fit_image(tpl.logo, w - sponsor_w - 48, 40)
+                img.alpha_composite(lg, (14, int(30 - lg.height / 2)))
+            else:
+                lg = fit_image(tpl.logo, w - 60, 40)
+                img.alpha_composite(lg, (int(w / 2 - lg.width / 2), int(30 - lg.height / 2)))
         else:
             champ = self.cfg['championship']
             title = (champ.get('short_name') or champ.get('name') or 'LIVE TIMING').upper()
