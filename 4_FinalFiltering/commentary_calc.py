@@ -11,12 +11,12 @@ def parse_time(line):
 
 import sys
 
-# The voices speak about 2.85 words a second. Each gap gets words for almost all of it (a short breath before the
-# next event): near-continuous commentary works best, as long as it is conversation rather than padding (the
-# commentary prompt handles that). Two thirds left too much dead air.
-SPEECH_WORDS_PER_SEC = 2.85
-FILL = 0.9
-MAX_WORDS = 70
+# The voices speak about 2.8 words a second (measured: Martin 2.7, Ant 3.1). The audio combiner leaves up to 1.5 s
+# between lines, so each gap loses about a second to pauses before the words fill the rest: near-continuous talk,
+# with a breath before the next event and no overrun into it. Works out at about 2.6 words a second of gap.
+SPEECH_WORDS_PER_SEC = 2.8
+PAUSE_SEC = 1.2
+MAX_WORDS = 90
 
 
 def main():
@@ -70,7 +70,7 @@ def main():
             continue
 
         duration = default_last_duration
-        
+
         # Look ahead for the next valid timestamp
         for j in range(i + 1, len(parsed_data)):
             if parsed_data[j]['timestamp'] is not None:
@@ -80,8 +80,8 @@ def main():
                 if total_seconds >= 0:
                     duration = total_seconds
                 break
-        
-        word_count = max(3, min(int(round(duration * SPEECH_WORDS_PER_SEC * FILL)), MAX_WORDS))
+
+        word_count = max(3, min(int(round((duration - PAUSE_SEC) * SPEECH_WORDS_PER_SEC)), MAX_WORDS))
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"
