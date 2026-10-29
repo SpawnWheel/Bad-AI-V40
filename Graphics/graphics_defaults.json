@@ -9,8 +9,8 @@
     "name": "Caterham Academy",
     "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 1",
-    "event_name": "Interlagos",
+    "round": "Round 2",
+    "event_name": "Donnington Park",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
     "event_flag": "Graphics/Logos/BritainLogo.png"
@@ -36,7 +36,7 @@
       "footer": true
     },
     "map": {
-      "enabled": true,
+      "enabled": false,
       "x": 1597,
       "y": 113,
       "w": 306,
@@ -61,7 +61,17 @@
       "h": 58,
       "anchor": "right"
     },
-    "extra_logos": [],
+    "extra_logos": [
+      {
+        "path": "Graphics/Logos/BadAILogo_White.png",
+        "x": 1903,
+        "y": 950,
+        "h": 150,
+        "anchor": "right",
+        "opacity": 0.85,
+        "tint_white": false
+      }
+    ],
     "ticker": {
       "enabled": true,
       "y": 1018,
