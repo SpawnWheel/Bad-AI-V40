@@ -6,14 +6,14 @@
     1080
   ],
   "championship": {
-    "name": "Caterham Academy",
-    "short_name": "RCV",
+    "name": "JCW Mini Challenge",
+    "short_name": "",
     "season": "Season 15",
     "round": "Round 2",
     "event_name": "Donnington Park",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Logos/BritainLogo.png"
+    "event_flag": "Graphics/Flags/UK.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -36,7 +36,7 @@
       "footer": true
     },
     "map": {
-      "enabled": false,
+      "enabled": true,
       "x": 1597,
       "y": 113,
       "w": 306,
@@ -51,7 +51,7 @@
       "row_h": 34,
       "bottom": 820,
       "rows": 0,
-      "cycle": "interval,gap,name,team",
+      "cycle": "interval,gap,name",
       "cycle_sec": 15
     },
     "logo": {
@@ -61,17 +61,7 @@
       "h": 58,
       "anchor": "right"
     },
-    "extra_logos": [
-      {
-        "path": "Graphics/Logos/BadAILogo_White.png",
-        "x": 1903,
-        "y": 950,
-        "h": 150,
-        "anchor": "right",
-        "opacity": 0.85,
-        "tint_white": false
-      }
-    ],
+    "extra_logos": [],
     "ticker": {
       "enabled": true,
       "y": 1018,
@@ -81,8 +71,8 @@
       "extra_hold": 10
     },
     "popups": {
-      "x": 40,
-      "bottom": 1000,
+      "x": 88,
+      "bottom": 992,
       "max_w": 780
     },
     "radio": {
@@ -122,7 +112,7 @@
     "pit_stop": true
   },
   "popup_density": "medium",
-  "popup_duration": 8.0,
+  "popup_duration": 7.0,
   "drivers": {
     "[RCV]Dom.Payne": {
       "display": "Dom Payne",
@@ -130,57 +120,57 @@
       "number": "1",
       "country": "GBR",
       "team": "Itchy & Scratchy Racing",
-      "make": "Caterham",
-      "color": "#07f8f8",
+      "make": "MINI",
+      "color": "#2f0df2",
       "car_image": "Graphics/Logos/ItchyScratchy.png"
     },
     "[RCV]ATIBoy69": {
       "display": "ATI Boy",
       "short": "ATIBOY",
       "number": "420",
-      "country": "NLD",
+      "country": "GBR",
       "team": "Cheech and Chong",
-      "make": "Caterham",
-      "color": "#48824d",
+      "make": "MINI",
+      "color": "#399b2f",
       "car_image": "Graphics/Logos/cheechchong.png"
     },
     "[RCV]Neworder": {
       "display": "New Order",
       "short": "NEWORDER",
-      "number": "52",
+      "number": "26",
       "country": "GBR",
       "team": "Foxy Stoat Racing",
-      "make": "Caterham",
+      "make": "MINI",
       "color": "#F97316",
       "car_image": "Graphics/Logos/stoat.png"
     },
     "Daniel Born": {
       "display": "Daniel Born",
       "short": "BORN",
-      "number": "88",
+      "number": "12",
       "country": "RSA",
-      "team": "Red Bull",
-      "make": "Caterham",
-      "color": "#1a0cc0",
-      "car_image": "Graphics/Logos/redbull.png"
+      "team": "SAPS Underground",
+      "make": "MINI",
+      "color": "#edf0fc",
+      "car_image": "Graphics/Logos/SAPS.png"
     },
     "[RCV]thommo": {
       "display": "Thommo",
       "short": "THOMMO",
       "number": "58",
       "country": "GBR",
-      "team": "Ping",
-      "make": "Caterham",
-      "color": "#ebf9fa",
+      "team": "Ping Racing Essex",
+      "make": "MINI",
+      "color": "#bd7575",
       "car_image": "Graphics/Logos/ping.png"
     },
     "kf.MTG": {
-      "display": "MTG",
-      "short": "MTG",
+      "display": "kf.MTG",
+      "short": "KF.MTG",
       "number": "00",
       "country": "USA",
       "team": "Silent Assassin",
-      "make": "Caterham",
+      "make": "MINI",
       "color": "#000000",
       "car_image": "Graphics/Logos/silentassasin2.png"
     },
@@ -189,38 +179,37 @@
       "short": "ALFAQUAD",
       "number": "12",
       "country": "RSA",
-      "team": "Caterham",
-      "make": "Caterham",
-      "color": "#047857",
-      "car_image": "Graphics/Logos/caterham.png"
+      "team": "Spitfire",
+      "make": "MINI",
+      "color": "#525823",
+      "car_image": "Graphics/Logos/spitfire.png"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
       "short": "NORTJE",
-      "number": "121",
+      "number": "64",
       "country": "RSA",
-      "team": "Back to the Future",
-      "make": "Caterham",
-      "color": "#e8eb67",
-      "car_image": "Graphics/Logos/BackToFuture.png"
+      "team": "Commodore",
+      "make": "MINI",
+      "color": "#716c4a",
+      "car_image": "Graphics/Logos/commodore2.png"
     },
     "inthebagbud": {
       "display": "InTheBagBud",
       "short": "BAGBUD",
-      "number": "27",
+      "number": "",
       "country": "GBR",
       "team": "Beavertown Neck Oil",
-      "make": "Caterham",
-      "color": "#18d7e7",
-      "car_image": "Graphics/Logos/Beavertown.png"
+      "color": "#F59E0B",
+      "car_image": "Graphics/CarPreviews/InTheBagBud.dds"
     },
     "mattikake": {
       "display": "mattikake",
       "short": "MATTIKAKE",
       "number": "77",
       "country": "GBR",
-      "team": "McLaren Mini",
-      "make": "Caterham",
+      "team": "McLaren Renault Mini",
+      "make": "MINI",
       "color": "#f4b92f",
       "car_image": "Graphics/Logos/McLaren.webp"
     },
@@ -230,6 +219,7 @@
       "number": "28",
       "country": "NLD",
       "team": "Mini",
+      "make": "MINI",
       "color": "#008000",
       "car_image": "Graphics/Logos/mini.png"
     },
@@ -239,7 +229,7 @@
       "number": "137",
       "country": "GBR",
       "team": "Rick and Morty",
-      "make": "Caterham",
+      "make": "MINI",
       "color": "#215cc0",
       "car_image": "Graphics/Logos/rickmorty.png"
     },
@@ -249,6 +239,7 @@
       "number": "71",
       "country": "GBR",
       "team": "Team Gulf",
+      "make": "MINI",
       "color": "#04dddd",
       "car_image": "Graphics/Logos/gulf.png"
     },
@@ -258,7 +249,7 @@
       "number": "85",
       "country": "ESP",
       "team": "John Player Special",
-      "make": "Caterham",
+      "make": "MINI",
       "color": "#c4a31e",
       "car_image": "Graphics/Logos/jps.png"
     },
@@ -268,38 +259,39 @@
       "number": "99",
       "country": "GBR",
       "team": "Mini",
+      "make": "MINI",
       "color": "#e10600",
       "car_image": "Graphics/Logos/mini.png"
     },
-    "Bill(AuchAye)_[SR-50]": {
-      "display": "Bill",
-      "short": "BILL",
-      "number": "5",
-      "country": "SCT",
-      "team": "Thistle Racing",
-      "make": "Caterham",
-      "color": "#d909b5",
-      "car_image": "Graphics/Logos/ThistleRacing.png"
+    "dmk": {
+      "display": "dmk",
+      "short": "DMK",
+      "number": "58",
+      "country": "POL",
+      "team": "Mini Poland",
+      "make": "MINI",
+      "color": "#ff0000",
+      "car_image": "Graphics/Logos/mini.png"
+    },
+    "[RCV]kenevo": {
+      "display": "Kenevo_Mini",
+      "short": "KENEVO_MINI",
+      "number": "27",
+      "country": "GBR",
+      "team": "The Mulch Vendor",
+      "make": "MINI",
+      "color": "#c089c7",
+      "car_image": "Graphics/Logos/BlockEkipa.png"
     },
     "[RCV]RayFin": {
       "display": "Rayfin",
       "short": "RAYFIN",
-      "number": "55",
+      "number": "6",
       "country": "GBR",
-      "team": "Canadian Eagle",
-      "make": "Caterham",
-      "color": "#0bc8d7",
+      "team": "Canadian Eagle Racing",
+      "make": "MINI",
+      "color": "#00ffff",
       "car_image": "Graphics/Logos/EagleRacing.png"
-    },
-    "Bill(AuchAye)_": {
-      "display": "Bill",
-      "short": "BILL",
-      "number": "",
-      "country": "",
-      "team": "",
-      "make": "",
-      "color": "",
-      "car_image": "Graphics/CarPreviews/Bill.dds"
     }
   },
   "sponsors": {
@@ -313,16 +305,19 @@
     },
     "partner": {
       "name": "",
-      "logo": "Graphics/Logos/CaterhamWhite.png"
+      "logo": "Graphics/Logos/mini.png"
     }
   },
   "commentators": {
     "Martin Haven": {
-      "bio": "Veteran motorsport broadcaster and lead voice of the FIA World Endurance Championship."
+      "bio": "TV, radio and circuit commentary on almost every conceivable form of motorsport"
     },
     "Anthony Davidson": {
-      "bio": "2014 FIA World Endurance Champion and former Formula 1 driver"
+      "bio": "British former racing driver and broadcaster who competed in Formula One from 2002 to 2008 and won the FIA World Endurance Drivers' Championship"
+    },
+    "Thommo": {
+      "bio": "Some random driver who added his name to the list?"
     }
   },
-  "championship_preset": "RCV Caterham - Season 15"
+  "championship_preset": "RCV Mini Challenge - Season 15"
 }

@@ -146,6 +146,7 @@ class RaceEngineerBrain:
         request_timeout_sec: float = 20.0,
         notebook_size: int = 8,
         scoped_system_prompt: bool = True,
+        driver_brief: Optional[str] = None,
     ):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.model_name = model_name
@@ -163,6 +164,8 @@ class RaceEngineerBrain:
         self.fallback_model = (fallback_model or "").strip() or None
         self.structured_output = bool(structured_output)
         self.scoped_system_prompt = bool(scoped_system_prompt)
+        # The driver's pre-race notes from the launcher (rivalries, planned strategy); blank = none
+        self.driver_brief = (driver_brief or "").strip()
 
         # Resolve thinking configuration for Gemini 3.8 Flash (supports LOW / MEDIUM / HIGH)
         if thinking_level and str(thinking_level).upper() in ("HIGH", "MEDIUM", "LOW", "MINIMAL"):
@@ -182,7 +185,10 @@ class RaceEngineerBrain:
 
         # Session-scoped system prompt (rebuilt by set_session_group)
         self.session_group: Optional[str] = None
-        self.system_prompt = get_system_prompt(self.personality, self.accent, self.delivery, persona=persona)
+        self.system_prompt = get_system_prompt(self.personality, self.accent, self.delivery, persona=persona,
+                                               driver_brief=self.driver_brief)
+        if self.driver_brief:
+            logger.info(f"Driver's pre-race brief loaded ({len(self.driver_brief)} chars).")
 
         # Wording / emotion variety + pit-wall mood memory
         self.variety = VarietyTracker(
@@ -228,7 +234,8 @@ class RaceEngineerBrain:
         if not self.scoped_system_prompt:
             return
         self.system_prompt = get_system_prompt(
-            self.personality, self.accent, self.delivery, persona=self.persona, session_group=group
+            self.personality, self.accent, self.delivery, persona=self.persona, session_group=group,
+            driver_brief=self.driver_brief,
         )
         logger.info(f"Engineer system prompt scoped to {group or 'ALL'} ({len(self.system_prompt)} chars).")
 

@@ -14,6 +14,7 @@ SESSION_TEXT = {
     "Unknown": "Waiting for a session to start in the sim.",
 }
 BADGE = 210
+BRIEF_W = 560
 # The start screen's switches: key -> (setting, label)
 SWITCHES = {"engineer": ("start_engineer", "Race engineer"), "recorder": ("start_recorder", "Race recorder")}
 
@@ -30,6 +31,8 @@ class HomeScreen(tk.Frame):
         if self._timer:
             self.after_cancel(self._timer)
             self._timer = None
+        self.flush_notes()
+        self.brief = None
         for w in self.winfo_children():
             w.destroy()
         self.canvas = t.PhotoCanvas(self, focus=0.45)
@@ -61,7 +64,7 @@ class HomeScreen(tk.Frame):
             for item in (badge, name):
                 c.tag_bind(item, "<Enter>", lambda e, s=sim: self._hover(s, True))
                 c.tag_bind(item, "<Leave>", lambda e, s=sim: self._hover(s, False))
-                c.tag_bind(item, "<Button-1>", lambda e, s=sim: self.app.start_session(s))
+                c.tag_bind(item, "<Button-1>", lambda e, s=sim: self._start(s))
         # What a logo click starts: engineer only, recorder only (e.g. logging a race replay), or both
         for key in SWITCHES:
             item = self.items[key] = c.create_text(0, 0, text="", font=(t.FONT, 10, "bold"))
@@ -69,6 +72,20 @@ class HomeScreen(tk.Frame):
             c.tag_bind(item, "<Enter>", lambda e: c.config(cursor="hand2"))
             c.tag_bind(item, "<Leave>", lambda e: c.config(cursor=""))
         self.items["switch_help"] = c.create_text(0, 0, text="", fill=t.DIM, font=(t.FONT, 9))
+        # Pre-race brief: told to the engineer when the session starts (blank = nothing sent)
+        self.items["brief_title"] = c.create_text(0, 0, text="Pre-race brief for your engineer", fill=t.TEXT,
+                                                  font=(t.FONT, 10, "bold"), anchor="w")
+        self.items["brief_hint"] = c.create_text(0, 0, text="Optional - a rivalry, your strategy... blank = nothing sent",
+                                                 fill=t.DIM, font=(t.FONT, 9), anchor="e")
+        self._brief_job = None
+        self.brief = tk.Text(c, height=3, bg=t.INPUT, fg=t.TEXT, relief="flat", bd=0, font=(t.FONT, 10), wrap="word",
+                             padx=10, pady=6, insertbackground=t.TEXT, highlightthickness=1,
+                             highlightbackground=t.BORDER, highlightcolor=t.ACCENT, undo=True)
+        self.brief.insert("1.0", self.app.settings.get("engineer_brief", ""))
+        self.brief.edit_reset()
+        self.brief.bind("<KeyRelease>", lambda e: self._queue_brief_save())
+        self.brief.bind("<FocusOut>", lambda e: self._save_brief())
+        self.items["brief"] = c.create_window(0, 0, window=self.brief, anchor="nw", width=BRIEF_W)
         self._show_switches()
         self.items["line"] = c.create_line(0, 0, 0, 0, fill=t.BORDER_STRONG)
         count = len(racefiles.list_races())
@@ -80,6 +97,31 @@ class HomeScreen(tk.Frame):
 
     def _on(self, key):
         return self.app.settings.get(SWITCHES[key][0], True)
+
+    def _start(self, sim):
+        self._save_brief()  # a logo click does not take focus from the box, so save what was typed
+        self.app.start_session(sim)
+
+    def flush_notes(self):
+        """Saves the pre-race brief before this screen is left or rebuilt."""
+        if getattr(self, "brief", None) is not None:
+            self._save_brief()
+
+    def _queue_brief_save(self):
+        if self._brief_job:
+            self.after_cancel(self._brief_job)
+        self._brief_job = self.after(800, self._save_brief)
+
+    def _save_brief(self):
+        if self._brief_job:
+            self.after_cancel(self._brief_job)
+            self._brief_job = None
+        if not self.brief.winfo_exists():
+            return
+        text = self.brief.get("1.0", "end").strip()
+        if text != self.app.settings.get("engineer_brief", ""):
+            self.app.settings["engineer_brief"] = text
+            self.app.save_settings()
 
     def _toggle(self, key):
         other = "recorder" if key == "engineer" else "engineer"
@@ -111,6 +153,8 @@ class HomeScreen(tk.Frame):
             hint = "Start the engineer only"
         c.itemconfigure(self.items["switch_help"], text=help_text)
         c.itemconfigure(self.items["sub"], text=sub)
+        for key in ("brief_title", "brief_hint", "brief"):
+            c.itemconfigure(self.items[key], state="normal" if engineer else "hidden")
         for _, _, hint_item in self.sims.values():
             c.itemconfigure(hint_item, text=hint)
 
@@ -123,7 +167,7 @@ class HomeScreen(tk.Frame):
 
     def _layout_pick(self, w, h):
         c = self.canvas
-        cx, cy = w / 2, max(h * 0.47, 330)
+        cx, cy = w / 2, max(min(h * 0.47, h - 410), 310)
         if "warn" in self.items:
             c.coords(self.items["warn"], cx - 50, cy - 290)
             c.coords(self.items["warn_link"], cx + 290, cy - 290)
@@ -138,9 +182,12 @@ class HomeScreen(tk.Frame):
         c.coords(self.items["engineer"], cx - 110, cy + 192)
         c.coords(self.items["recorder"], cx + 110, cy + 192)
         c.coords(self.items["switch_help"], cx, cy + 213)
-        c.coords(self.items["line"], cx - 280, cy + 240, cx + 280, cy + 240)
-        c.coords(self.items["count"], cx, cy + 262)
-        c.coords(self.items["link"], cx, cy + 288)
+        c.coords(self.items["brief_title"], cx - BRIEF_W / 2, cy + 246)
+        c.coords(self.items["brief_hint"], cx + BRIEF_W / 2, cy + 246)
+        c.coords(self.items["brief"], cx - BRIEF_W / 2, cy + 258)
+        c.coords(self.items["line"], cx - 280, cy + 340, cx + 280, cy + 340)
+        c.coords(self.items["count"], cx, cy + 362)
+        c.coords(self.items["link"], cx, cy + 388)
 
     # ------------------------------------------------------------------ live session
 

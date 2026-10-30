@@ -50,7 +50,7 @@
       "row_h": 34,
       "bottom": 820,
       "rows": 0,
-      "cycle": "interval,gap,name,team",
+      "cycle": "interval,gap,name",
       "cycle_sec": 15
     },
     "logo": {

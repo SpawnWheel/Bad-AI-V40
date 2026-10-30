@@ -1125,7 +1125,12 @@ class Templates:
         col_w = 330
         W = col_w * len(cols) + 8
         panel_h = 128
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'AFTER THE START').upper(), stripe=th.accent)
+        title = (g.get('title') or 'AFTER THE START').upper()
+        tab = self.sponsor_tab('partner')
+        if tab:
+            # Room for the label and the partner's tab side by side
+            W = max(W, int(text_w(font(18, 'bold_cond'), title) + 28 + 16 + tab.width))
+        img, top = self.card_canvas(W, panel_h, title, stripe=th.accent, sponsor='partner')
         for i, (key, r) in enumerate(cols):
             x = 8 + i * col_w
             if i:
@@ -1461,40 +1466,77 @@ class Templates:
             polygon(img, [(38, ty - 5), (50, ty - 5), (44, ty + 5)], green)
         else:
             polygon(img, [(38, ty + 5), (50, ty + 5), (44, ty - 5)], red)
+        if d.get('laps'):
+            trend += f" OVER THE LAST {d['laps']} LAPS"
         text_vcenter(img, 58, ty, ('CLOSING ' if closing else 'LOSING ') + trend, font(16, 'semibold_cond'), th.muted)
         return img
 
     def card_pit_timer(self, g, anim=1.0):
-        """Pit stop with the stationary time ticking up while the car is in its box, then held in green."""
+        """Compact F1-style pit timer for a top-4 car: position, team logo and name on top, IN PIT with the
+        stationary time ticking up under it (green once the car leaves its box), and the partner sponsor's
+        logo along the bottom when one is set."""
         th = self.th
         d = g.get('data', {})
         name = g['driver']
         anim = 1.0 if anim is None else anim
         secs = d.get('stationary', 0) * anim
         done = anim >= 1.0
-        panel_h = 98
-        f_team = font(19, 'semibold_cond')
-        team = self.meta(name).get('team') or ''
-        used = max(self.name_with_flag_w(name, 36), text_w(f_team, team), 200)
-        badge = self.card_badge(name, panel_h, 70)
-        timer_w = 190
-        W = int(96 + 18 + used + 30 + self.badge_w(badge) + timer_w + 12)
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'PIT STOP').upper())
-        self.pos_number(img, 52, top + panel_h / 2, d.get('pos'), 56)
-        round_rect(img, (96, top + 14, 101, top + panel_h - 14), 2, self.driver_color(name))
-        self.name_with_flag(img, 116, top + 36, name, 36)
-        if team:
-            text_vcenter(img, 116, top + 70, team, f_team, th.muted)
+        head_h, body_h = 38, 50
+        label = self.meta(name)['short'].upper()
+        f_name = font(24, 'bold_cond')
+        badge = self.badge(name, 22)
+        pos_w = 38
+        name_x = pos_w + 12 + (badge.width + 8 if badge is not None else 0)
+        W = int(max(name_x + text_w(f_name, label) + 16, 200))
+        sp = self.sponsor('partner')
+        strip_h = 30 if sp else 0
+        H = head_h + body_h + strip_h
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 6, th.panel)
+        # Header: position, logo and name, with the driver's colour along its bottom
+        round_rect(img, (0, 0, W, head_h), 6, th.panel_hi, corners=(True, True, False, False))
+        round_rect(img, (0, 0, pos_w, head_h), 6, th.text, corners=(True, False, False, False))
+        pos = str(d.get('pos') or '')
+        text_vcenter(img, pos_w / 2, head_h / 2 + 1, pos, font(24, 'bold'), th.dark_text, 'm')
         if badge is not None:
-            img.alpha_composite(badge, (int(W - timer_w - 12 - badge.width - 12),
-                                        int(top + (panel_h - badge.height) / 2)))
-        tx0 = W - timer_w - 10
-        box = th.green if done else th.panel_hi
-        round_rect(img, (tx0, top + 10, W - 10, top + panel_h - 10), 6, box)
-        fg = contrast_text(box) if done else th.text
-        text_vcenter(img, (tx0 + W - 10) / 2, top + 28, 'STATIONARY', font(15, 'bold_cond'),
-                     fg if done else th.muted, 'm')
-        text_vcenter(img, (tx0 + W - 10) / 2, top + 62, f"{secs:.1f}s", font(40, 'bold'), fg, 'm')
+            img.alpha_composite(badge, (pos_w + 10, int((head_h - badge.height) / 2)))
+        text_vcenter(img, name_x, head_h / 2 + 1, label, f_name, th.text)
+        round_rect(img, (0, head_h - 3, W, head_h), 0, self.driver_color(name))
+        # IN PIT and the time
+        cy = head_h + body_h / 2
+        text_vcenter(img, 14, cy, 'PIT STOP' if done else 'IN PIT', font(20, 'semibold_cond'), th.muted)
+        text_vcenter(img, W - 14, cy, f"{secs:.1f}", font(34, 'bold'), th.green if done else th.text, 'r')
+        if sp:
+            sname, logo = sp
+            sy = head_h + body_h
+            round_rect(img, (10, sy, W - 10, sy + 1), 0, (255, 255, 255, 40))
+            if logo:
+                lg = fit_image(logo, W - 28, strip_h - 10)
+                img.alpha_composite(lg, (int((W - lg.width) / 2), int(sy + (strip_h - lg.height) / 2)))
+            else:
+                text_vcenter(img, W / 2, sy + strip_h / 2, sname.upper(), font(16, 'bold_cond'), th.muted, 'm')
+        return img
+
+    def card_pit_lane(self, g):
+        """Small IN PITS tag for cars outside the top 4: one line per car (position and name)."""
+        th = self.th
+        cars = g.get('data', {}).get('cars') or []
+        if not cars:
+            return None
+        head_h, row_h = 26, 28
+        f_pos, f_name = font(19, 'bold'), font(20, 'bold_cond')
+        names = [self.meta(n)['short'].upper() for _, n in cars]
+        W = int(max(130, 48 + max(text_w(f_name, s) for s in names) + 14))
+        H = head_h + 4 + row_h * len(cars) + 4
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 6, th.panel)
+        round_rect(img, (0, 0, W, head_h), 6, th.accent2, corners=(True, True, False, False))
+        text_vcenter(img, 12, head_h / 2 + 1, 'IN PITS', font(16, 'bold_cond'), contrast_text(th.accent2))
+        for k, ((pos, name), label) in enumerate(zip(cars, names)):
+            cy = head_h + 4 + k * row_h + row_h / 2
+            text_vcenter(img, 20, cy + 1, str(pos or ''), f_pos, th.text, 'm')
+            round_rect(img, (36, cy - 9, 39, cy + 9), 0, self.driver_color(name))
+            text_vcenter(img, 48, cy + 1, label, f_name, th.text)
         return img
 
     def card_gaps(self, g):
@@ -1508,7 +1550,7 @@ class Templates:
         W, panel_h = 1180, 166
         R = 23                      # marker radius
         step = 2 * R + 6            # closest two markers may sit
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'GAPS ON TRACK').upper())
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'GAPS ON TRACK').upper(), sponsor='partner')
         x0, x1 = 60, W - 60
         cap = max(r[1] for r in rows) or 1.0
         # True positions, then nudged apart (forwards, then back from the right edge) so no two overlap
@@ -1562,26 +1604,6 @@ class Templates:
         img, top = self.card_canvas(W, panel_h, (g.get('label') or 'ANALYSIS').upper(), stripe=th.accent2)
         ImageDraw.Draw(img).text((26, top + 18), title, font=f_title, fill=th.text)
         self.text_lines(img, 26, top + 62, lines, f_text, th.muted, 26)
-        return img
-
-    def card_sponsor(self, g):
-        """A sponsor's moment on screen: just their logo (or name without one)."""
-        th = self.th
-        kind = g.get('data', {}).get('kind', 'title')
-        sp = self.sponsor(kind)
-        if not sp:
-            return None
-        name, logo = sp
-        lg = fit_image(logo, 420, 80) if logo else None
-        f_name = font(52, 'bold_cond')
-        W = int((lg.width if lg else text_w(f_name, name.upper())) + 70)
-        panel_h = 112
-        img, top = self.card_canvas(W, panel_h, None)
-        if lg:
-            img.alpha_composite(lg, (int((W - lg.width) / 2), int(top + panel_h / 2 - lg.height / 2)))
-        else:
-            text_vcenter(img, W / 2, top + panel_h / 2, name.upper(), f_name, th.text, 'm')
-        round_rect(img, (W / 2 - 30, top + panel_h - 6, W / 2 + 30, top + panel_h - 3), 1, th.accent2)
         return img
 
 

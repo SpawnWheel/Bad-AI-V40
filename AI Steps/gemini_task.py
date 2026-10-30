@@ -208,11 +208,6 @@ def run_ai_step():
             
         print(f"Success! Saved to: {output_filename}")
 
-        # The commentary comes out short of its word budgets: fix the events that would leave dead air or run late
-        if os.path.basename(os.path.dirname(os.path.abspath(prompt_file))) == "Commentary":
-            from pacing_pass import pace
-            pace(data_filename, output_filename, f"{prompt_text}{extra_context}", client, model_name)
-
     except Exception as e:
         print(f"An error occurred during generation: {e}")
 

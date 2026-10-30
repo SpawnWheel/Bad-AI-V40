@@ -93,6 +93,8 @@ class RaceEngineerApp:
             request_timeout_sec=float(gemini_cfg.get("request_timeout_sec", 20)),
             notebook_size=int(eng_cfg.get("notebook_size", 8)),
             scoped_system_prompt=bool(gemini_cfg.get("scoped_system_prompt", True)),
+            # Typed into the launcher's start screen before the session (blank = nothing sent)
+            driver_brief=os.environ.get("RACE_ENGINEER_DRIVER_BRIEF", ""),
         )
 
         tts_cfg = self.config.get("tts", {}) or {}

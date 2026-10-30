@@ -28,7 +28,7 @@ FOOTER_H = 30
 CLASS_H = 26
 GAP = 3            # space between rows
 MIN_W = 250
-MODE_LABELS = {'interval': 'INTERVAL', 'gap': 'LEADER', 'name': '', 'team': ''}
+MODE_LABELS = {'interval': 'INTERVAL', 'gap': 'LEADER', 'name': ''}  # 'team' in older configs is skipped
 MAKE_DIR = os.path.join(gcfg.GRAPHICS_DIR, 'Manufacturers')
 YELLOW = rgba('#FFD200')
 YELLOW_DARK = rgba('#C99A00')
@@ -438,14 +438,12 @@ class TimingTower:
         # Name / team, and the value box
         val_w = cols['val_w'] if mode in ('interval', 'gap') else 0
         text_right = w - 4 - val_w - 6
-        if mode == 'team':
-            label = meta.get('team') or self.timing.entry(name).get('team') or make or meta.get('display', name)
-        elif mode == 'name':
+        if mode == 'name':
             label = meta.get('display', name)
         else:
             label = meta.get('short') or name
         label = label.upper()
-        # Full names and teams shrink a little before they are cut short
+        # Full names shrink a little before they are cut short
         f = fit_font(label, text_right - x, fs - 1, 'bold_cond', max(10, fs - 3))
         text_vcenter(img, x, cy + 1, ellipsize(label, f, text_right - x), f, th.text)
         finished = r.get('finish') == FINISH_FINISHED

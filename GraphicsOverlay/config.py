@@ -49,9 +49,9 @@ AUTO_TYPES = {
     'start_movers': 'Biggest gainer and loser a minute after the start',
     'fastest_lap': 'Fastest lap of the race (top centre, laps from lap 5 only)',
     'new_leader': 'New race leader banner (top centre, from 20 seconds into the race)',
-    'pit_stops': 'Pit stop timer for the stops that matter (front-runners, undercuts)',
-    'gap_tracker': 'Battle forecast when a car closes on (or pulls away from) the one ahead',
-    'sponsors': 'One sponsor card per sponsor during the race',
+    'pit_stops': 'Pit stops: a compact timer for the top 4, a small "in pits" tag for the rest',
+    'gap_tracker': 'Gap trend: a car steadily catching (or pulling away from) the one ahead over several laps, '
+                   'from lap 5 (not for close battles)',
     'radio': 'Team radio quotes (middle right)',
     'chequered': 'Chequered flag banner (top centre; the timing tower comes off)',
     'results': 'Final classification panel',
@@ -89,9 +89,9 @@ DEFAULT_CONFIG = {
         # Full timing tower drawn from the recorded live timing (RaceRoom replays show no leaderboard
         # or map, so the frames above are not used there; AMS2 uses the leaderboard frame only with the
         # tower off). Rows shrink to fit above 'bottom', the width shrinks to fit the names (up to 'w');
-        # 'cycle' lists the value columns shown in turn (interval, gap, name, team).
+        # 'cycle' lists the value columns shown in turn (interval, gap, name).
         'tower': {'enabled': True, 'x': 24, 'y': 24, 'w': 400, 'row_h': 34, 'bottom': 820, 'rows': 0,
-                  'cycle': 'interval,gap,name,team', 'cycle_sec': 15},
+                  'cycle': 'interval,gap,name', 'cycle_sec': 15},
         'logo': {'enabled': True, 'x': 1903, 'y': 14, 'h': 58, 'anchor': 'right'},
         'extra_logos': [],
         'ticker': {'enabled': True, 'y': 1018, 'h': 46, 'speed': 150, 'max_duration': 40,
@@ -102,14 +102,20 @@ DEFAULT_CONFIG = {
         'radio': {'right': 1880, 'cy': 640, 'w': 400},
         # New race leader banner, centred at the top
         'leader': {'y': 24},
+        # Pit stop timers and IN PITS tags: top left corner (x 0 = just right of the timing tower)
+        'pits': {'x': 0, 'y': 150},
     },
     'auto_graphics': {k: True for k in AUTO_TYPES},
     'popup_types': {k: True for k in POPUP_TYPES},
     'popup_density': 'medium',
     'popup_duration': 7.0,
+    # Graphics are rendered at this frame rate on export (capped at the video's), then repeated to the
+    # video's: fewer frames to draw, so the export is quicker
+    'render_fps': 15,
     'drivers': {},
-    # Sponsors: name and/or logo each. Title: race card, results and a sponsor card. Timing: the timing
-    # tower, fastest lap and battle forecast. Partner: a sponsor card. Only the logo is shown, no caption.
+    # Sponsors: name and/or logo each, always on another graphic, never on their own. Title: race card,
+    # chequered flag and results. Timing: the timing tower, fastest lap and gap trends. Partner: after the
+    # start, gaps on track and the pit stop timer. Only the logo is shown, no caption.
     'sponsors': {k: {'name': '', 'logo': ''} for k in ('title', 'timing', 'partner')},
     # AI commentator name (as in the commentary) -> {'bio': short line shown under their name}
     'commentators': {},

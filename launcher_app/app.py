@@ -153,7 +153,7 @@ class App:
             if isinstance(self.screen, SettingsScreen) and name != "settings":
                 if not self.screen.save(quiet=True):
                     return
-            if isinstance(self.screen, RaceScreen):
+            if isinstance(self.screen, (RaceScreen, HomeScreen)):
                 self.screen.flush_notes()
             self.screen.destroy()
         self.screen_name = name
@@ -238,7 +238,9 @@ class App:
 
         engineer = logger = None
         if start_engineer:
-            env = {"GEMINI_API_KEY": self.settings["gemini_api_key"], "RACE_ENGINEER_SIM": ENGINEER_SIMS[sim]}
+            env = {"GEMINI_API_KEY": self.settings["gemini_api_key"], "RACE_ENGINEER_SIM": ENGINEER_SIMS[sim],
+                   # The start screen's pre-race brief; blank means the engineer is told nothing extra
+                   "RACE_ENGINEER_DRIVER_BRIEF": self.settings.get("engineer_brief", "").strip()}
             engineer = self.pm.start("Race engineer", [python_exe(), "main.py"], cwd=ENGINEER_DIR, env=env,
                                      kind="engineer", graceful=True)
         if start_recorder:

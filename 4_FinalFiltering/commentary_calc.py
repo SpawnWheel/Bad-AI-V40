@@ -11,12 +11,13 @@ def parse_time(line):
 
 import sys
 
-# The voices speak about 2.8 words a second (measured: Martin 2.7, Ant 3.1). The audio combiner leaves up to 1.5 s
-# between lines, so each gap loses about a second to pauses before the words fill the rest: near-continuous talk,
-# with a breath before the next event and no overrun into it. Works out at about 2.6 words a second of gap.
-SPEECH_WORDS_PER_SEC = 2.8
-PAUSE_SEC = 1.2
+# Words per second of gap. The voices speak a little faster than this (about 2.8 words a second), which leaves
+# room for the short pauses the audio combiner puts between lines. Raise it for more talk, lower it for more air.
+WORDS_PER_SEC = 2.5
 MAX_WORDS = 90
+# The start is shouted and rushed: events in the first seconds after the green flag get more words
+START_WORDS_PER_SEC = 2.8
+START_SECONDS = 25
 
 
 def main():
@@ -57,6 +58,11 @@ def main():
             'original_text': line.strip()
         })
 
+    # The green flag: the event that says so, else the first event
+    green_flag = next((p['timestamp'] for p in parsed_data
+                       if p['timestamp'] is not None and 'green flag' in p['original_text'].lower()),
+                      next((p['timestamp'] for p in parsed_data if p['timestamp'] is not None), None))
+
     output_lines = []
     default_last_duration = 15.0  # Seconds to assume for the final event
 
@@ -81,7 +87,9 @@ def main():
                     duration = total_seconds
                 break
 
-        word_count = max(3, min(int(round((duration - PAUSE_SEC) * SPEECH_WORDS_PER_SEC)), MAX_WORDS))
+        at_start = green_flag is not None and 0 <= (timestamp - green_flag).total_seconds() < START_SECONDS
+        rate = START_WORDS_PER_SEC if at_start else WORDS_PER_SEC
+        word_count = max(3, min(int(round(duration * rate)), MAX_WORDS))
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"

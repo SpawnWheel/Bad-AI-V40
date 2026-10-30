@@ -183,7 +183,7 @@ def main(input_folder, output_file):
 
     # Timeline layout constants
     MIN_GAP_MS = 10           # Minimum natural gap between clips (10ms)
-    MAX_GAP_MS = 1500         # Maximum natural gap between clips (1.5s)
+    MAX_GAP_MS = 800          # Maximum natural gap between clips (800ms)
     MAX_SHIFT_MS = 4000       # Maximum allowed delay (4s) from scheduled timecode
     MAX_OVERLAP_MS = 800      # Maximum allowed overlap between different speakers (up to 800ms)
     FADE_OUT_MS = 100         # Fade-out duration when truncating a clip

@@ -46,11 +46,12 @@ REGIONS = {
     'ticker': ('Bottom ticker', '#a78bfa'),
     'radio': ('Team radio (middle right)', '#f43f5e'),
     'tower': ('Timing tower', '#22c55e'),
+    'pits': ('Pit stops (top left corner)', '#facc15'),
 }
 # RaceRoom replays have no leaderboard or map to wrap, so the full timing tower replaces both. AMS2 gets the
 # tower too (hide the in-game leaderboard), or the old frame around the game's own one with the tower off.
-SIM_REGIONS = {'Raceroom': ('tower', 'logo', 'popups', 'ticker', 'radio'),
-               'AMS2': ('tower', 'leaderboard', 'map', 'logo', 'popups', 'ticker', 'radio')}
+SIM_REGIONS = {'Raceroom': ('tower', 'logo', 'popups', 'ticker', 'radio', 'pits'),
+               'AMS2': ('tower', 'leaderboard', 'map', 'logo', 'popups', 'ticker', 'radio', 'pits')}
 
 REGION_FIELDS = {
     'leaderboard': [('enabled', 'Show frame', bool), ('x', 'Left (x)', int), ('y', 'Top of board (y)', int),
@@ -69,7 +70,8 @@ REGION_FIELDS = {
     'tower': [('enabled', 'Show timing tower', bool), ('x', 'Left (x)', int), ('y', 'Top (y)', int),
               ('w', 'Max width (shrinks to fit the names)', int), ('row_h', 'Max row height', int), ('bottom', 'Lowest bottom edge (y)', int),
               ('rows', 'Rows (0 = every car; per class when multi-class)', int),
-              ('cycle', 'Columns in turn (interval, gap, name, team)', str), ('cycle_sec', 'Seconds per column', int)],
+              ('cycle', 'Columns in turn (interval, gap, name)', str), ('cycle_sec', 'Seconds per column', int)],
+    'pits': [('x', 'Left (x, 0 = beside the tower)', int), ('y', 'Top (y)', int)],
 }
 
 DRIVER_COLS = [('log', 'Log name', 150), ('display', 'Display name', 140), ('short', 'Short', 90),
@@ -543,7 +545,8 @@ class GraphicsSetup:
             row=r, column=0, columnspan=3, sticky='w', pady=(16, 4))
         sponsors = self.cfg.setdefault('sponsors', {})
         for kind, label in (('title', 'Title sponsor (race card, results)'),
-                            ('timing', 'Timing sponsor (tower, forecasts)'), ('partner', 'Official partner')):
+                            ('timing', 'Timing sponsor (tower, gap trends)'),
+                            ('partner', 'Official partner (start, gaps, pit stops)')):
             r += 1
             sp = sponsors.setdefault(kind, {'name': '', 'logo': ''})
             self.label(f, label, row=r, column=0, sticky='w', pady=3)
@@ -931,10 +934,17 @@ class GraphicsSetup:
                    buttonbackground=INPUT,
                    command=lambda: self.cfg.__setitem__('popup_duration', float(dur.get()))).grid(
             row=6, column=1, sticky='w')
+        self.label(f, "Graphics frame rate on export", row=7, column=0, sticky='w')
+        rfps = tk.StringVar()
+        tk.Spinbox(f, values=(10, 15, 20, 25, 30, 60), textvariable=rfps, width=6, bg=INPUT, fg=FG, relief='flat',
+                   buttonbackground=INPUT, state='readonly', readonlybackground=INPUT,
+                   command=lambda: self.cfg.__setitem__('render_fps', int(rfps.get()))).grid(
+            row=7, column=1, sticky='w')
+        rfps.set(str(self.cfg.get('render_fps', 15)))  # after creating it: a values spinbox starts on the first
 
         tk.Label(f, text="Automatic graphics", bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
-            row=7, column=0, sticky='w', pady=(14, 2))
-        r = 8
+            row=8, column=0, sticky='w', pady=(14, 2))
+        r = 9
         for k, label in gcfg.AUTO_TYPES.items():
             var = tk.BooleanVar(value=bool(self.cfg['auto_graphics'].get(k, True)))
             tk.Checkbutton(f, text=label, variable=var, bg=CARD, fg=FG, selectcolor=INPUT, activebackground=CARD,
@@ -1086,6 +1096,10 @@ class GraphicsSetup:
         if key == 'radio':
             r = lay['radio']
             return r['right'] - r['w'], r['cy'] - 100, r['right'], r['cy'] + 100
+        if key == 'pits':
+            p = lay['pits']
+            x = p.get('x') or (lay['tower']['x'] + lay['tower']['w'] + 14)
+            return x, p['y'], x + 240, p['y'] + 120
 
     def draw_guides(self):
         self.canvas.delete('guide')
@@ -1140,6 +1154,8 @@ class GraphicsSetup:
             lay['ticker'].update(y=by0, h=max(30, by1 - by0))
         elif key == 'radio':
             lay['radio'].update(right=bx1, cy=(by0 + by1) // 2, w=max(320, bx1 - bx0))
+        elif key == 'pits':
+            lay['pits'].update(x=max(1, bx0), y=by0)
         self.sync_region_vars()
         self.refresh_preview()
 

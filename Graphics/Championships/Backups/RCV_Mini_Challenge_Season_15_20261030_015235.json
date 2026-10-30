@@ -1,0 +1,313 @@
+{
+  "version": 1,
+  "enabled": true,
+  "base_resolution": [
+    1920,
+    1080
+  ],
+  "championship": {
+    "name": "JCW Mini Challenge",
+    "short_name": "",
+    "season": "Season 15",
+    "round": "Round 2",
+    "event_name": "Donnington Park",
+    "logo": "Graphics/Logos/RCVWhite.png",
+    "logo_tint_white": false,
+    "event_flag": "Graphics/Flags/UK.png"
+  },
+  "theme": {
+    "accent": "#E10600",
+    "accent2": "#FFC400",
+    "panel": "#0B0E14",
+    "panel_alpha": 0.62,
+    "text": "#FFFFFF",
+    "muted": "#9AA3B2"
+  },
+  "layout": {
+    "leaderboard": {
+      "enabled": true,
+      "x": 10,
+      "y": 110,
+      "w": 420,
+      "row_h": 25,
+      "pad": 15,
+      "rows": 0,
+      "header": true,
+      "footer": true
+    },
+    "map": {
+      "enabled": true,
+      "x": 1597,
+      "y": 113,
+      "w": 306,
+      "h": 299,
+      "header": true
+    },
+    "tower": {
+      "enabled": true,
+      "x": 24,
+      "y": 24,
+      "w": 400,
+      "row_h": 34,
+      "bottom": 820,
+      "rows": 0,
+      "cycle": "interval,gap,name,team",
+      "cycle_sec": 15
+    },
+    "logo": {
+      "enabled": true,
+      "x": 1903,
+      "y": 14,
+      "h": 58,
+      "anchor": "right"
+    },
+    "extra_logos": [],
+    "ticker": {
+      "enabled": true,
+      "y": 1018,
+      "h": 46,
+      "speed": 150,
+      "max_duration": 40,
+      "extra_hold": 10
+    },
+    "popups": {
+      "x": 88,
+      "bottom": 992,
+      "max_w": 780
+    },
+    "radio": {
+      "right": 1902,
+      "cy": 559,
+      "w": 420
+    },
+    "leader": {
+      "y": 24
+    }
+  },
+  "auto_graphics": {
+    "title_card": true,
+    "commentators": true,
+    "start_ticker": true,
+    "standings_ticker": true,
+    "start_movers": true,
+    "fastest_lap": true,
+    "new_leader": true,
+    "pit_stops": true,
+    "gap_tracker": true,
+    "sponsors": true,
+    "radio": true,
+    "chequered": true,
+    "results": true
+  },
+  "popup_types": {
+    "driver_card": true,
+    "battle": true,
+    "overtake": true,
+    "race_control": true,
+    "stat": true,
+    "movers": true,
+    "headline": true,
+    "gaps": true,
+    "insight": true,
+    "pit_stop": true
+  },
+  "popup_density": "medium",
+  "popup_duration": 7.0,
+  "drivers": {
+    "[RCV]Dom.Payne": {
+      "display": "Dom Payne",
+      "short": "PAYNE",
+      "number": "1",
+      "country": "GBR",
+      "team": "Itchy & Scratchy Racing",
+      "make": "MINI",
+      "color": "#2f0df2",
+      "car_image": "Graphics/Logos/ItchyScratchy.png"
+    },
+    "[RCV]ATIBoy69": {
+      "display": "ATI Boy",
+      "short": "ATIBOY",
+      "number": "420",
+      "country": "GBR",
+      "team": "Cheech and Chong",
+      "make": "MINI",
+      "color": "#399b2f",
+      "car_image": "Graphics/Logos/cheechchong.png"
+    },
+    "[RCV]Neworder": {
+      "display": "New Order",
+      "short": "NEWORDER",
+      "number": "26",
+      "country": "GBR",
+      "team": "Foxy Stoat Racing",
+      "make": "MINI",
+      "color": "#F97316",
+      "car_image": "Graphics/Logos/stoat.png"
+    },
+    "Daniel Born": {
+      "display": "Daniel Born",
+      "short": "BORN",
+      "number": "12",
+      "country": "RSA",
+      "team": "SAPS Underground",
+      "make": "MINI",
+      "color": "#edf0fc",
+      "car_image": "Graphics/Logos/SAPS.png"
+    },
+    "[RCV]thommo": {
+      "display": "Thommo",
+      "short": "THOMMO",
+      "number": "58",
+      "country": "GBR",
+      "team": "Ping Racing Essex",
+      "make": "MINI",
+      "color": "#bd7575",
+      "car_image": "Graphics/Logos/ping.png"
+    },
+    "kf.MTG": {
+      "display": "kf.MTG",
+      "short": "KF.MTG",
+      "number": "00",
+      "country": "USA",
+      "team": "Silent Assassin",
+      "make": "MINI",
+      "color": "#000000",
+      "car_image": "Graphics/Logos/silentassasin2.png"
+    },
+    "AlfaQuadSA": {
+      "display": "AlfaQuadSA",
+      "short": "ALFAQUAD",
+      "number": "12",
+      "country": "RSA",
+      "team": "Spitfire",
+      "make": "MINI",
+      "color": "#525823",
+      "car_image": "Graphics/Logos/spitfire.png"
+    },
+    "clinton.nortje": {
+      "display": "Clinton Nortje",
+      "short": "NORTJE",
+      "number": "64",
+      "country": "RSA",
+      "team": "Commodore",
+      "make": "MINI",
+      "color": "#716c4a",
+      "car_image": "Graphics/Logos/Commodore.png"
+    },
+    "inthebagbud": {
+      "display": "InTheBagBud",
+      "short": "BAGBUD",
+      "number": "",
+      "country": "GBR",
+      "team": "Beavertown Neck Oil",
+      "color": "#F59E0B",
+      "car_image": "Graphics/CarPreviews/InTheBagBud.dds"
+    },
+    "mattikake": {
+      "display": "mattikake",
+      "short": "MATTIKAKE",
+      "number": "77",
+      "country": "GBR",
+      "team": "McLaren Renault Mini",
+      "make": "MINI",
+      "color": "#f4b92f",
+      "car_image": "Graphics/Logos/McLaren.webp"
+    },
+    "Lucas Degen": {
+      "display": "Lucan Degen",
+      "short": "DEGEN",
+      "number": "28",
+      "country": "NLD",
+      "team": "Mini",
+      "make": "MINI",
+      "color": "#008000",
+      "car_image": "Graphics/Logos/mini.png"
+    },
+    "[RCV]muzzer82": {
+      "display": "Liam Murray",
+      "short": "MURRAY",
+      "number": "137",
+      "country": "GBR",
+      "team": "Rick and Morty",
+      "make": "MINI",
+      "color": "#215cc0",
+      "car_image": "Graphics/Logos/rickmorty.png"
+    },
+    "grizzlycliff1": {
+      "display": "GrizzlyCliff",
+      "short": "GRIZZLYCLIFF",
+      "number": "71",
+      "country": "GBR",
+      "team": "Team Gulf",
+      "make": "MINI",
+      "color": "#04dddd",
+      "car_image": "Graphics/Logos/gulf.png"
+    },
+    "jaavib": {
+      "display": "Jaavib",
+      "short": "JAAVIB",
+      "number": "85",
+      "country": "ESP",
+      "team": "John Player Special",
+      "make": "MINI",
+      "color": "#c4a31e",
+      "car_image": "Graphics/Logos/jps.png"
+    },
+    "Holdany": {
+      "display": "Holdany",
+      "short": "HOLDANY",
+      "number": "99",
+      "country": "GBR",
+      "team": "Mini",
+      "make": "MINI",
+      "color": "#e10600",
+      "car_image": "Graphics/Logos/mini.png"
+    },
+    "dmk": {
+      "display": "dmk",
+      "short": "DMK",
+      "number": "58",
+      "country": "POL",
+      "team": "Mini Poland",
+      "make": "MINI",
+      "color": "#ff0000",
+      "car_image": "Graphics/Logos/mini.png"
+    },
+    "[RCV]kenevo": {
+      "display": "Kenevo_Mini",
+      "short": "KENEVO_MINI",
+      "number": "27",
+      "country": "GBR",
+      "team": "The Mulch Vendor",
+      "make": "MINI",
+      "color": "#c089c7",
+      "car_image": "Graphics/Logos/BlockEkipa.png"
+    },
+    "[RCV]RayFin": {
+      "display": "Rayfin",
+      "short": "RAYFIN",
+      "number": "6",
+      "country": "GBR",
+      "team": "Canadian Eagle Racing",
+      "make": "MINI",
+      "color": "#00ffff",
+      "car_image": "Graphics/Logos/EagleRacing.png"
+    }
+  },
+  "sponsors": {
+    "title": {
+      "name": "",
+      "logo": "Graphics/Logos/Goodyear.png"
+    },
+    "timing": {
+      "name": "",
+      "logo": "Graphics/Logos/Rolex.png"
+    },
+    "partner": {
+      "name": "",
+      "logo": "Graphics/Logos/mini.png"
+    }
+  },
+  "commentators": {},
+  "championship_preset": "RCV Mini Challenge - Season 15"
+}

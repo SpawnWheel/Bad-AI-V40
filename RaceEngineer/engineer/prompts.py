@@ -303,6 +303,24 @@ def _filter_session_modes(text: str, session_group: Optional[str]) -> str:
     return head + blocks[group] + tail
 
 
+def driver_brief_section(brief: Optional[str]) -> str:
+    """The driver's own pre-race notes (typed in the launcher), or "" when there are none."""
+    brief = (brief or "").strip()
+    if not brief:
+        return ""
+    return (
+        "[DRIVER'S PRE-RACE BRIEF]:\n"
+        "Before the session your driver gave you these notes - rivalries, a strategy they have planned, or anything "
+        "else they want you to keep in mind. Treat them as part of your team's plan: bring them in when the live "
+        "situation makes them relevant (e.g. call out the rival when they are close, run the planned strategy and "
+        "say so if the data says it no longer works). They are the driver's intentions, not live data - telemetry, "
+        "timing and the standings still decide the facts.\n"
+        "---\n"
+        f"{brief}\n"
+        "---"
+    )
+
+
 def get_system_prompt(
     personality: str = "Sharp, authoritative, dry-witted race engineer. Candid, blunt, unflappable on the pit wall. Zero fluff, direct data, sarcastic when needed, laser-focused in battles.",
     accent: str = "British",
@@ -310,11 +328,13 @@ def get_system_prompt(
     reference_material: Optional[str] = None,
     persona=None,
     session_group: Optional[str] = None,
+    driver_brief: Optional[str] = None,
 ) -> str:
     """
     Builds the system prompt. When a Persona is given, every persona field comes from it.
     With a session_group, only that session's operating rules are included, and the (large)
     setup reference material is only attached for PRACTICE -- race/quali calls don't need it.
+    A driver_brief (the driver's pre-race notes) is attached to every session when given.
     """
     if persona is not None:
         fields = dict(
@@ -351,7 +371,10 @@ def get_system_prompt(
     if reference_material is None:
         reference_material = load_reference_material()
     if reference_material:
-        return base + "\n\n" + reference_material.strip()
+        base += "\n\n" + reference_material.strip()
+    brief = driver_brief_section(driver_brief)
+    if brief:
+        base += "\n\n" + brief
     return base
 
 
