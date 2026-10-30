@@ -35,6 +35,9 @@ FASTEST_LAP_RE =re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest 
 RADIO_RE = re.compile(r'\(Radio\)\s*(.*)$', re.I)
 RADIO_SEGMENT_RE = re.compile(r'([^"“”:]{1,60}?):\s*["“]([^"“”]+)["”]')
 WORD_COUNT_RE = re.compile(r'\s*Commentate in \d+ words\.?\s*$', re.I)
+# Stewards messages, same step: (Stewards) Incident involving A and B at The Esses noted: contact ...
+# (up to the next tag or event on the line)
+STEWARDS_RE = re.compile(r'\(Stewards\)\s*(.+?)(?=\s+-\s+\[|\s+\([A-Z][A-Za-z ]{2,20}\)\s|\s*Commentate in \d+ words|$)')
 
 
 def hms_to_sec(h, m, s):
@@ -598,6 +601,15 @@ def read_commentary(path):
             if m:
                 out.append((hms_to_sec(*m.group(1, 2, 3)), m.group(4).strip(), m.group(5).strip()))
     return out
+
+
+def read_stewards(paths):
+    """[(video seconds, message)] from the first video-timed log with (Stewards) entries."""
+    for path in paths:
+        msgs = [(t, m.group(1).strip()) for t, _, msg in read_raw_lines(path) for m in [STEWARDS_RE.search(msg)] if m]
+        if msgs:
+            return msgs
+    return []
 
 
 def read_radio_calls(paths):

@@ -12,7 +12,12 @@ PAD_BEFORE_SEC = 0.5
 PAD_AFTER_SEC = 0.5
 
 # Volume of the original game audio underneath the commentary (0 = commentary only)
-GAME_AUDIO_VOLUME = 0.30
+GAME_AUDIO_VOLUME = 0.90
+
+# How hard the game ducks while the commentators talk (higher ratio = quieter under speech).
+# Ratio 2.5 takes roughly 8 dB off the game under normal speech; it was 5 (~14 dB) and buried the cars.
+DUCK_THRESHOLD = 0.05
+DUCK_RATIO = 2.5
 
 # The stitched timeline is built on digital silence, so anything above this is commentary
 SILENCE_THRESHOLD_DBFS = -60.0
@@ -96,7 +101,7 @@ def build_audio_filter(has_game_audio):
         return (
             f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,volume={GAME_AUDIO_VOLUME}[game];"
             f"{commentary},asplit=2[comm][key];"
-            "[game][key]sidechaincompress=threshold=0.03:ratio=5:attack=15:release=450:makeup=1[ducked];"
+            f"[game][key]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={DUCK_RATIO}:attack=15:release=450:makeup=1[ducked];"
             "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
         )
     # Pad the commentary with silence so it covers the trailing clip padding

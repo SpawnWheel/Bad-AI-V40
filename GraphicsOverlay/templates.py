@@ -833,6 +833,27 @@ class Templates:
             text_vcenter(img, W - 14, top - LABEL_H / 2, d['race_time'], font(16, 'semibold_cond'), th.text, 'r')
         return img
 
+    def card_stewards(self, g):
+        """F1-style stewards message: the championship logo on the left, STEWARDS: <status> in bold, and the
+        drivers, corner and reason under it. As wide as its text."""
+        th = self.th
+        title = (g.get('title') or 'STEWARDS').upper()
+        f_title, f_sub = font(26, 'bold_cond'), font(19, 'semibold_cond')
+        sub = wrap((g.get('text') or '').upper(), f_sub, 760, 2)
+        logo = fit_image(self.logo, 90, 44) if self.logo else None
+        x = 20 + (logo.width + 18 if logo is not None else 0)
+        H = 16 + 30 + len(sub) * 24 + 14
+        W = int(x + max(text_w(f_title, title), self.lines_w(sub, f_sub)) + 24)
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 6, th.panel)
+        round_rect(img, (0, 0, 5, H), 0, th.accent2)
+        if logo is not None:
+            img.alpha_composite(logo, (20, int((H - logo.height) / 2)))
+            round_rect(img, (x - 10, 14, x - 9, H - 14), 0, (255, 255, 255, 60))
+        ImageDraw.Draw(img).text((x, 14), title, font=f_title, fill=th.text)
+        self.text_lines(img, x, 48, sub, f_sub, th.muted, 24)
+        return img
+
     def card_stat(self, g):
         th = self.th
         d = g.get('data', {})

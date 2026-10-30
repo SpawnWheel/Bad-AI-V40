@@ -53,6 +53,7 @@ AUTO_TYPES = {
     'gap_tracker': 'Gap trend: a car steadily catching (or pulling away from) the one ahead over several laps, '
                    'from lap 5 (not for close battles)',
     'radio': 'Team radio quotes (middle right)',
+    'stewards': 'Stewards messages from the commentary (top centre: incident noted, under investigation, decision)',
     'chequered': 'Chequered flag banner (top centre; the timing tower comes off)',
     'results': 'Final classification panel',
 }
