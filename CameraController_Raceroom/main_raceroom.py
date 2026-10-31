@@ -16,6 +16,7 @@ sys.path.insert(0, APP_DIR) # camera_gemini.py
 sys.path.insert(0, os.path.join(APP_DIR, "Logger_Raceroom")) # Shared memory reader lives with the RaceRoom logger
 from r3e_shared import R3ESharedMemory, decode
 import camera_gemini
+import incidents
 
 # Disable pydirectinput's safety pause and failsafe
 pydirectinput.PAUSE = 0.01
@@ -1096,7 +1097,12 @@ class RaceroomCameraController:
     def _on_gemini_answer(self, result_text):
         try:
             json_data = camera_gemini.extract_json(result_text)
-            json_data["sequence"], changes = enforce_camera_rules(json_data.get("sequence", []))
+            # Cut to the major incidents the AI's plan missed (an outside camera; the rules below fix any jumps)
+            json_data["sequence"], cuts = incidents.add_incident_cuts(
+                json_data.get("sequence", []), self.preloaded_input_file, camera=FALLBACK_CAMERA)
+            for cut in cuts:
+                self.log_message(f"Incident: {cut}")
+            json_data["sequence"], changes = enforce_camera_rules(json_data["sequence"])
             for change in changes:
                 self.log_message(f"Camera rule: {change}")
 
@@ -1115,6 +1121,8 @@ class RaceroomCameraController:
         text = f"Watching {driver} (P{pos})" if pos is not None else f"Watching {driver}"
         if item_camera(item):
             text += f" - {item_camera(item)} camera"
+        if item.get("incident"):
+            text += f" - incident: {item['incident']}"
         return text
 
     def _generate_director_notes_from_sequence(self, sequence_data):
