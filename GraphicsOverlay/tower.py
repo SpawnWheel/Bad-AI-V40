@@ -6,17 +6,18 @@ The value column cycles through the configured modes, and cars that change place
 past each other. The tower is only as wide as its names need (up to the configured width), and
 turns yellow while a yellow flag is out.
 """
+import bisect
 import colorsys
 import hashlib
 import os
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from . import config as gcfg
 from .drawing import (add_shadow, ease_in, ease_out, ellipsize, fit_font, fit_image, font, h_gradient,
                       load_image, rgba, round_outline, round_rect, text_vcenter, text_w)
 from .race_data import norm_key
-from .templates import FLAG_COLORS, contrast_text
+from .templates import FASTEST_PURPLE, FLAG_COLORS, contrast_text
 from .timing import FINISH_FINISHED, row_value
 
 SWAP_DUR = 0.8     # seconds for two rows to trade places
@@ -86,6 +87,9 @@ class TimingTower:
             self.x, self.y = min(self.x, self.cover[0]), min(self.y, self.cover[1])
         self.geom = self._geometry()
         self.w = self.geom['w']
+        # Who holds the fastest lap when (a purple stopwatch on their row)
+        self._fl = self.race.fastest_laps_video()
+        self._fl_times = [t for t, _ in self._fl]
 
     # ------------------------------------------------------------------ layout
     def _hud_rect(self):
@@ -167,6 +171,11 @@ class TimingTower:
             return 'yellow'
         return None
 
+    def fastest_at(self, t):
+        """The driver holding the race's fastest lap at video time t, or None."""
+        i = bisect.bisect_right(self._fl_times, t)
+        return self._fl[i - 1][1] if i else None
+
     def mode_at(self, t):
         return int(max(0.0, t) // self.cycle_sec) % len(self.modes)
 
@@ -202,20 +211,21 @@ class TimingTower:
             anim = min(steps, int(local / SWAP_DUR * steps))
             flash = min(FLASH_STEPS, int(local / FLASH_DUR * FLASH_STEPS))
         return (idx, self.mode_at(t), prev_i, anim, flash, self.timing.clock_text(idx, t),
-                self.race.flag_state_at(t), self.timing.lap_text(idx, t))
+                self.race.flag_state_at(t), self.timing.lap_text(idx, t), self.fastest_at(t))
 
     # ------------------------------------------------------------------ drawing
     def draw(self, frame, t):
         k = self.key(t)
-        idx, mode_i, prev_i, anim, flash, clock, flag, lap = k
-        body_key = k[:5] + (flag,)
+        idx, mode_i, prev_i, anim, flash, clock, flag, lap, fastest = k
+        body_key = k[:5] + (flag, fastest)
         if body_key not in self._cache:
             if len(self._cache) > 400:
                 self._cache.clear()
             steps = max(1, int(SWAP_DUR * self.fps))
             p_move = 1.0 if anim is None else anim / steps
             p_flash = None if flash is None else flash / FLASH_STEPS
-            self._cache[body_key] = add_shadow(self._body(idx, self.modes[mode_i], prev_i, p_move, p_flash, flag))
+            self._cache[body_key] = add_shadow(self._body(idx, self.modes[mode_i], prev_i, p_move, p_flash, flag,
+                                                          fastest))
         img, margin = self._cache[body_key]
         x, y = self.x, self.y
         frame.alpha_composite(img, (int(x - margin), int(y - margin)))
@@ -249,7 +259,7 @@ class TimingTower:
                 y += rh
         return slots, bars, groups
 
-    def _body(self, idx, mode, prev_i, p_move, p_flash, flag):
+    def _body(self, idx, mode, prev_i, p_move, p_flash, flag, fastest=None):
         th = self.th
         w = self.w
         geom = self.geom
@@ -286,7 +296,7 @@ class TimingTower:
                 drawn.append((change, y, r))
         # Cars moving up are drawn last so they slide over the cars they pass
         for change, y, r in sorted(drawn, key=lambda d: d[0]):
-            self._row(img, body_top + y, w, r, mode, values.get(r['name']), change, p_flash)
+            self._row(img, body_top + y, w, r, mode, values.get(r['name']), change, p_flash, r['name'] == fastest)
         self._footer(img, w, geom['h'] - FOOTER_H, flag, yellow, idx)
         if yellow:
             round_outline(img, (0, 0, w, geom['h']), 8, YELLOW[:3] + (230,), 3)
@@ -394,7 +404,7 @@ class TimingTower:
                 return rgba(v)
         return rgba(stable_color(make or name))
 
-    def _row(self, img, y, w, r, mode, value, change, p_flash):
+    def _row(self, img, y, w, r, mode, value, change, p_flash, fastest=False):
         th = self.th
         rh = self.geom['row_h']
         h = rh - GAP
@@ -438,6 +448,14 @@ class TimingTower:
         # Name / team, and the value box
         val_w = cols['val_w'] if mode in ('interval', 'gap') else 0
         text_right = w - 4 - val_w - 6
+        finished = r.get('finish') == FINISH_FINISHED
+        # Room at the end of the name for the chequered flag and the fastest lap stopwatch
+        icon = max(14, int(h * 0.72))
+        marks_x = text_right
+        if finished:
+            text_right -= 20
+        if fastest:
+            text_right -= icon + 6
         if mode == 'name':
             label = meta.get('display', name)
         else:
@@ -446,7 +464,6 @@ class TimingTower:
         # Full names shrink a little before they are cut short
         f = fit_font(label, text_right - x, fs - 1, 'bold_cond', max(10, fs - 3))
         text_vcenter(img, x, cy + 1, ellipsize(label, f, text_right - x), f, th.text)
-        finished = r.get('finish') == FINISH_FINISHED
         if val_w:
             vx = w - 4 - val_w
             round_rect(img, (vx, y, w - 4, y + h), 2, (255, 255, 255, 34))
@@ -459,7 +476,28 @@ class TimingTower:
             fv = fit_font(value, val_w - 14, fs - 3, 'semibold_cond', 9)
             text_vcenter(img, w - 12, cy + 1, value, fv, col, 'r')
         if finished:
-            self.tpl._checker(img, text_right - 16, int(cy - 6), 14, 12, 3)
+            marks_x -= 16
+            self.tpl._checker(img, marks_x, int(cy - 6), 14, 12, 3)
+            marks_x -= 4
+        if fastest:
+            self._stopwatch(img, marks_x - icon, cy, icon)
+
+    @staticmethod
+    def _stopwatch(img, x, cy, size):
+        """Small purple stopwatch for the fastest lap holder."""
+        s = 4  # drawn large and scaled down for smooth edges
+        big = Image.new('RGBA', (size * s, size * s), (0, 0, 0, 0))
+        d = ImageDraw.Draw(big)
+        n = size * s
+        purple = rgba(FASTEST_PURPLE)
+        crown = int(n * 0.16)
+        d.rounded_rectangle((n * 0.40, 0, n * 0.60, crown), radius=n * 0.04, fill=purple)
+        d.ellipse((n * 0.04, crown * 0.8, n * 0.96, n), fill=purple)
+        cx, cyy, r = n / 2, (crown * 0.8 + n) / 2, (n - crown * 0.8) / 2
+        d.ellipse((cx - r * 0.72, cyy - r * 0.72, cx + r * 0.72, cyy + r * 0.72), outline=(255, 255, 255, 255),
+                  width=max(2, int(n * 0.07)))
+        d.line((cx, cyy, cx + r * 0.32, cyy - r * 0.42), fill=(255, 255, 255, 255), width=max(2, int(n * 0.08)))
+        img.alpha_composite(big.resize((size, size), Image.LANCZOS), (int(x), int(cy - size / 2)))
 
     def _footer(self, img, w, y, flag_state, yellow=None, idx=None):
         th = self.th

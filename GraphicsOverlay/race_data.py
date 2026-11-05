@@ -29,6 +29,7 @@ PASSIVE_LEAD = 8.0      # stopped/pit alerts can be logged a few seconds after c
 PIT_EXIT_GRACE = 3.0
 STOPPED_YELLOW_MAX = 10.0  # a stopped car shows a yellow until it moves again, at most this long
 STOPPED_YELLOW_BRIDGE = 3.0  # stoppages closer together than this run as one yellow
+FASTEST_LAP_FROM = 2       # fastest laps only count from this lap (the opening lap is skipped)
 FASTEST_LAP_RE =re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest lap of the race: ([\d:.]+)'
                             r'(?: on lap (\d+))?(?:, ([\d.]+)s quicker than (.+?) ([\d:.]+))?\.\s*$')
 # Radio messages written by the Refinement step: (Radio) Thommo to engineer: "..." Engineer: "..."
@@ -401,6 +402,11 @@ class RaceData:
         if ahead in names and behind in names and names.index(behind) == names.index(ahead) + 1:
             return snap[1][names.index(behind)][2]
         return None
+
+    def fastest_laps_video(self):
+        """[(video time, driver)] for each fastest lap of the race from FASTEST_LAP_FROM on, in order."""
+        return [(self.to_video(e['t']), e['driver']) for e in self.events if e['type'] == 'fastest_lap'
+                and (e.get('lap') is None or e['lap'] >= FASTEST_LAP_FROM)]
 
     def events_video(self):
         for e in self.events:

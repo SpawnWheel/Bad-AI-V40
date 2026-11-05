@@ -278,8 +278,9 @@ class SharedMemory(ctypes.Structure):
 # Windows Virtual Key Code for F12
 VK_F12 = 0x7B
 
-# Fastest lap events are only announced once the leader has completed this many laps
-FASTEST_LAP_MIN_RACE_LAPS = 5
+# Fastest lap events are only announced once the leader has completed this many laps; the opening
+# lap (standing start, traffic, cold tyres) never counts towards the fastest lap
+FASTEST_LAP_MIN_RACE_LAPS = 2
 
 # The game is read every POLL_INTERVAL seconds at normal speed. A fast-forwarded replay runs the
 # sim clock faster, so the logger reads that much more often to keep the same detail per sim second.
@@ -330,6 +331,7 @@ class AMS2EventLogger:
         self.distance_history = {} # name -> list of (sim_time, total_distance)
         self.fastest_lap = None # {"name", "time", "lap"} - best valid lap of the race so far
         self.fastest_lap_announced = False # True once the race has reached FASTEST_LAP_MIN_RACE_LAPS
+        self.opening_lap_best = {} # name -> best lap AMS2 reported after the opening lap (never counts)
         self.last_track_key = ""
         self.current_track_corners = []
         self.corner_names_dir = self._find_corner_names_dir()
@@ -590,6 +592,7 @@ class AMS2EventLogger:
             self.distance_history.clear()
             self.fastest_lap = None
             self.fastest_lap_announced = False
+            self.opening_lap_best.clear()
 
         # Phase Updates
         if self.data.mPitMode != self.last_pit_mode:
@@ -1050,7 +1053,15 @@ class AMS2EventLogger:
             if name not in positions:
                 continue  # Safety car or not yet tracked
             lap_time = self.data.mFastestLapTimes[i]
-            if lap_time > 10.0 and (best is None or lap_time < best[1]):
+            if lap_time <= 10.0:
+                continue
+            # The opening lap never counts: remember the time it gave and skip it until they beat it
+            if laps_completed.get(name, 0) <= 1:
+                self.opening_lap_best[name] = lap_time
+                continue
+            if abs(lap_time - self.opening_lap_best.get(name, -1.0)) < 0.0005:
+                continue
+            if best is None or lap_time < best[1]:
                 best = (name, lap_time)
 
         if best is None:

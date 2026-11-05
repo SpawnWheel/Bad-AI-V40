@@ -30,8 +30,9 @@ ORDER_SETTLE_TIME = 1.0
 # A car must be missing from the driver list this long before it counts as having left the race
 LEFT_SESSION_DELAY = 10.0
 
-# Fastest lap events are only announced once the leader has completed this many laps
-FASTEST_LAP_MIN_RACE_LAPS = 5
+# Fastest lap events are only announced once the leader has completed this many laps; the opening
+# lap (standing start, traffic, cold tyres) never counts towards the fastest lap
+FASTEST_LAP_MIN_RACE_LAPS = 2
 
 PHASE_NAMES = {
     PHASE_GARAGE: "in the Garage",
@@ -523,7 +524,7 @@ class RaceroomEventLogger:
                 self.last_lap_times[name] = lap_time
                 was_valid = self.last_lap_valid.get(name, 1) == 1
                 best = self.best_laps.get(name)
-                if was_valid and (best is None or lap_time < best[0]):
+                if was_valid and d["laps"] >= 2 and (best is None or lap_time < best[0]):
                     self.best_laps[name] = (lap_time, d["laps"])
 
         if not is_race:
