@@ -337,25 +337,15 @@ class AMS2CameraController:
             messagebox.showerror("Error", f"Failed to read data file: {e}")
             return
 
-        # 4b. Optional: Project Specific Notes
+        # 4b. Optional: the camera notes (the race notes are for the other AI steps, not the camera)
         extra_context = ""
         project_path = os.environ.get("R3E_PROJECT_PATH")
         if not project_path:
             possible_project_path = os.path.dirname(os.path.dirname(os.path.abspath(data_path)))
-            if os.path.exists(os.path.join(possible_project_path, "project_notes.txt")):
+            if os.path.exists(camera_gemini.notes_file(possible_project_path, "camera_notes", "camera_instructions.txt")):
                 project_path = possible_project_path
 
         if project_path:
-            notes_path = camera_gemini.notes_file(project_path, "race_notes", "project_notes.txt")
-            if os.path.exists(notes_path):
-                try:
-                    with open(notes_path, 'r', encoding='utf-8') as f:
-                        notes = "\n".join(l for l in f.read().splitlines() if not l.lstrip().startswith("#")).strip()
-                    if notes:
-                        extra_context = f"\n\nProject Specific Instructions:\n{notes}"
-                    self.log_message(f"Loaded race notes from: {os.path.basename(notes_path)}")
-                except Exception as e:
-                    self.log_message(f"Warning: Failed to read race notes: {e}")
             extra_context += self._director_instructions(project_path)
 
         settings = self.data["settings"]

@@ -328,7 +328,7 @@ class RaceScreen(tk.Frame):
     def _notes_editors(self, parent):
         for key, title, about in (
                 ("race_notes", "Race notes", "Championship, storylines, rivalries, nicknames, how to pronounce names, "
-                                             "who to focus on. Used by every AI step."),
+                                             "who to focus on. Used by the spice, commentary and graphics steps."),
                 ("camera_notes", "Camera notes", "Only for the camera director - e.g. 'Focus on car #24 whenever it "
                                                  "is battling for position.'")):
             c = t.card(parent, padx=18, pady=14)

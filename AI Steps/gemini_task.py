@@ -90,6 +90,8 @@ def run_ai_step():
 
     folders = [project_path] if project_path else []
     folders.append(os.path.dirname(os.path.abspath(data_filename)))
+    if os.environ.get("SKIP_RACE_NOTES") == "1":  # the event picker doesn't need them
+        folders = []
     for folder in folders:
         for name in ("race_notes.txt", "project_notes.txt"):
             possible_path = os.path.join(folder, name)

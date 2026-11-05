@@ -29,7 +29,7 @@ STEPS = {
         hint="Adds who the camera was watching to the race log. Takes a second."),
     "events": dict(
         title="Pick the events for commentary",
-        kind="auto", script="AI Steps/gemini_task.py", prompt_folder="Filtering",
+        kind="auto", script="AI Steps/gemini_task.py", prompt_folder="Filtering", race_notes=False,
         args=["combined_log"], needs=["combined_log"], output="events",
         hint="The AI picks the moments worth talking about from the race log."),
     "review": dict(
@@ -82,9 +82,9 @@ STEPS = {
 
 STAGES = [
     dict(id="notes", title="Race notes", steps=[],
-         about="Tell the AI about this race before you start. The race notes are read by the camera director, "
-               "the event picker, the commentary writer and the graphics. Camera notes are only for the camera "
-               "director. You can change them at any time."),
+         about="Tell the AI about this race before you start. The race notes are read by the spice step, "
+               "the commentary writer and the graphics. Camera notes are only for the camera director, which "
+               "doesn't read the race notes. You can change them at any time."),
     dict(id="film", title="Film the replay", steps=["camera"],
          about="1. Open the Camera Director and press Generate - the AI plans the camera shots from your race log.\n"
                "2. Load the race replay in the sim and start recording your screen (OBS or similar).\n"

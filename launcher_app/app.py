@@ -345,6 +345,8 @@ class App:
         env.update(self.ai_env())
         if step.get("prompt_folder"):
             env["GEMINI_PROMPT_FILE"] = pipeline.prompt_path(step, self.prompt_choice(sid))
+        if step.get("race_notes") is False:
+            env["SKIP_RACE_NOTES"] = "1"
         started = time.time()
         proc = self.pm.start(step["title"], [python_exe()] + args, cwd=cwd, env=env,
                              kind="step" if step["kind"] == "auto" else "tool", race=folder, step_id=sid)
@@ -397,8 +399,8 @@ class App:
         except OSError as e:
             messagebox.showerror("Copy prompt", f"Could not read the prompt:\n{e}")
             return
-        notes = racefiles.notes_text(racefiles.race_file(folder, "race_notes"))
-        extra = f"\n\nProject Specific Instructions:\n{notes}" if notes else ""
+        notes = racefiles.notes_text(racefiles.race_file(folder, "race_notes")) if step.get("race_notes") is not False else ""
+        extra =f"\n\nProject Specific Instructions:\n{notes}" if notes else ""
         data = ""
         inputs = [k for k in step["args"] if k != "OUTPUT"]
         source = pipeline.input_path(folder, inputs[0]) if inputs else None
