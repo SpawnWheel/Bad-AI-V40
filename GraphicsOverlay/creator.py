@@ -388,7 +388,12 @@ def resolve_entry(raw, cfg, race, resolve, facts):
     elif typ == 'insight':
         if not g['title']:
             return None, 'insight needs a title'
-        g['text'] = g['text'][:130]
+        if (g.get('label') or '').upper() in gcfg.CIRCUIT_LABELS:
+            # Circuit notes carry a little more to read
+            g['text'] = g['text'][:170]
+            g['duration'] = max(g['duration'], 9.0)
+        else:
+            g['text'] = g['text'][:130]
 
     if typ == 'race_control':
         data['race_time'] = race_time_label(race, g['time'])

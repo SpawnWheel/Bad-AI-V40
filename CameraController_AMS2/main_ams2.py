@@ -12,6 +12,7 @@ import pygetwindow as gw
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) # camera_gemini.py
 import camera_gemini
+import incidents
 import winsound
 import wave
 import struct
@@ -409,6 +410,11 @@ class AMS2CameraController:
     def _on_gemini_answer(self, result_text):
         try:
             json_data = camera_gemini.extract_json(result_text)
+            # Cut to the major incidents the AI's plan missed
+            json_data["sequence"], cuts = incidents.add_incident_cuts(
+                json_data.get("sequence", []), self.preloaded_input_file)
+            for cut in cuts:
+                self.log_message(f"Incident: {cut}")
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_filename = camera_gemini.output_path("camera_sequence", f"camera_sequence_ams2_{timestamp}.json")
@@ -418,6 +424,13 @@ class AMS2CameraController:
             self._on_generation_success(output_filename)
         except Exception as e:
             self._on_gemini_error(e)
+
+    @staticmethod
+    def _note_text(item):
+        text = f"Watching {item.get('driver', 'Unknown')} (P{item.get('position')})"
+        if item.get("incident"):
+            text += f" - incident: {item['incident']}"
+        return text
 
     def _generate_director_notes_from_sequence(self, sequence_data, json_filename):
         """Generate the director notes .txt file directly from the sequence data,
@@ -432,7 +445,7 @@ class AMS2CameraController:
                     driver = item.get("driver", "Unknown")
                     pos = item.get("position")
                     if pos is not None:
-                        f.write(f"{tc} - [DIRECTOR NOTES] Watching {driver} (P{pos})\n")
+                        f.write(f"{tc} - [DIRECTOR NOTES] {self._note_text(item)}\n")
             self.log_message(f"Director notes saved: {os.path.basename(txt_filename)}")
             return txt_filename
         except Exception as e:
@@ -564,7 +577,7 @@ class AMS2CameraController:
         
         if pos is not None:
             self.log_message(f"Switching to {driver} (P{pos})")
-            self._save_director_note(tc, f"Watching {driver} (P{pos})")
+            self._save_director_note(tc, self._note_text(item))
             threading.Thread(target=self._switch_driver, args=(pos,), daemon=True).start()
         else:
             self.log_message(f"Warning: No position for {driver}")

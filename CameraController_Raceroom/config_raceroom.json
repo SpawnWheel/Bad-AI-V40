@@ -3,7 +3,7 @@
         "hold_time": 0.05,
         "step_gap": 0.15,
         "hide_ui_key": "h",
-        "hide_replay_ui": true,
+        "hide_replay_ui": false,
         "manual_fallback": false,
         "camera_method": "hotkeys",
         "camera_keys": {
@@ -13,7 +13,7 @@
             "driving": "insert"
         },
         "gemini_model": "gemini-3.8-flash",
-        "gemini_thinking_level": "HIGH",
+        "gemini_thinking_level": "MEDIUM",
         "api_key": ""
     },
     "cameras": {

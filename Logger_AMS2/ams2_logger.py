@@ -334,6 +334,8 @@ class AMS2EventLogger:
         self.current_track_corners = []
         self.corner_names_dir = self._find_corner_names_dir()
         self.last_clock_sample = None # (wall time, sim time) at the previous read, to measure replay speed
+        self.session_clock = 0.0 # Live session time, summed from the lap timer (live mCurrentTime restarts every lap)
+        self.clock_sample = None # (mCurrentTime, viewed participant, wall time) at the previous update
 
     def _find_corner_names_dir(self):
         """Locate the Corner Names folder."""
@@ -473,13 +475,39 @@ class AMS2EventLogger:
                 return True
         return False
 
+    def is_replay(self):
+        return self.data is not None and self.data.mGameState in (6, 7)
+
     def get_session_time(self):
-        """Get elapsed session time directly from the sim's own session clock (mCurrentTime).
-        This is the pCars2/AMS2 equivalent of R3E's game_simulation_time.
-        Never uses wall-clock time."""
-        if self.data is not None and self.data.mCurrentTime >= 0:
-            return self.data.mCurrentTime
-        return 0.0
+        """Elapsed session time from the sim's own clock, never wall-clock time.
+        In a replay mCurrentTime runs for the whole session; live it is the viewed car's lap timer,
+        which restarts at every line crossing, so live uses the clock summed in tick_session_clock."""
+        if self.is_replay():
+            return max(0.0, self.data.mCurrentTime)
+        return self.session_clock
+
+    def tick_session_clock(self):
+        """Advance the live session clock by how far the lap timer ran since the previous update."""
+        current, viewed, wall_now = self.data.mCurrentTime, self.data.mViewedParticipantIndex, time.perf_counter()
+        previous, self.clock_sample = self.clock_sample, (current, viewed, wall_now)
+        if self.is_replay() or previous is None or current < 0 or previous[0] < 0:
+            return
+        prev_current, prev_viewed, prev_wall = previous
+        if viewed != prev_viewed:
+            # The timer now belongs to another car: the wall clock covers this one step
+            if self.data.mGameState != 3:  # paused
+                self.session_clock += wall_now - prev_wall
+        elif current >= prev_current:
+            self.session_clock += current - prev_current
+        else:
+            # A new lap started: the end of the old lap plus the time into the new one
+            last_lap = self.data.mLastLapTime
+            if prev_current <= last_lap <= prev_current + 5.0:
+                self.session_clock += last_lap - prev_current
+            self.session_clock += current
+
+    def reset_session_clock(self):
+        self.session_clock = 0.0
 
     def get_playback_speed(self):
         """How fast the sim clock ran since the previous read: about 1 when live or in a normal
@@ -513,6 +541,7 @@ class AMS2EventLogger:
         if not self.data:
             return
 
+        self.tick_session_clock()
         sim_now = self.get_session_time()  # Sim time for ALL event timing — never wall-clock
 
         # Track Identification & Reporting
@@ -533,6 +562,8 @@ class AMS2EventLogger:
         restarted = (self.data.mSessionState == 5 and self.last_session_state == 5 and self.green_flag_fired
                      and self.data.mRaceState == 1 and self.last_race_state != 1)
         if self.data.mSessionState != self.last_session_state or restarted:
+            self.reset_session_clock()
+            sim_now = self.get_session_time()
             session_name = SESSION_STATES.get(self.data.mSessionState, "Unknown")
             if self.data.mSessionState == 5:
                 self.begin_race()

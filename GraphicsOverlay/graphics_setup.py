@@ -70,7 +70,8 @@ REGION_FIELDS = {
     'tower': [('enabled', 'Show timing tower', bool), ('x', 'Left (x)', int), ('y', 'Top (y)', int),
               ('w', 'Max width (shrinks to fit the names)', int), ('row_h', 'Max row height', int), ('bottom', 'Lowest bottom edge (y)', int),
               ('rows', 'Rows (0 = every car; per class when multi-class)', int),
-              ('cycle', 'Columns in turn (interval, gap, name)', str), ('cycle_sec', 'Seconds per column', int)],
+              ('cycle', 'Columns in turn (interval, gap, name)', str), ('cycle_sec', 'Seconds per column', int),
+              ('class_groups', 'Classes racing together (all, or A + B; C + D)', str)],
     'pits': [('x', 'Left (x, 0 = beside the tower)', int), ('y', 'Top (y)', int)],
 }
 
@@ -545,7 +546,7 @@ class GraphicsSetup:
             row=r, column=0, columnspan=3, sticky='w', pady=(16, 4))
         sponsors = self.cfg.setdefault('sponsors', {})
         for kind, label in (('title', 'Title sponsor (race card, results)'),
-                            ('timing', 'Timing sponsor (tower, gap trends)'),
+                            ('timing', 'Timing sponsor (tower, fastest lap, last 4 laps)'),
                             ('partner', 'Official partner (start, gaps, pit stops)')):
             r += 1
             sp = sponsors.setdefault(kind, {'name': '', 'logo': ''})
@@ -842,9 +843,29 @@ class GraphicsSetup:
     # ------------------------------------------------------------------ AI commentators tab
     def _build_commentators_tab(self):
         f = self.tab_commentators
-        tk.Label(f, text=("A short bio for each AI commentator, shown under their name on the AI Commentators "
-                          "card at the start of the race. Bios are kept for future races like the driver details."),
+        tk.Label(f, text=("A short bio for each AI commentator and one picture for the AI Commentators list under "
+                          "the map at the start of the race. A cut-out PNG (transparent background) looks best; put "
+                          "it in Graphics/Commentators. Kept for future races like the driver details. The official "
+                          "partner sponsor shows on the list."),
                  bg=CARD, fg=DIM, font=(FONT, 9), wraplength=520, justify='left').pack(anchor='w')
+        prow = tk.Frame(f, bg=CARD)
+        prow.pack(fill='x', pady=(10, 0))
+        tk.Label(prow, text="Picture", bg=CARD, fg=FG, font=(FONT, 10, "bold")).pack(side='left')
+        self.comm_photo = tk.StringVar(value=gcfg.commentator_group_photo(self.cfg))
+        cb = ttk.Combobox(prow, textvariable=self.comm_photo, width=40, values=self.commentator_photos())
+        cb.pack(side='left', padx=6)
+        cb.bind("<<ComboboxSelected>>", lambda e: self.set_commentator_photo(self.comm_photo.get()))
+        styled_button(prow, "Browse…", lambda: self.set_commentator_photo(
+            self.browse_image(gcfg.COMMENTATOR_DIR))).pack(side='left')
+        disc = tk.Frame(f, bg=CARD)
+        disc.pack(fill='x', pady=(10, 0))
+        tk.Label(disc, text="Disclaimer under the list (empty hides it)", bg=CARD, fg=FG,
+                 font=(FONT, 10, "bold")).pack(anchor='w')
+        self.disc_box = tk.Text(disc, height=2, width=60, wrap='word', bg=INPUT, fg=FG, insertbackground=FG,
+                                relief='flat', font=(FONT, 10), highlightthickness=0)
+        self.disc_box.insert('1.0', gcfg.commentator_disclaimer(self.cfg))
+        self.disc_box.pack(fill='x', pady=(2, 0))
+        self.disc_box.bind('<KeyRelease>', lambda e: self.set_disclaimer())
         self.comm_rows = tk.Frame(f, bg=CARD)
         self.comm_rows.pack(fill='x', pady=(10, 0))
         add = tk.Frame(f, bg=CARD)
@@ -884,6 +905,23 @@ class GraphicsSetup:
 
     def set_commentator_bio(self, name, box):
         self.cfg['commentators'].setdefault(name, {})['bio'] = ' '.join(box.get('1.0', 'end').split())
+        self.schedule_preview()
+
+    @staticmethod
+    def commentator_photos():
+        os.makedirs(gcfg.COMMENTATOR_DIR, exist_ok=True)
+        return ['(none)'] + [f"Graphics/Commentators/{x}" for x in gcfg.list_images(gcfg.COMMENTATOR_DIR)]
+
+    def set_commentator_photo(self, path):
+        if path is None:
+            return
+        path = '' if path == '(none)' else path
+        self.comm_photo.set(path)
+        self.cfg['commentator_photo'] = path
+        self.schedule_preview()
+
+    def set_disclaimer(self):
+        self.cfg['commentator_disclaimer'] = ' '.join(self.disc_box.get('1.0', 'end').split())
         self.schedule_preview()
 
     def add_commentator(self):

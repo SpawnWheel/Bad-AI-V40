@@ -27,6 +27,9 @@ POLL_INTERVAL = 0.25
 # The running order must hold this long before overtakes are counted (side-by-side cars flicker)
 ORDER_SETTLE_TIME = 1.0
 
+# A car must be missing from the driver list this long before it counts as having left the race
+LEFT_SESSION_DELAY = 10.0
+
 # Fastest lap events are only announced once the leader has completed this many laps
 FASTEST_LAP_MIN_RACE_LAPS = 5
 
@@ -81,6 +84,28 @@ class SimClock:
         return self.elapsed
 
 
+def game_data_paths():
+    """RaceRoom's GameData/General/r3e-data.json in each Steam library."""
+    steam = r"C:\Program Files (x86)\Steam"
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+            steam = winreg.QueryValueEx(key, "SteamPath")[0]
+    except Exception:
+        pass
+    libraries = [steam]
+    try:
+        with open(os.path.join(steam, "steamapps", "libraryfolders.vdf"), "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.strip().split('"')
+                if len(parts) >= 4 and parts[1] == "path":
+                    libraries.append(parts[3].replace("\\\\", "\\"))
+    except OSError:
+        pass
+    return [os.path.join(lib, "steamapps", "common", "raceroom racing experience", "Game", "GameData",
+                         "General", "r3e-data.json") for lib in dict.fromkeys(libraries)]
+
+
 class R3ELookup:
     """Car, class, team and manufacturer names from RaceRoom's content data (r3e-data.json)."""
     def __init__(self):
@@ -89,17 +114,24 @@ class R3ELookup:
         self.liveries = {}
         self.teams = {}
         self.manufacturers = {}
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "r3e-data.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+        # The game's own copy lists every car it has; the bundled copy is older and misses new content
+        bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), "r3e-data.json")
+        for path in game_data_paths() + [bundled]:
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+            except Exception as e:
+                print(f"Warning: could not load car names from {path}: {e}")
+                continue
             self.cars = data.get("cars", {})
             self.classes = data.get("classes", {})
             self.liveries = data.get("liveries", {})
             self.teams = data.get("teams", {})
             self.manufacturers = data.get("manufacturers", {})
-        except Exception as e:
-            print(f"Warning: could not load car names from {path}: {e}")
+            print(f"Car names: {len(self.cars)} cars from {path}")
+            break
 
         self.learned_cars = {} # model_id -> name, for content newer than r3e-data.json
         self.learned_classes = {} # class_id -> name
@@ -173,6 +205,9 @@ class RaceroomEventLogger:
         self.last_penalties = {} # name -> {field: bool pending}
         self.finished_participants = set() # set of names who have finished or retired
         self.assumed_retired_participants = set() # set of names assumed retired due to no movement
+        self.race_entrants = set() # names seen in the driver list since the green flag
+        self.missing_since = {} # name -> sim_time it dropped out of the driver list
+        self.left_participants = set() # names logged as having left the session
         self.last_movement_time = {} # name -> sim_time of last movement
         self.last_overtake_time = {} # name -> sim_time of last overtake
         self.accidents = {} # name -> sim_time when accident started
@@ -414,13 +449,25 @@ class RaceroomEventLogger:
         for d in drivers:
             self.update_driver(d, sim_now, is_race, phase)
 
-        # Disconnected / removed cars
-        if self.last_positions and is_race:
+        # Disconnected / removed cars: only once the race is running (the driver list blinks out while an
+        # online server loads the race from practice), and only after the car has stayed gone for a while
+        if is_race and phase in (PHASE_GREEN, PHASE_CHECKERED) and drivers:
             current = {d["name"] for d in drivers}
-            for name in set(self.last_positions) - current:
-                if name not in self.finished_participants:
-                    self.log("SESSION", f"{name} has retired and left the session.")
-                    self.finished_participants.add(name)
+            for name in current:
+                self.missing_since.pop(name, None)
+                if name in self.left_participants:
+                    self.left_participants.discard(name)
+                    self.finished_participants.discard(name)
+                    self.log("SESSION", f"Notice: {name} was logged as having left but is back in the session!")
+            # Most of the field vanishing at once is the game reshuffling its list, not mass retirements
+            if len(current) > len(self.race_entrants) // 2:
+                for name in self.race_entrants - current:
+                    gone_since = self.missing_since.setdefault(name, sim_now)
+                    if sim_now - gone_since >= LEFT_SESSION_DELAY and name not in self.finished_participants:
+                        self.log("SESSION", f"{name} has retired and left the session.")
+                        self.finished_participants.add(name)
+                        self.left_participants.add(name)
+            self.race_entrants |= current
 
         if is_race and phase == PHASE_GREEN:
             self.check_overtakes(drivers, sim_now)

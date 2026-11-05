@@ -33,12 +33,50 @@ class Timing:
         if not self.states:
             self._from_log()
         self.times = [s['t'] for s in self.states]
+        self.merged = {}       # game class (lower case) -> class it races in, from group_classes()
+        self.group_spec = None
+        self._find_classes()
+
+    def _find_classes(self):
         self.classes = []
         for name in self.order_names():
-            c = self.entries.get(name, {}).get('class') or race.classes.get(name) or ''
+            c = self.driver_class(name)
             if c not in self.classes:
                 self.classes.append(c)
         self.multiclass = self.recorded and len(self.classes) > 1
+
+    def group_classes(self, spec):
+        """Classes that race each other share one group and one set of class positions.
+        spec: '' keeps the game's classes, 'all' races everyone together, else groups split by ';' with
+        their classes joined by '+', optionally named first: 'DTM = DTM 2024 + DTM 2025; Hypercar'."""
+        spec = (spec or '').strip()
+        if spec == self.group_spec:
+            return
+        self.group_spec = spec
+        game = {n: self.entry(n).get('class') or self.race.classes.get(n) or '' for n in self.order_names()}
+        self.merged = {}
+        if spec.lower() == 'all':
+            self.merged = {c.lower(): '' for c in game.values()}
+        else:
+            for part in spec.split(';'):
+                label, _, members = part.rpartition('=')
+                members = [m.strip() for m in members.split('+') if m.strip()]
+                if len(members) > 1 or label.strip():
+                    label = label.strip() or ' / '.join(members)
+                    for m in members:
+                        self.merged[m.lower()] = label
+        # Class positions counted again in each group, in running order
+        for st in self.states:
+            counts = {}
+            for r in st['rows']:
+                r.setdefault('pos_game', r.get('pos_class'))
+                if not self.merged:
+                    r['pos_class'] = r['pos_game']
+                    continue
+                c = self.driver_class(r['name'])
+                counts[c] = counts.get(c, 0) + 1
+                r['pos_class'] = counts[c]
+        self._find_classes()
 
     # ------------------------------------------------------------------ loading
     def _load(self, path):
@@ -106,7 +144,8 @@ class Timing:
         return self.entries.get(name, {})
 
     def driver_class(self, name):
-        return self.entry(name).get('class') or self.race.classes.get(name) or ''
+        c = self.entry(name).get('class') or self.race.classes.get(name) or ''
+        return self.merged.get(c.lower(), c)
 
     def clock_text(self, idx, t_video):
         """Header clock: time remaining, LAP x/y, or the race time when nothing was recorded."""

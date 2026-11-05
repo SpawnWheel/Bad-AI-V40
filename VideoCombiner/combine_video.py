@@ -11,8 +11,15 @@ from pydub.silence import detect_leading_silence
 PAD_BEFORE_SEC = 0.5
 PAD_AFTER_SEC = 0.5
 
-# Volume of the original game audio underneath the commentary (0 = commentary only)
-GAME_AUDIO_VOLUME = 0.90
+# Volume of the original game audio underneath the commentary (0 = commentary only), after GAME_LEVELER
+GAME_AUDIO_VOLUME = 1.0
+
+# The game audio swings ~20 LU between a distant TV shot and an onboard (and the sims record it hot, around
+# -9 LUFS). A slow compressor takes the edge off the loud shots, then loudnorm rides the level to GAME_LUFS
+# (the commentary track sits at -16 LUFS), leaving a range of about 5 LU so crashes still stand out.
+GAME_LUFS = -15
+GAME_LEVELER = ("acompressor=threshold=-26dB:ratio=3:attack=40:release=500:knee=6,"
+                f"loudnorm=I={GAME_LUFS}:TP=-2:LRA=5,aresample=48000")
 
 # How hard the game ducks while the commentators talk (higher ratio = quieter under speech).
 # Ratio 2.5 takes roughly 8 dB off the game under normal speech; it was 5 (~14 dB) and buried the cars.
@@ -99,7 +106,7 @@ def build_audio_filter(has_game_audio):
         # The game ducks under the commentators while they talk and comes back up in the gaps.
         # amix follows the game audio's length; adding apad here deadlocks ffmpeg
         return (
-            f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,volume={GAME_AUDIO_VOLUME}[game];"
+            f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,{GAME_LEVELER},volume={GAME_AUDIO_VOLUME}[game];"
             f"{commentary},asplit=2[comm][key];"
             f"[game][key]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={DUCK_RATIO}:attack=15:release=450:makeup=1[ducked];"
             "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"

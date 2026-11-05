@@ -62,6 +62,7 @@ Work in a pattern on each driver you follow: **pick them up on "TV" (10 to 20 se
 
 #### Race Start:
 - Focus on the pole-sitter (**P1**) at lights out and lock the camera on them for at least the first **20 seconds** before switching to first-lap battles.
+- The opening laps are the busiest part of the race. After those 20 seconds, **move around the pack**: no more than about **45 seconds on one car in the first 3 minutes**, even if it is fighting for the lead. Show the cars gaining and losing places through the field, then come back to the front.
 
 #### The Finish Line Protocol (Checkered Flag):
 The race finish overrides standard dwell times. Follow this strict sequence:

@@ -6,14 +6,14 @@
     1080
   ],
   "championship": {
-    "name": "JCW Mini Challenge",
-    "short_name": "",
+    "name": "Caterham Academy",
+    "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 2",
-    "event_name": "Donnington Park",
+    "round": "Round 3",
+    "event_name": "Barcelona",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Flags/UK.png"
+    "event_flag": "Graphics/Flags/ESP.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -52,7 +52,8 @@
       "bottom": 820,
       "rows": 0,
       "cycle": "interval,gap,name",
-      "cycle_sec": 15
+      "cycle_sec": 15,
+      "class_groups": ""
     },
     "logo": {
       "enabled": true,
@@ -71,8 +72,8 @@
       "extra_hold": 10
     },
     "popups": {
-      "x": 88,
-      "bottom": 992,
+      "x": 40,
+      "bottom": 1000,
       "max_w": 780
     },
     "radio": {
@@ -82,6 +83,14 @@
     },
     "leader": {
       "y": 24
+    },
+    "pits": {
+      "x": 0,
+      "y": 150
+    },
+    "commentators": {
+      "right": 0,
+      "y": 0
     }
   },
   "auto_graphics": {
@@ -94,10 +103,11 @@
     "new_leader": true,
     "pit_stops": true,
     "gap_tracker": true,
-    "sponsors": true,
     "radio": true,
+    "stewards": true,
     "chequered": true,
-    "results": true
+    "results": true,
+    "sponsors": true
   },
   "popup_types": {
     "driver_card": true,
@@ -112,7 +122,8 @@
     "pit_stop": true
   },
   "popup_density": "medium",
-  "popup_duration": 7.0,
+  "popup_duration": 8.0,
+  "render_fps": 15,
   "drivers": {
     "[RCV]Dom.Payne": {
       "display": "Dom Payne",
@@ -120,57 +131,57 @@
       "number": "1",
       "country": "GBR",
       "team": "Itchy & Scratchy Racing",
-      "make": "MINI",
-      "color": "#2f0df2",
+      "make": "Caterham",
+      "color": "#07f8f8",
       "car_image": "Graphics/Logos/ItchyScratchy.png"
     },
     "[RCV]ATIBoy69": {
       "display": "ATI Boy",
       "short": "ATIBOY",
       "number": "420",
-      "country": "GBR",
+      "country": "NLD",
       "team": "Cheech and Chong",
-      "make": "MINI",
-      "color": "#399b2f",
+      "make": "Caterham",
+      "color": "#48824d",
       "car_image": "Graphics/Logos/cheechchong.png"
     },
     "[RCV]Neworder": {
       "display": "New Order",
       "short": "NEWORDER",
-      "number": "26",
+      "number": "52",
       "country": "GBR",
       "team": "Foxy Stoat Racing",
-      "make": "MINI",
+      "make": "Caterham",
       "color": "#F97316",
       "car_image": "Graphics/Logos/stoat.png"
     },
     "Daniel Born": {
       "display": "Daniel Born",
       "short": "BORN",
-      "number": "12",
+      "number": "88",
       "country": "RSA",
-      "team": "SAPS Underground",
-      "make": "MINI",
-      "color": "#edf0fc",
-      "car_image": "Graphics/Logos/SAPS.png"
+      "team": "Red Bull",
+      "make": "Caterham",
+      "color": "#1a0cc0",
+      "car_image": "Graphics/Logos/redbull.png"
     },
     "[RCV]thommo": {
       "display": "Thommo",
       "short": "THOMMO",
       "number": "58",
       "country": "GBR",
-      "team": "Ping Racing Essex",
-      "make": "MINI",
-      "color": "#bd7575",
+      "team": "Ping",
+      "make": "Caterham",
+      "color": "#ebf9fa",
       "car_image": "Graphics/Logos/ping.png"
     },
     "kf.MTG": {
-      "display": "kf.MTG",
-      "short": "KF.MTG",
+      "display": "MTG",
+      "short": "MTG",
       "number": "00",
       "country": "USA",
       "team": "Silent Assassin",
-      "make": "MINI",
+      "make": "Caterham",
       "color": "#000000",
       "car_image": "Graphics/Logos/silentassasin2.png"
     },
@@ -179,37 +190,38 @@
       "short": "ALFAQUAD",
       "number": "12",
       "country": "RSA",
-      "team": "Spitfire",
-      "make": "MINI",
-      "color": "#525823",
-      "car_image": "Graphics/Logos/spitfire.png"
+      "team": "Caterham",
+      "make": "Caterham",
+      "color": "#047857",
+      "car_image": "Graphics/Logos/caterham.png"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
       "short": "NORTJE",
-      "number": "64",
+      "number": "121",
       "country": "RSA",
-      "team": "Commodore",
-      "make": "MINI",
-      "color": "#716c4a",
-      "car_image": "Graphics/Logos/commodore2.png"
+      "team": "Back to the Future",
+      "make": "Caterham",
+      "color": "#e8eb67",
+      "car_image": "Graphics/Logos/BackToFuture.png"
     },
     "inthebagbud": {
       "display": "InTheBagBud",
       "short": "BAGBUD",
-      "number": "",
+      "number": "27",
       "country": "GBR",
       "team": "Beavertown Neck Oil",
-      "color": "#F59E0B",
-      "car_image": "Graphics/CarPreviews/InTheBagBud.dds"
+      "make": "Caterham",
+      "color": "#18d7e7",
+      "car_image": "Graphics/Logos/Beavertown.png"
     },
     "mattikake": {
       "display": "mattikake",
       "short": "MATTIKAKE",
       "number": "77",
       "country": "GBR",
-      "team": "McLaren Renault Mini",
-      "make": "MINI",
+      "team": "McLaren Mini",
+      "make": "Caterham",
       "color": "#f4b92f",
       "car_image": "Graphics/Logos/McLaren.webp"
     },
@@ -219,7 +231,6 @@
       "number": "28",
       "country": "NLD",
       "team": "Mini",
-      "make": "MINI",
       "color": "#008000",
       "car_image": "Graphics/Logos/mini.png"
     },
@@ -229,7 +240,7 @@
       "number": "137",
       "country": "GBR",
       "team": "Rick and Morty",
-      "make": "MINI",
+      "make": "Caterham",
       "color": "#215cc0",
       "car_image": "Graphics/Logos/rickmorty.png"
     },
@@ -239,7 +250,6 @@
       "number": "71",
       "country": "GBR",
       "team": "Team Gulf",
-      "make": "MINI",
       "color": "#04dddd",
       "car_image": "Graphics/Logos/gulf.png"
     },
@@ -249,7 +259,7 @@
       "number": "85",
       "country": "ESP",
       "team": "John Player Special",
-      "make": "MINI",
+      "make": "Caterham",
       "color": "#c4a31e",
       "car_image": "Graphics/Logos/jps.png"
     },
@@ -259,39 +269,48 @@
       "number": "99",
       "country": "GBR",
       "team": "Mini",
-      "make": "MINI",
       "color": "#e10600",
       "car_image": "Graphics/Logos/mini.png"
     },
-    "dmk": {
-      "display": "dmk",
-      "short": "DMK",
-      "number": "58",
-      "country": "POL",
-      "team": "Mini Poland",
-      "make": "MINI",
-      "color": "#ff0000",
-      "car_image": "Graphics/Logos/mini.png"
-    },
-    "[RCV]kenevo": {
-      "display": "Kenevo_Mini",
-      "short": "KENEVO_MINI",
-      "number": "27",
-      "country": "GBR",
-      "team": "The Mulch Vendor",
-      "make": "MINI",
-      "color": "#c089c7",
-      "car_image": "Graphics/Logos/BlockEkipa.png"
+    "Bill(AuchAye)_[SR-50]": {
+      "display": "Bill",
+      "short": "BILL",
+      "number": "5",
+      "country": "SCT",
+      "team": "Thistle Racing",
+      "make": "Caterham",
+      "color": "#d909b5",
+      "car_image": "Graphics/Logos/ThistleRacing.png"
     },
     "[RCV]RayFin": {
       "display": "Rayfin",
       "short": "RAYFIN",
-      "number": "6",
+      "number": "55",
       "country": "GBR",
-      "team": "Canadian Eagle Racing",
-      "make": "MINI",
-      "color": "#00ffff",
+      "team": "Canadian Eagle",
+      "make": "Caterham",
+      "color": "#0bc8d7",
       "car_image": "Graphics/Logos/EagleRacing.png"
+    },
+    "Bill(AuchAye)_": {
+      "display": "Bill",
+      "short": "BILL",
+      "number": "",
+      "country": "",
+      "team": "",
+      "make": "",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/Bill.dds"
+    },
+    "Googlebear": {
+      "display": "Googlebear",
+      "short": "GOOGLEBEAR",
+      "number": "4",
+      "country": "GBR",
+      "team": "Private",
+      "make": "Caterham",
+      "color": "#16d50d",
+      "car_image": "Graphics/Logos/CaterhamWhite.png"
     }
   },
   "sponsors": {
@@ -305,19 +324,21 @@
     },
     "partner": {
       "name": "",
-      "logo": "Graphics/Logos/mini.png"
+      "logo": "Graphics/Logos/CaterhamWhite.png"
     }
   },
   "commentators": {
-    "Martin Haven": {
-      "bio": "TV, radio and circuit commentary on almost every conceivable form of motorsport"
+    "Antonio Lobato": {
+      "bio": "Renowned Spanish Formula 1 television commentator."
     },
-    "Anthony Davidson": {
-      "bio": "British former racing driver and broadcaster who competed in Formula One from 2002 to 2008 and won the FIA World Endurance Drivers' Championship"
+    "Pedro de la Rosa": {
+      "bio": "Former Formula 1 driver and broadcast analyst."
     },
-    "Thommo": {
-      "bio": "Some random driver who added his name to the list?"
+    "Toni Cuquerella": {
+      "bio": "Veteran Formula 1 engineer and race analyst."
     }
   },
-  "championship_preset": "RCV Mini Challenge - Season 15"
+  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_ome2pkome2pkome2.jfif",
+  "commentator_disclaimer": null,
+  "championship_preset": "RCV Caterham - Season 15"
 }

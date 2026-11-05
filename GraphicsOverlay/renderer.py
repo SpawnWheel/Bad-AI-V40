@@ -5,7 +5,6 @@ PNG with a long duration in an ffmpeg concat list, which ffmpeg composites over
 the race video in the same pass as the final encode.
 """
 import bisect
-import math
 import multiprocessing
 import os
 import re
@@ -28,7 +27,7 @@ YELLOW_FLAGS = ('yellow', 'double yellow')  # shown by the timing tower turning 
 # type -> (start after pop-in begins, duration) of the held animation
 # (commentators, chequered and pit timers run for their whole time on screen, see _anim_timing)
 ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1), 'commentators': (0.2, 1.4),
-            'title_card': (0.0, 1.6), 'chequered': (0.0, 1.0), 'gap_tracker': (0.6, 2.2), 'pit_timer': (0.0, 1.0)}
+            'title_card': (0.0, 1.6), 'chequered': (0.0, 1.0), 'last_laps': (0.5, 1.2), 'pit_timer': (0.0, 1.0)}
 ANIM_RATE = {'commentators': 15, 'chequered': 15, 'pit_timer': 10}  # steps per second, else the video fps
 TOWER_OFF_AFTER = 3.0      # the timing tower comes off this long after the winner crosses the line
 FASTEST_LAP_FROM = 5       # fastest laps only count from this lap (early laps are in traffic and on cold tyres)
@@ -36,15 +35,14 @@ PIT_TIMER_LEAD = 1.2       # the pit timer card is up this long before the car s
 PIT_TIMER_TOP = 4          # only the top 4 get the pit timer; the rest a small IN PITS tag
 PIT_TAG_DUR = 6.0          # seconds an IN PITS tag stays up
 PIT_TAG_MAX_SHIFT = 8.0    # a tag waits at most this long for a timer to clear (later, the cars have left)
-GAP_FROM_LAP = 5           # gap trends only once the leader has done this many laps
-GAP_WINDOW_LAPS = 4        # closing/pulling away is measured over this many laps
+GAP_FROM_LAP = 5           # last-4-laps comparisons only once the leader has done this many laps
+GAP_WINDOW_LAPS = 4        # closing/pulling away is measured over this many laps (and that many are shown)
 GAP_CHANGE = 1.0           # ... needs the interval to change by at least this much over them
 GAP_NOISE = 0.05           # ... going the same way every lap (a lap the other way by up to this is noise)
-GAP_BATTLE = 1.5           # closer than this is a battle already (the trend is for one still to come)
+GAP_CLOSE_MIN = 0.3        # a car catching the one ahead counts until it's this close (then it's alongside)
+GAP_BATTLE = 1.5           # a car pulling away has to start at least this far ahead
 GAP_FAR = 10.0             # further apart than this isn't a fight
-GAP_LAPS_TO_MAX = 10       # a catch due more laps away than this is too far off to forecast
-STRIKING = 1.0             # 'striking distance': within this many seconds of the car ahead
-GAP_SPACING = 150.0        # seconds between two battle forecasts
+GAP_SPACING = 150.0        # seconds between two comparisons
 GAP_PAIR_SPACING = 300.0   # ... and between two about the same pair
 GAP_MAX = 6
 START_MOVERS_AFTER = 25.0  # seconds after the green flag (with the logger's start report)
@@ -106,7 +104,7 @@ class OverlayRenderer:
                 # A little longer on screen when there are bios to read
                 dur = min(12.0, 6.0 + 2.0 * sum(1 for b in bios.values() if b))
                 items.append({'id': 'auto_comm', 'type': 'commentators', 'time': gf + 10.5, 'duration': dur,
-                              'lane': 'popup', 'auto': True,
+                              'lane': 'side', 'auto': True,
                               'data': {'names': names, 'bios': bios, 'anim_dur': dur - 0.2 - POPUP_OUT}})
         tk = cfg['layout']['ticker']
         if tk['enabled']:
@@ -237,17 +235,31 @@ class OverlayRenderer:
                 kept.append(tag)
         return sorted(kept, key=lambda x: x['time'])
 
+    def _lap_table(self):
+        """{driver: {lap number: lap time in seconds}} from the recorded timing ('last' once each lap is done)."""
+        table = {}
+        for st in self.race.timing.states:
+            for r in st['rows']:
+                lap, last = r.get('laps'), r.get('last')
+                if lap and last and 20.0 < last < 1000.0:
+                    table.setdefault(r['name'], {})[lap] = last
+        # A lap that kept the previous lap's time (an invalidated lap the game never timed) isn't a lap time
+        for laps in table.values():
+            for n in [n for n in laps if laps.get(n - 1) == laps[n]]:
+                del laps[n]
+        return table
+
     def _gap_items(self):
-        """Gap trends from the recorded timing, from the leader's GAP_FROM_LAP-th lap: a car steadily catching
-        the one ahead (or the one ahead pulling away), the interval moving the same way on every one of the
-        last GAP_WINDOW_LAPS laps and by GAP_CHANGE seconds in all. Not for cars already fighting (closer
-        than GAP_BATTLE): it shows a fight still a few laps off."""
+        """Last 4 laps: the lap times of a car steadily catching the one ahead (or the one ahead pulling away)
+        side by side, from the leader's GAP_FROM_LAP-th lap. The interval has moved the same way on every one
+        of the last GAP_WINDOW_LAPS laps and by GAP_CHANGE seconds in all."""
         race = self.race
         tm = race.timing
         gf, lf = race.green_flag_video, race.leader_finish_video
         if not tm.recorded or gf is None:
             return []
         lap = tm.lap_time() or ((race.track_length_m or 4000) / 45.0)
+        table = self._lap_table()
         items, last_any, last_pair = [], -1e9, {}
         for i, st in enumerate(tm.states):
             t = race.to_video(st['t'])
@@ -276,14 +288,9 @@ class OverlayRenderer:
                     continue
                 steps = [b - a_ for a_, b in zip(gaps, gaps[1:])]
                 old_gap, now_gap = gaps[0], gaps[-1]
-                rate = abs(now_gap - old_gap) / GAP_WINDOW_LAPS
-                laps_to = None
                 if (old_gap - now_gap >= GAP_CHANGE and all(s <= GAP_NOISE for s in steps)
-                        and GAP_BATTLE <= now_gap <= GAP_FAR):
+                        and GAP_CLOSE_MIN <= now_gap <= GAP_FAR):
                     mode = 'closing'
-                    laps_to = max(1, math.ceil((now_gap - STRIKING) / rate))
-                    if laps_to > GAP_LAPS_TO_MAX:
-                        continue
                 elif (now_gap - old_gap >= GAP_CHANGE and all(s >= -GAP_NOISE for s in steps)
                       and old_gap >= GAP_BATTLE and now_gap <= GAP_FAR):
                     mode = 'pulling'
@@ -291,16 +298,22 @@ class OverlayRenderer:
                     continue
                 if t - last_pair.get((r['name'], a['name']), -1e9) < GAP_PAIR_SPACING:
                     continue
+                # The last laps both cars have finished, with a time for every one (lap 1 is a standing start)
+                done = r.get('laps') or 0
+                nums = list(range(done - GAP_WINDOW_LAPS + 1, done + 1))
+                ta = [table.get(a['name'], {}).get(n) for n in nums]
+                tb = [table.get(r['name'], {}).get(n) for n in nums]
+                if nums[0] < 2 or None in ta or None in tb:
+                    continue
                 if best is None or a['pos'] < best[1]['pos']:
-                    best = (r, a, old_gap, now_gap, rate, mode, laps_to)
+                    best = (r, a, mode, nums, ta, tb)
             if best is None:
                 continue
-            r, a, old_gap, now_gap, rate, mode, laps_to = best
-            items.append({'id': f'auto_gap_{i}', 'type': 'gap_tracker', 'time': t + 0.5, 'duration': 9.0,
+            r, a, mode, nums, ta, tb = best
+            items.append({'id': f'auto_gap_{i}', 'type': 'last_laps', 'time': t + 0.5, 'duration': 9.0,
                           'lane': 'popup', 'auto': True, 'shift': True, 'driver': r['name'], 'driver2': a['name'],
-                          'data': {'mode': mode, 'gap_from': old_gap, 'gap_now': now_gap, 'rate': rate,
-                                   'laps_to': laps_to, 'laps': GAP_WINDOW_LAPS, 'pos_behind': r['pos'],
-                                   'pos_ahead': a['pos']}})
+                          'data': {'mode': mode, 'laps': nums, 'ahead_times': ta, 'behind_times': tb,
+                                   'pos_behind': r['pos'], 'pos_ahead': a['pos']}})
             last_any = t
             last_pair[(r['name'], a['name'])] = t
             if len(items) >= GAP_MAX:
@@ -418,10 +431,11 @@ class OverlayRenderer:
         for it in shiftable + sorted(planned, key=lambda x: float(x['time'])):
             if self._place(it, blocking, AUTO_MAX_SHIFT if it.get('auto') else MAX_SHIFT):
                 placed.append(it)
-        # Team radio and the top centre slot (leader banner, fastest lap) have their own slots, one at a time
-        for lane in ('radio', 'top'):
+        # Team radio and the top centre slot (leader banner, fastest lap) have their own slots, one at a time;
+        # the commentators list shares the right-hand side with team radio
+        for lanes in (('side', 'radio'), ('top',)):
             lane_blocking = []
-            for it in sorted([a for a in auto if a['lane'] == lane], key=lambda x: x['time']):
+            for it in sorted([a for a in auto if a['lane'] in lanes], key=lambda x: (x['lane'] != 'side', x['time'])):
                 if self._place(it, lane_blocking, AUTO_MAX_SHIFT):
                     placed.append(it)
         placed.sort(key=lambda x: x['time'])
@@ -488,6 +502,14 @@ class OverlayRenderer:
             else:
                 x = 440
         return x, pz['y']
+
+    def side_xy(self):
+        """(right edge, top) of the commentators list: the configured spot, or right under the map frame."""
+        lay = self.cfg['layout']
+        cz, mp = lay.get('commentators') or {}, lay['map']
+        right = cz.get('right') or mp['x'] + mp['w']
+        top = cz.get('y') or mp['y'] + mp['h'] + 18
+        return right, top
 
     def tower_shown(self, t):
         """The timing tower comes off a few seconds after the leader takes the chequered flag."""
@@ -590,6 +612,17 @@ class OverlayRenderer:
             rz = self.cfg['layout']['radio']
             x = rz['right'] + margin - img.width + (1 - p_in) * 60 + p_out * 30
             y = rz['cy'] - img.height / 2
+            alpha = min(1.0, p_in * 1.4) * (1 - p_out)
+            src = img
+            if phase == 'in':
+                vis = max(1, int(img.width * p_in))
+                src = img.crop((img.width - vis, 0, img.width, img.height))
+                x += img.width - vis
+        elif it['lane'] == 'side':
+            # Under the map on the right: slides in from the right edge, wiping open right-to-left
+            x0, y0 = self.side_xy()
+            x = x0 + margin - img.width + (1 - p_in) * 60 + p_out * 30
+            y = y0 - margin
             alpha = min(1.0, p_in * 1.4) * (1 - p_out)
             src = img
             if phase == 'in':

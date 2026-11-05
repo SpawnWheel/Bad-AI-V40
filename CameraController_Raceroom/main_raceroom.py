@@ -16,6 +16,7 @@ sys.path.insert(0, APP_DIR) # camera_gemini.py
 sys.path.insert(0, os.path.join(APP_DIR, "Logger_Raceroom")) # Shared memory reader lives with the RaceRoom logger
 from r3e_shared import R3ESharedMemory, decode
 import camera_gemini
+import incidents
 
 # Disable pydirectinput's safety pause and failsafe
 pydirectinput.PAUSE = 0.01
@@ -176,10 +177,11 @@ def enforce_camera_rules(sequence):
 
 
 def load_race_timing(log_path):
-    """Running order through the race from the logger's <log>_timing.jsonl: [(log time, [names by place])].
+    """How far round the race every car is, from the logger's <log>_timing.jsonl: [(log time, {name: laps})].
 
-    The ">" driver arrow follows this order, so a switch can be counted out in clicks. Retired and
-    disqualified cars are left out, as RaceRoom leaves them out of the arrow cycle.
+    The ">" driver arrow goes to the car ahead on the road (lapped cars included), so a switch can be
+    counted out in clicks from where the cars are on track. Retired and disqualified cars are left out,
+    as RaceRoom leaves them out of the arrow cycle.
     """
     if not log_path:
         return []
@@ -199,9 +201,8 @@ def load_race_timing(log_path):
                 if record["type"] == "session":
                     snapshots = [] # The clock restarts; the race is the last session in the file
                 elif record["type"] == "timing":
-                    rows = sorted(record["rows"], key=lambda r: r[1])
-                    snapshots.append((record["t"], [r[0] for r in rows if r[12] in (0, 1)]))
-    except (OSError, ValueError, KeyError, IndexError):
+                    snapshots.append((record["t"], {r[0]: r[3] + r[4] for r in record["rows"] if r[12] in (0, 1)}))
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
         return []
     return snapshots
 
@@ -234,7 +235,7 @@ class RaceroomCameraController:
         self.current_camera = None
         self.camera_memory = {"external": None, "onboard": None} # What Page Down / Home would come back to
         self.driver_ring = [] # The replay's driver list in "driver ahead" arrow order: [{slot, name, car, num}]
-        self.race_timing = [] # [(log time, running order by place)] from the logger's timing file
+        self.race_timing = [] # [(log time, {name: laps round the race})] from the logger's timing file
         self.is_paused = False
         self.pause_start_time = None
         self.ignore_space_until = 0.0 # Our own simulated Space presses must not toggle the pause
@@ -690,14 +691,23 @@ class RaceroomCameraController:
         return True
 
     def _arrow_order(self, t=None):
-        """Driver names in "driver ahead" (>) order: from the timing log at log time t, else as learned."""
+        """Driver names in "driver ahead" (>) order: from the timing log at log time t, else as learned.
+
+        > goes to the next car up the road, so the cars are put in order of where they are on the lap,
+        placed between the two snapshots either side of t (they are ~5s apart and cars swap in that time).
+        """
         if t is not None and self.race_timing:
-            order = self.race_timing[0][1]
-            for snap_t, names in self.race_timing:
-                if snap_t > t:
+            before = after = self.race_timing[0]
+            for snap in self.race_timing:
+                after = snap
+                if snap[0] > t:
                     break
-                order = names
-            return order[:1] + order[1:][::-1] # > goes to the car one place ahead, and from P1 round to last
+                before = snap
+            share = (t - before[0]) / (after[0] - before[0]) if after[0] > before[0] else 0.0
+            share = min(max(share, 0.0), 1.0)
+            laps = {name: done + (after[1][name] - done) * share if name in after[1] else done
+                    for name, done in before[1].items()}
+            return sorted(laps, key=lambda name: laps[name] % 1.0)
         return [c["name"] for c in self.driver_ring]
 
     @staticmethod
@@ -724,7 +734,7 @@ class RaceroomCameraController:
     def _step_to_driver(self, rect, driver, position, log_time=None):
         """With the replay bar showing, clicks the driver arrows the short way round to the target car.
 
-        The clicks are counted from the running order and sent in one burst, then the car in view is checked;
+        The clicks are counted from the order on track and sent in one burst, then the car in view is checked;
         if RaceRoom's order differed (a car left out of the arrow cycle, positions just changed), it recounts
         from wherever it landed.
         """
@@ -1096,7 +1106,12 @@ class RaceroomCameraController:
     def _on_gemini_answer(self, result_text):
         try:
             json_data = camera_gemini.extract_json(result_text)
-            json_data["sequence"], changes = enforce_camera_rules(json_data.get("sequence", []))
+            # Cut to the major incidents the AI's plan missed (an outside camera; the rules below fix any jumps)
+            json_data["sequence"], cuts = incidents.add_incident_cuts(
+                json_data.get("sequence", []), self.preloaded_input_file, camera=FALLBACK_CAMERA)
+            for cut in cuts:
+                self.log_message(f"Incident: {cut}")
+            json_data["sequence"], changes = enforce_camera_rules(json_data["sequence"])
             for change in changes:
                 self.log_message(f"Camera rule: {change}")
 
@@ -1115,6 +1130,8 @@ class RaceroomCameraController:
         text = f"Watching {driver} (P{pos})" if pos is not None else f"Watching {driver}"
         if item_camera(item):
             text += f" - {item_camera(item)} camera"
+        if item.get("incident"):
+            text += f" - incident: {item['incident']}"
         return text
 
     def _generate_director_notes_from_sequence(self, sequence_data):

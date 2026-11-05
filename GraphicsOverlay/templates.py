@@ -50,6 +50,7 @@ class Templates:
         self.th = Theme(cfg)
         champ = cfg['championship']
         self.logo = load_image(gcfg.resolve_path(champ.get('logo')), bool(champ.get('logo_tint_white')))
+        race.timing.group_classes(cfg['layout']['tower'].get('class_groups'))
         self.tower = None
         # RaceRoom replays show no leaderboard, so it always gets the tower; AMS2 can wrap its own instead
         if cfg['layout']['tower'].get('enabled', True) or not race.has_hud:
@@ -155,7 +156,7 @@ class Templates:
         top = max(LABEL_H, top_extra, tab.height if tab else 0)
         img = Image.new('RGBA', (int(w), int(top + panel_h)), (0, 0, 0, 0))
         round_rect(img, (0, top, w, top + panel_h), 6, self.th.panel,
-                   corners=(False, tab is None, True, True))
+                   corners=(not label, tab is None, True, True))
         if stripe:
             round_rect(img, (0, top, 6, top + panel_h), 0, stripe)
         if label:
@@ -1028,100 +1029,171 @@ class Templates:
         round_outline(img, (0, 0, W, H), 12, (255, 255, 255, 40), 1)
         return img
 
+    COMM_W = 440       # the commentator list is a narrow vertical card under the map on the right
+    COMM_PHOTO_H = 140  # tallest the picture above the header may be
+    COMM_BIO_LINE = 20
+
     def card_commentators(self, g, anim=1.0):
-        """The AI commentator line-up: an accent header with a mic and a LIVE tag, then one column per
-        commentator (accent bar, name, voice waveform, bio). anim 0..1 reveals the columns one after another
-        while the waveforms pulse."""
+        """The AI commentator line-up, F1 TV analyst style, as a vertical list for the right of the screen:
+        their picture standing on top of the card (a pre-race shot of them side by side), a dark header with
+        the partner sponsor, one maroon panel listing the commentators (name, voice waveform, bio), then a line
+        saying the commentary is AI and the racing is real. anim 0..1 brings the card in, then the rows one
+        after another, while the waveforms take turns talking."""
         th = self.th
         d = g.get('data', {})
         names = d.get('names', [])
         if not names:
             return None
         anim = 1.0 if anim is None else anim
-        # Bios come from the config at draw time, so edits in Graphics Setup show straight away
-        bios = {n: gcfg.commentator_bio(self.cfg, n) for n in names}
-        per_row = min(3, len(names))
-        col_w, pad, mono = 340, 22, 66
-        f_first, f_last = font(20, 'regular'), font(34, 'bold')
-        f_bio = font(18, 'regular')
-        cols = []
-        for n in names:
-            parts = n.split()
-            first, last = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', n)
-            lines = wrap(bios[n], f_bio, col_w - pad * 2, 3)
-            cols.append((n, first, last.upper(), lines))
-        body_h = pad + mono + 36 + max([len(c[3]) * 23 for c in cols] + [0]) + pad - 10
-        n_rows = (len(cols) + per_row - 1) // per_row
-        head_h = 46
-        W, H = per_row * col_w, head_h + n_rows * body_h
-        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-        round_rect(img, (0, 0, W, H), 10, th.panel)
-        # Header band: accent gradient with a soft highlight along its top edge
-        darker = tuple(int(c * 0.55) for c in th.accent[:3]) + (255,)
-        band = h_gradient(W, head_h, th.accent, darker)
+        W, pad, head_h = self.COMM_W, 10, 48
+        body_w = W - pad * 2
+        # The picture, bios and disclaimer come from the config at draw time, so Graphics Setup edits show at once
+        path = gcfg.resolve_path(gcfg.commentator_group_photo(self.cfg))
+        photo = self._commentator_picture(load_image(path) if path else None, W - 40, self.COMM_PHOTO_H)
+        ph_h = photo.height if photo is not None else 0
+        f_bio = font(16, 'regular')
+        bios = [wrap(gcfg.commentator_bio(self.cfg, n), f_bio, body_w - 46, 2) for n in names]
+        # Each row is as tall as its own bio needs
+        row_hs = [66 + self.COMM_BIO_LINE * len(b) + (8 if b else 0) for b in bios]
+        row_ys = [sum(row_hs[:i]) for i in range(len(names))]
+        f_disc = font(15, 'regular')
+        disc = gcfg.commentator_disclaimer(self.cfg)
+        disc_lines = wrap(disc, f_disc, W - pad * 2 - 8, 3) if disc else []
+        disc_h = (18 + len(disc_lines) * 19) if disc_lines else 0
+        body_h = sum(row_hs)
+        H = head_h + pad + body_h + pad + disc_h
+        img = Image.new('RGBA', (W, ph_h + H), (0, 0, 0, 0))
+        card = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(card, (0, 0, W, H), 10, th.panel)
+
+        # Header: maroon into the panel colour, twin accent slashes, the label and the partner's logo as it is
+        band = h_gradient(W, head_h, self._tint(th.accent, 0.38), th.panel_solid)
         shape = Image.new('L', (W, head_h), 0)
         ImageDraw.Draw(shape).rounded_rectangle((0, 0, W - 1, head_h + 12), radius=10, fill=255)
         band.putalpha(shape)
-        img.alpha_composite(band)
-        round_rect(img, (10, 1, W - 10, 3), 1, (255, 255, 255, 60))
-        fg = contrast_text(th.accent)
+        card.alpha_composite(band)
+        for off, col in ((14, th.accent), (28, th.accent2)):
+            polygon(card, [(off + 10, 10), (off + 17, 10), (off + 7, head_h - 10), (off, head_h - 10)], col)
         label = (g.get('label') or 'AI COMMENTATORS').upper()
-        f_head = font(24, 'bold_cond')
-        text_vcenter(img, 20, head_h / 2 + 1, label, f_head, fg)
-        # LIVE tag on the right
-        f_live = font(16, 'bold_cond')
-        lw = int(text_w(f_live, 'LIVE') + 30)
-        lx = W - 16 - lw
-        round_rect(img, (lx, head_h / 2 - 12, lx + lw, head_h / 2 + 12), 12, (0, 0, 0, 90))
-        round_rect(img, (lx + 9, head_h / 2 - 4, lx + 17, head_h / 2 + 4), 4, (255, 255, 255, 255))
-        text_vcenter(img, lx + 22, head_h / 2 + 1, 'LIVE', f_live, (255, 255, 255, 255))
-        round_rect(img, (0, head_h, W, head_h + 3), 0, th.accent2)
+        sp_w = self.sponsor_mark(card, W - 16, head_h / 2, 'partner', 28)
+        f_head = fit_font(label, W - 70 - (sp_w + 16 if sp_w else 0), 26, 'bold_cond')
+        text_vcenter(card, 56, head_h / 2 + 1, label, f_head, th.text)
+        card.alpha_composite(h_gradient(W, 3, th.accent, th.accent2), (0, head_h - 3))
+        round_outline(card, (0, 0, W, H), 10, (255, 255, 255, 40), 1)
+        img.alpha_composite(card, (0, ph_h))
 
-        n = len(cols)
-        # anim runs over the whole time the card is up: the columns reveal in the first 1.4 s, then each
-        # commentator's waveform takes a turn "talking" while the others idle
+        # anim runs over the whole time the card is up: the panel and picture come in first, the rows follow
+        # one after another, then each commentator's waveform takes a turn "talking" while the others idle
+        n = len(names)
         secs = anim * float(d.get('anim_dur') or 1.4)
-        reveal = min(1.0, secs / 1.4)
-        talker = int(max(0.0, secs - 1.0) / 1.6) % n
-        for i, (name, first, last, lines) in enumerate(cols):
-            # Each column fades and rises in, one after another
-            p = max(0.0, min(1.0, reveal * (n + 1.5) - i))
+        talker = int(max(0.0, secs - 1.2) / 1.6) % n
+        top = ph_h + head_h + pad
+        p = max(0.0, min(1.0, secs / 0.35))
+        if p > 0:
+            img.alpha_composite(self._commentator_body(body_w, body_h, p), (pad, top))
+        if photo is not None:
+            # Rises up out of the header, right-aligned like the F1 TV analyst
+            p = max(0.0, min(1.0, (secs - 0.1) / 0.45))
+            e = 1 - (1 - p) ** 3
+            if e > 0:
+                rise = int((1 - e) * 24)
+                pic = photo.crop((0, 0, photo.width, photo.height - rise))
+                if e < 1:
+                    pic.putalpha(pic.getchannel('A').point(lambda v, e=e: int(v * e)))
+                img.alpha_composite(pic, (W - 20 - photo.width, rise))
+        for i, name in enumerate(names):
+            p = max(0.0, min(1.0, (secs - 0.15 - i * 0.22) / 0.45))
             e = 1 - (1 - p) ** 3
             if e <= 0:
                 continue
-            col = Image.new('RGBA', (col_w, body_h), (0, 0, 0, 0))
-            level = 1.0 if i == talker or secs < 1.0 else 0.3
-            self._commentator_column(col, name, first, last, lines, pad, mono, f_first, f_last, f_bio, secs, i, level)
+            level = 1.0 if i == talker or secs < 1.2 else 0.3
+            row = self._commentator_row(name, bios[i], body_w, row_hs[i], secs, i, level, divider=i > 0)
             if e < 1:
-                col.putalpha(col.getchannel('A').point(lambda v, e=e: int(v * e)))
-            cx, cy = (i % per_row) * col_w, head_h + (i // per_row) * body_h + int((1 - e) * 14)
-            img.alpha_composite(col, (cx, cy))
-            if i % per_row:
-                round_rect(img, (cx, head_h + 18, cx + 1, head_h + body_h - 14), 0, (255, 255, 255, 34))
-        round_outline(img, (0, 0, W, H), 10, (255, 255, 255, 40), 1)
+                row.putalpha(row.getchannel('A').point(lambda v, e=e: int(v * e)))
+            img.alpha_composite(row, (pad, int(top + row_ys[i] + (1 - e) * 12)))
+        if disc_lines:
+            p = max(0.0, min(1.0, (secs - 0.3 - n * 0.22) / 0.4))
+            if p > 0:
+                foot = Image.new('RGBA', (W, disc_h), (0, 0, 0, 0))
+                round_rect(foot, (pad, 0, W - pad, 1), 0, (255, 255, 255, 34))
+                self.text_lines(foot, pad + 4, 10, disc_lines, f_disc, th.muted, 19)
+                if p < 1:
+                    foot.putalpha(foot.getchannel('A').point(lambda v, p=p: int(v * p)))
+                img.alpha_composite(foot, (0, int(top + body_h + pad + 2)))
         return img
 
-    def _commentator_column(self, col, name, first, last, lines, pad, mono, f_first, f_last, f_bio, secs, idx, level):
+    @staticmethod
+    def _tint(color, k, base=(11, 14, 20)):
+        """color mixed k of the way from the dark panel base."""
+        return tuple(int(b + (c - b) * k) for c, b in zip(color[:3], base)) + (255,)
+
+    def _commentator_picture(self, photo, max_w, max_h):
+        """The commentators' picture for the top of the card, or None. A cut-out PNG (transparent background)
+        is used as it is, to stand on the header; any other picture is shown whole on a plate with a slanted
+        left edge and an accent2 sliver, rounded on top."""
+        if photo is None:
+            return None
+        a = photo.getchannel('A')
+        corners = [(0, 0), (photo.width - 1, 0), (0, photo.height - 1), (photo.width - 1, photo.height - 1)]
+        if min(a.getpixel(c) for c in corners) < 250:
+            return fit_image(photo, max_w, max_h)
+        slant = 22
+        pic = fit_image(photo, max_w - slant - 8, max_h)
+        w, h = pic.width + slant + 8, pic.height
+        out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        polygon(out, [(slant, 0), (slant + 6, 0), (6, h), (0, h)], self.th.accent2)
+        m = Image.new('L', (pic.width * 4, h * 4), 0)
+        ImageDraw.Draw(m).rounded_rectangle((0, 0, pic.width * 4 - 1, h * 4 + 40), radius=24, fill=255)
+        ImageDraw.Draw(m).polygon([(0, 0), (slant * 4, 0), (0, h * 4)], fill=0)
+        m = m.resize((pic.width, h), Image.LANCZOS)
+        pic.putalpha(ImageChops.multiply(pic.getchannel('A'), m))
+        out.alpha_composite(pic, (8, 0))
+        return out
+
+    def _commentator_body(self, w, h, opacity=1.0):
+        """The maroon panel behind the commentator rows, with faint diagonal stripes like the F1 TV panel."""
         th = self.th
-        x, y = pad, pad
+        bg = h_gradient(w, h, self._tint(th.accent, 0.30), self._tint(th.accent, 0.12))
+        stripes = ImageDraw.Draw(bg)
+        for sx in range(-h, w, 14):
+            stripes.line((sx, h, sx + h, 0), fill=self._tint(th.accent, 0.36), width=1)
+        mask = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        round_rect(mask, (0, 0, w, h), 6, (255, 255, 255, int(255 * opacity)))
+        bg.putalpha(mask.getchannel('A'))
+        return bg
+
+    def _commentator_row(self, name, lines, w, h, secs, idx, level, divider=False):
+        """One commentator on a transparent strip: accent bar, first name and waveform, SURNAME and up to two
+        lines of bio (a thin line above it after the first)."""
+        th = self.th
+        row = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        if divider:
+            round_rect(row, (12, 0, w - 12, 1), 0, (255, 255, 255, 30))
+        # Surname particles stay with the surname: Pedro / DE LA ROSA
+        parts = name.split()
+        cut = len(parts) - 1
+        while cut > 1 and parts[cut - 1].lower() in ('de', 'la', 'del', 'van', 'von', 'der', 'da', 'di', 'le', 'dos'):
+            cut -= 1
+        first, last = (' '.join(parts[:cut]), ' '.join(parts[cut:])) if len(parts) > 1 else ('', name)
+        tx, top = 22, 10
+        avail = w - tx - 24
         # Accent bar beside the name, red into gold
-        bar = Image.new('RGBA', (5, mono), (0, 0, 0, 0))
-        grad = Image.linear_gradient('L').resize((5, mono))  # 0 at the top -> 255 at the bottom
-        bar.paste(Image.new('RGBA', (5, mono), th.accent), (0, 0))
-        bar.paste(Image.new('RGBA', (5, mono), th.accent2), (0, 0), grad)
-        shape = Image.new('RGBA', (5, mono), (0, 0, 0, 0))
-        round_rect(shape, (0, 0, 5, mono), 2, (255, 255, 255, 255))
-        bar.putalpha(shape.getchannel('A'))
-        col.alpha_composite(bar, (x, y))
-        tx = x + 18
-        avail = col.width - tx - pad
+        bar_h = 50
+        bar = Image.new('RGBA', (4, bar_h), th.accent)
+        bar.paste(Image.new('RGBA', (4, bar_h), th.accent2), (0, 0), Image.linear_gradient('L').resize((4, bar_h)))
+        row.alpha_composite(bar, (10, top + (0 if first else 4)))
+        f_first = font(18, 'regular')
+        wx = tx
         if first:
-            text_vcenter(col, tx, y + 14, ellipsize(first, f_first, avail), f_first, th.muted)
-        f2 = fit_font(last, avail, f_last.size, 'bold')
-        text_vcenter(col, tx, y + (40 if first else 30), last, f2, th.text)
-        # Voice waveform under the name: live while this commentator talks, idling otherwise
-        self._waveform(col, tx, y + mono + 4, min(avail, 170), 22, secs, idx, level)
-        self.text_lines(col, x, y + mono + 28, lines, f_bio, th.muted, 23)
+            first_t = ellipsize(first, f_first, avail - 90)
+            text_vcenter(row, tx, top + 9, first_t, f_first, (255, 255, 255, 200))
+            wx = tx + int(text_w(f_first, first_t)) + 12
+        f_last = fit_font(last.upper(), avail, 30, 'bold')
+        text_vcenter(row, tx, top + (36 if first else 29), last.upper(), f_last, th.text)
+        # Voice waveform beside the first name: live while this commentator talks, idling otherwise
+        self._waveform(row, wx, top + 9, 72, 16, secs, idx, level)
+        self.text_lines(row, tx, top + 56, lines, font(16, 'regular'), (255, 255, 255, 175), self.COMM_BIO_LINE)
+        return row
 
     def _waveform(self, img, x, cy, w, h, secs, seed, level=1.0):
         import math
@@ -1425,71 +1497,56 @@ class Templates:
 
 
     # ------------------------------------------------------------------ data-driven cards
-    def card_gap_tracker(self, g, anim=1.0):
-        """Battle forecast: the car behind closing on (or dropping away from) the car ahead. The interval
-        counts from where it was to where it is now while the two markers slide together or apart."""
+    def card_last_laps(self, g, anim=1.0):
+        """Last 4 laps, F1 style: the car ahead's lap times on top, the car behind's difference to each one
+        under them (green where it was quicker, red where slower), and the timing sponsor in a tab on the top
+        right. The differences come in lap by lap."""
         th = self.th
         d = g.get('data', {})
         behind, ahead = g['driver'], g.get('driver2')
-        if not ahead:
+        laps, ta, tb = d.get('laps') or [], d.get('ahead_times') or [], d.get('behind_times') or []
+        if not ahead or not laps or len(ta) != len(laps) or len(tb) != len(laps):
             return None
         anim = 1.0 if anim is None else anim
-        e = ease_out(anim)
-        closing = d.get('mode', 'closing') == 'closing'
-        gap = d['gap_from'] + (d['gap_now'] - d['gap_from']) * e
-        W, panel_h = 920, 158
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or ('BATTLE FORECAST' if closing else 'PULLING AWAY')),
-                                    sponsor='timing')
-        cx = W / 2
+        shown = len(laps) if anim >= 1 else int(anim * len(laps) + 0.999)
+        f_head = font(26, 'semibold_cond')
+        f_lap = font(26, 'bold_cond')
+        f_name = font(30, 'bold_cond')
+        f_time = font(30, 'regular')
+        f_delta = font(30, 'semibold')
+        col_w = 150
+        head_h, row_h = 50, 52
+        rows = ((d.get('pos_ahead'), ahead), (d.get('pos_behind'), behind))
+        badges = [self.badge(name, 26) for _, name in rows]
+        logo_x = 24 + 34 + 10
+        logo_w = max(self.badge_w(bg) for bg in badges)  # one column for the logos, so the names line up
+        name_x = logo_x + logo_w
+        name_w = max(text_w(f_head, 'LAST 4 LAPS') - (name_x - 24),
+                     *(text_w(f_name, self.meta(n)['short'].upper()) for _, n in rows))
+        x_cols = name_x + int(name_w) + 40
+        W = x_cols + col_w * len(laps) + 10
+        panel_h = head_h + row_h * 2 + 8
+        img, top = self.card_canvas(W, panel_h, None, sponsor='timing')
+        text_vcenter(img, 24, top + head_h / 2 + 2, f'LAST {len(laps)} LAPS', f_head, th.text)
+        for k, n in enumerate(laps):
+            text_vcenter(img, x_cols + col_w * (k + 0.5), top + head_h / 2 + 2, f'LAP {n}', f_lap, th.text, 'm')
         green, red = th.green, th.red
-        # Drivers either side: the car behind on the left, the car ahead on the right
-        for side, name, pos in ((0, behind, d.get('pos_behind')), (1, ahead, d.get('pos_ahead'))):
-            col = self.driver_color(name)
-            if side == 0:
-                round_rect(img, (20, top + 18, 25, top + 70), 2, col)
-                self.name_with_flag(img, 38, top + 34, name, 34, max_w=cx - 200)
-                sub = f"CHASING P{d.get('pos_ahead')}" if closing else f"P{pos}"
-                text_vcenter(img, 38, top + 60, sub, font(19, 'semibold_cond'), th.muted)
-            else:
-                round_rect(img, (W - 25, top + 18, W - 20, top + 70), 2, col)
-                self.name_with_flag(img, W - 38, top + 34, name, 34, anchor='r', max_w=cx - 200)
-                sub = f"P{pos}" if closing else f"P{pos}  ·  EXTENDING"
-                text_vcenter(img, W - 38, top + 60, sub, font(19, 'semibold_cond'), th.muted, 'r')
-        # Forecast box
-        bx0, bx1 = cx - 165, cx + 165
-        round_rect(img, (bx0, top + 12, bx1, top + 84), 6, th.panel_hi)
-        round_outline(img, (bx0, top + 12, bx1, top + 84), 6, (th.accent2 if closing else red)[:3] + (220,), 2)
-        laps = d.get('laps_to')
-        if closing:
-            head = 'STRIKING DISTANCE' if laps else 'WITHIN STRIKING DISTANCE'
-            big = (f"IN {laps} LAP{'S' if laps != 1 else ''}" if laps else 'NOW')
-        else:
-            head, big = 'GAP GROWING', f"+{abs(d.get('rate', 0)):.2f}s / LAP"
-        text_vcenter(img, cx, top + 28, head, font(18, 'bold_cond'), th.accent2 if closing else red, 'm')
-        text_vcenter(img, cx, top + 60, big, fit_font(big, bx1 - bx0 - 20, 38, 'bold'), th.text, 'm')
-        # Gap strip: two markers sliding together/apart with the interval between them
-        y = top + 122
-        x0, x1 = 60, W - 60
-        span = max(d['gap_from'], d['gap_now'], 0.5) * 1.15
-        round_rect(img, (x0, y - 2, x1, y + 2), 2, (255, 255, 255, 40))
-        xa = x1 - 20
-        xb = xa - (x1 - x0 - 40) * min(1.0, gap / span)
-        round_rect(img, (xb, y - 3, xa, y + 3), 3, (green if closing else red)[:3] + (180,))
-        for x, name in ((xb, behind), (xa, ahead)):
-            round_rect(img, (x - 9, y - 9, x + 9, y + 9), 9, self.driver_color(name))
-            round_outline(img, (x - 9, y - 9, x + 9, y + 9), 9, (255, 255, 255, 230), 2)
-        val = f"{gap:.3f}s"
-        text_vcenter(img, (xa + xb) / 2, y - 22, val, font(24, 'bold'), th.text, 'm')
-        rate = abs(d.get('rate', 0))
-        trend = f"{rate:.2f}s PER LAP"
-        ty = top + panel_h - 14
-        if closing:  # down arrow: the gap is shrinking
-            polygon(img, [(38, ty - 5), (50, ty - 5), (44, ty + 5)], green)
-        else:
-            polygon(img, [(38, ty + 5), (50, ty + 5), (44, ty - 5)], red)
-        if d.get('laps'):
-            trend += f" OVER THE LAST {d['laps']} LAPS"
-        text_vcenter(img, 58, ty, ('CLOSING ' if closing else 'LOSING ') + trend, font(16, 'semibold_cond'), th.muted)
+        for r, ((pos, name), bg) in enumerate(zip(rows, badges)):
+            cy = top + head_h + row_h * r + row_h / 2
+            if r:
+                round_rect(img, (16, cy - row_h / 2, W - 16, cy - row_h / 2 + 1), 0, (255, 255, 255, 28))
+            text_vcenter(img, 24 + 17, cy, str(pos or '–'), font(26, 'semibold'), th.text, 'm')
+            if bg is not None:
+                img.alpha_composite(bg, (int(logo_x + (logo_w - 18 - bg.width) / 2), int(cy - bg.height / 2)))
+            text_vcenter(img, name_x, cy, self.meta(name)['short'].upper(), f_name, th.text)
+            for k in range(len(laps)):
+                cx = x_cols + col_w * (k + 0.5)
+                if r == 0:
+                    text_vcenter(img, cx, cy, _lap_clock(ta[k]), f_time, th.text[:3] + (215,), 'm')
+                elif k < shown:
+                    diff = tb[k] - ta[k]
+                    col = green if diff < -0.0005 else red if diff > 0.0005 else th.muted
+                    text_vcenter(img, cx, cy, f"{'-' if diff < 0 else '+'}{abs(diff):.3f}", f_delta, col, 'm')
         return img
 
     def card_pit_timer(self, g, anim=1.0):
@@ -1613,20 +1670,37 @@ class Templates:
         return img
 
     def card_insight(self, g):
-        """Track guide / strategy / analysis: a bold line and one short line under it."""
+        """Track guide / strategy / analysis: a bold line and one short line under it. Circuit notes (the
+        CIRCUIT_LABELS tabs) take up to three lines, with the event flag fading in on the right."""
         th = self.th
+        label = (g.get('label') or 'ANALYSIS').upper()
+        circuit = label in gcfg.CIRCUIT_LABELS
         title = (g.get('title') or '').upper()
         text = ' '.join((g.get('text') or '').split())
         f_title, f_text = font(32, 'bold_cond'), font(20, 'regular')
-        title = wrap(title, f_title, 860, 1)[0] if title else ''
-        lines = wrap(text, f_text, 860, 2) if text else []
+        max_w = 780 if circuit else 860
+        title = wrap(title, f_title, max_w, 1)[0] if title else ''
+        lines = wrap(text, f_text, max_w, 3 if circuit else 2) if text else []
         panel_h = 22 + 36 + (len(lines) * 26 + 6 if lines else 0) + 14
-        W = int(48 + max(text_w(f_title, title), self.lines_w(lines, f_text), 260))
-        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'ANALYSIS').upper(), stripe=th.accent2)
+        flag = (load_image(gcfg.resolve_path(self.cfg['championship'].get('event_flag')), autocrop=False)
+                if circuit else None)
+        flag_w = 160 if flag is not None else 0
+        W = int(48 + max(text_w(f_title, title), self.lines_w(lines, f_text), 260) + flag_w)
+        img, top = self.card_canvas(W, panel_h, label, stripe=th.accent2)
+        if flag is not None:
+            fw = flag_w + 60
+            art = cover_image(flag, fw, int(panel_h))
+            ramp = Image.linear_gradient('L').rotate(90).resize((fw, int(panel_h))).point(lambda v: int(v * 0.6))
+            art.putalpha(ImageChops.multiply(art.getchannel('A'), ramp))
+            shape = Image.new('L', img.size, 0)  # the panel's rounded right edge
+            ImageDraw.Draw(shape).rounded_rectangle((0, top, W - 1, top + panel_h - 1), 6, fill=255)
+            layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+            layer.alpha_composite(art, (W - fw, int(top)))
+            layer.putalpha(ImageChops.multiply(layer.getchannel('A'), shape))
+            img.alpha_composite(layer)
         ImageDraw.Draw(img).text((26, top + 18), title, font=f_title, fill=th.text)
         self.text_lines(img, 26, top + 62, lines, f_text, th.muted, 26)
         return img
-
 
 def _is_light(logo):
     """True for a mostly white/pale logo (it needs a dark tab behind it)."""
@@ -1640,3 +1714,9 @@ def _is_light(logo):
 def race_time_label(race, t_video):
     gf = race.green_flag_video
     return fmt_clock(t_video - gf) if gf is not None and t_video >= gf else ''
+
+
+def _lap_clock(sec):
+    """1:21.530"""
+    m, s = divmod(max(0.0, sec), 60)
+    return f"{int(m)}:{s:06.3f}"
