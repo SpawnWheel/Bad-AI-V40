@@ -22,6 +22,7 @@ CONFIG_FILE = os.path.join(APP_DIR, "launcher_config.json")
 ERROR_LOG = os.path.join(APP_DIR, "launcher_errors.log")
 
 LOGGERS = {"AMS2": "Logger_AMS2/ams2_logger.py", "RaceRoom": "Logger_Raceroom/raceroom_logger.py"}
+RACE_VISUALIZER = "RaceVisualizer/visualizer_app.py"
 CORNER_MAPPERS = {"AMS2": "CornerMapper_AMS2/corner_mapper.py", "RaceRoom": "CornerMapper_Raceroom/corner_mapper_raceroom.py"}
 ENGINEER_SIMS = {"AMS2": "ams2", "RaceRoom": "raceroom"}
 NAV = (("home", "Race"), ("library", "My races"), ("settings", "Settings"))
@@ -313,6 +314,15 @@ class App:
             return
         self.pm.start(f"Corner Mapper ({sim})", [python_exe(), script], cwd=APP_DIR, kind="tool")
         self.toast("Corner Mapper is opening in its own window.")
+
+    def launch_race_visualizer(self, folder=None):
+        script = os.path.join(APP_DIR, RACE_VISUALIZER)
+        if not os.path.exists(script):
+            messagebox.showerror("Race Visualizer", f"Not found:\n{script}")
+            return
+        args = [python_exe(), script] + ([folder] if folder else [])
+        self.pm.start("Race Visualizer", args, cwd=APP_DIR, kind="tool")
+        self.toast("Race Visualizer is opening in its own window.")
 
     # ------------------------------------------------------------------ replay steps
 

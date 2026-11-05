@@ -122,15 +122,48 @@ def level_clip(audio, target_dbfs=-27.0, max_peak_dbfs=-6.0, max_gain_db=12.0, m
 # Broadcast voice chain applied (via ffmpeg) to the stitched timeline: cut the rumble and the boxy low mids,
 # lift the presence and air so the voices cut through the game audio, compress firmly so every word lands,
 # then bring the whole track to broadcast loudness (-16 LUFS) under a limiter.
-COMPRESSOR_FILTER = (
+VOICE_FILTER = (
     "highpass=f=90,"
     "equalizer=f=300:t=q:w=1.2:g=-2.5,"
     "equalizer=f=3200:t=q:w=1.0:g=3.5,"
     "equalizer=f=9000:t=q:w=0.8:g=1.5,"
-    "acompressor=threshold=-24dB:ratio=4:attack=3:release=90:knee=3:makeup=2dB,"
-    "loudnorm=I=-16:TP=-1.5:LRA=7,aresample=48000,"
-    "alimiter=limit=-1dB:attack=3:release=40:level=disabled"
+    "acompressor=threshold=-24dB:ratio=4:attack=3:release=90:knee=3:makeup=2dB"
 )
+TARGET_LUFS = -16.0
+LIMITER_FILTER = "aresample=48000,alimiter=limit=-1dB:attack=3:release=40:level=disabled"
+
+
+def measure_lufs(ffmpeg, path, chain):
+    """Integrated loudness (LUFS) of the file through the filter chain, or None."""
+    import json, subprocess
+    res = subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-i", path, "-af",
+                          f"{chain},loudnorm=I={TARGET_LUFS}:TP=-1.5:LRA=7:print_format=json", "-f", "null", "-"],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
+    text = res.stderr
+    try:
+        return float(json.loads(text[text.rindex("{"):text.rindex("}") + 1])["input_i"])
+    except (ValueError, KeyError):
+        return None
+
+
+def export_broadcast(combined, output_file):
+    """Exports the timeline through the voice chain at one fixed gain to TARGET_LUFS, then the limiter.
+    (A one-pass loudnorm rides its gain up and down: after the minutes of silence before the start it was
+    still coming up, and the first calls were 8-10 dB quieter than the rest.)"""
+    import subprocess, tempfile
+    ffmpeg = AudioSegment.converter
+    fd, raw = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        combined.export(raw, format="wav")
+        lufs = measure_lufs(ffmpeg, raw, VOICE_FILTER)
+        gain = 0.0 if lufs is None or lufs < -70 else max(-20.0, min(20.0, TARGET_LUFS - lufs))
+        print(f"  Commentary loudness {lufs if lufs is not None else '?'} LUFS -> gain {gain:+.1f} dB")
+        subprocess.run([ffmpeg, "-hide_banner", "-nostats", "-loglevel", "error", "-y", "-i", raw, "-af",
+                        f"{VOICE_FILTER},volume={gain:.2f}dB,{LIMITER_FILTER}", output_file], check=True)
+    finally:
+        os.remove(raw)
+
 
 
 def main(input_folder, output_file):
@@ -310,7 +343,7 @@ def main(input_folder, output_file):
         combined = combined.overlay(item['audio'], position=item['actual_start'])
     
     print(f"Exporting to {output_file} (applying compressor)...")
-    combined.export(output_file, format="wav", parameters=["-af", COMPRESSOR_FILTER])
+    export_broadcast(combined, output_file)
     print("Done!")
 
 if __name__ == "__main__":

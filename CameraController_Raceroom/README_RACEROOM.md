@@ -12,7 +12,7 @@ RaceRoom's Driver Ahead/Behind keys (Numpad + / −) do nothing in replays, but 
 
 A switch takes about a second including showing and hiding the bar. RaceRoom takes every click, even in a fast burst.
 
-The ▶ arrow steps through the field in race order: P1, then last place, then back up to P2. Retired cars are skipped. The controller gets that order from the logger's timing file (`Race_*_timing.jsonl` next to the race log), at the replay's current point in the race. Without a timing file, it learns the order instead when you press **Play Sequence**: one lap of ▶ while the replay is still paused, about 2 seconds. **Learn Drivers** does the same by hand.
+The ▶ arrow steps to the next car up the road, not the next place in the race: once the leaders lap someone, the lapped car sits between them and the cars behind. Retired cars are skipped. The controller works out where every car is on the lap from the logger's timing file (`Race_*_timing.jsonl` next to the race log), at the replay's current point in the race. Without a timing file, it learns the order instead when you press **Play Sequence**: one lap of ▶ while the replay is still paused, about 2 seconds. **Learn Drivers** does the same by hand.
 
 Things to know:
 - Some replays never fill in RaceRoom's shared field list. The controller doesn't need it: in a replay, the shared memory's player name is always the driver in view.

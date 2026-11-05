@@ -1,0 +1,67 @@
+{
+  "track_location": "Barcelona",
+  "track_variation": "Circuit_de_Catalunya_NATL_NC",
+  "track_length": 2976.6,
+  "corners": [
+    {
+      "name": "The Main Straight",
+      "start": 94.1,
+      "end": 354.1
+    },
+    {
+      "name": "Braking into T1",
+      "start": 413.5,
+      "end": 573.5
+    },
+    {
+      "name": "The T1 Hairpin",
+      "start": 627.5,
+      "end": 747.5
+    },
+    {
+      "name": "Wurth",
+      "start": 787.2,
+      "end": 907.2
+    },
+    {
+      "name": "Up the hill towards Campsa",
+      "start": 956.5,
+      "end": 1101.5
+    },
+    {
+      "name": "Campsa",
+      "start": 1142.6,
+      "end": 1307.6
+    },
+    {
+      "name": "The Back Straight",
+      "start": 1344.7,
+      "end": 1574.7
+    },
+    {
+      "name": "Braking zone into La Caixa",
+      "start": 1611.2,
+      "end": 1731.2
+    },
+    {
+      "name": "La Caixa",
+      "start": 1782.8,
+      "end": 1902.8
+    },
+    {
+      "name": "Banc Sabadell",
+      "start": 1989.0,
+      "end": 2204.0
+    },
+    {
+      "name": "Europecar",
+      "start": 2338.8,
+      "end": 2458.8
+    },
+    {
+      "name": "New Holland",
+      "start": 2603.5,
+      "end": 2773.5
+    }
+  ]
+}

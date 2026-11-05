@@ -181,12 +181,14 @@ class SettingsScreen(tk.Frame):
 
     def _tools_card(self):
         c = self._card("Tools", "Map the corner names of a track by driving a lap, so the race log and commentary "
-                                "can say where things happened.")
+                                "can say where things happened. The Race Visualizer turns a recorded race into a "
+                                "90-second video of the whole race.")
         row = tk.Frame(c, bg=t.CARD)
         row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
         for sim in ("AMS2", "RaceRoom"):
             t.button(row, f"Corner Mapper - {t.SIM_NAMES[sim]}", lambda s=sim: self.app.launch_corner_mapper(s),
                      size=9).pack(side="left", padx=(0, 8))
+        t.button(row, "Race Visualizer", self.app.launch_race_visualizer, size=9).pack(side="left", padx=(0, 8))
 
     # ------------------------------------------------------------------ saving
 

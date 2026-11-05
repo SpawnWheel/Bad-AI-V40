@@ -9,11 +9,11 @@
     "name": "Caterham Academy",
     "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 1",
-    "event_name": "Interlagos",
+    "round": "Round 3",
+    "event_name": "Barcelona",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Logos/BritainLogo.png"
+    "event_flag": "Graphics/Flags/ESP.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -52,7 +52,8 @@
       "bottom": 820,
       "rows": 0,
       "cycle": "interval,gap,name",
-      "cycle_sec": 15
+      "cycle_sec": 15,
+      "class_groups": ""
     },
     "logo": {
       "enabled": true,
@@ -82,6 +83,14 @@
     },
     "leader": {
       "y": 24
+    },
+    "pits": {
+      "x": 0,
+      "y": 150
+    },
+    "commentators": {
+      "right": 0,
+      "y": 0
     }
   },
   "auto_graphics": {
@@ -94,10 +103,11 @@
     "new_leader": true,
     "pit_stops": true,
     "gap_tracker": true,
-    "sponsors": true,
     "radio": true,
+    "stewards": true,
     "chequered": true,
-    "results": true
+    "results": true,
+    "sponsors": true
   },
   "popup_types": {
     "driver_card": true,
@@ -113,6 +123,7 @@
   },
   "popup_density": "medium",
   "popup_duration": 8.0,
+  "render_fps": 15,
   "drivers": {
     "[RCV]Dom.Payne": {
       "display": "Dom Payne",
@@ -290,6 +301,16 @@
       "make": "",
       "color": "",
       "car_image": "Graphics/CarPreviews/Bill.dds"
+    },
+    "Googlebear": {
+      "display": "Googlebear",
+      "short": "GOOGLEBEAR",
+      "number": "4",
+      "country": "GBR",
+      "team": "Private",
+      "make": "Caterham",
+      "color": "#16d50d",
+      "car_image": "Graphics/Logos/CaterhamWhite.png"
     }
   },
   "sponsors": {
@@ -307,12 +328,17 @@
     }
   },
   "commentators": {
-    "Martin Haven": {
-      "bio": "Veteran motorsport broadcaster and lead voice of the FIA World Endurance Championship."
+    "Antonio Lobato": {
+      "bio": "Renowned Spanish Formula 1 television commentator."
     },
-    "Anthony Davidson": {
-      "bio": "2014 FIA World Endurance Champion and former Formula 1 driver"
+    "Pedro de la Rosa": {
+      "bio": "Former Formula 1 driver and broadcast analyst."
+    },
+    "Toni Cuquerella": {
+      "bio": "Veteran Formula 1 engineer and race analyst."
     }
   },
+  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_ome2pkome2pkome2.jfif",
+  "commentator_disclaimer": null,
   "championship_preset": "RCV Caterham - Season 15"
 }
