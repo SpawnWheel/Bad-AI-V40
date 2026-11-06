@@ -34,6 +34,28 @@ SAMPLE_CALLS = [
     ("dry, deadpan", "slow, flat and understated", "Yes, we saw the gravel trap. Thanks for the tour."),
 ]
 
+SAMPLE_CALLS_FR = [
+    ("détendu, calme", "vérification radio décontractée",
+     "Vérification radio. Je te reçois bien, comment est l'auto en sortie des stands?"),
+    ("sec et tendu", "rapide, légèrement plus fort par-dessus le moteur",
+     "Voiture derrière, une demi-seconde. Défends l'intérieur en entrée de virage 1."),
+    ("urgent, alarmé", "fort, rapide et insistant",
+     "Rentre, rentre, rentre! <short pause> Avant gauche qui se dégonfle, rentre ce tour-ci."),
+    ("content, discret", "chaleureux et sobre, un sourire dans la voix",
+     "Voilà la cinquième place. Beau dépassement, maintenant creuse l'écart."),
+    ("frustration contrôlée", "grave et ferme, mots bien espacés",
+     "<exhales> On a perdu deux positions. On se replace, il reste beaucoup de course."),
+    ("soulagé", "expiré, qui s'adoucit à la fin",
+     "<breath> Le carburant est correct jusqu'au drapeau. Plus d'arrêt, ramène-la à bon port."),
+    ("emballé", "plus haut, rapide, plein d'énergie",
+     "Drapeau à damier, deuxième place! Quelle course, mon ami, bravo!"),
+    ("pince-sans-rire", "lent, plat et sobre",
+     "Oui, on l'a vu, le bac à gravier. Merci pour la visite guidée."),
+]
+
+def get_sample_calls(persona):
+    return SAMPLE_CALLS_FR if getattr(persona, "language_code", "en").startswith("fr") else SAMPLE_CALLS
+
 
 def stream_debug(tts):
     """Prints what the Gemini TTS stream actually sends, with timings (for troubleshooting)."""
@@ -116,7 +138,7 @@ def main():
     player = AudioPlayer(volume=cfg.get("engineer", {}).get("volume", 1.2),
                          radio_effect=cfg.get("engineer", {}).get("radio_effect", True))
     out_dir = Path("data/voice_samples")
-    for i, (emotion, delivery, line) in enumerate(SAMPLE_CALLS, 1):
+    for i, (emotion, delivery, line) in enumerate(get_sample_calls(persona), 1):
         print(f"[{i}] {emotion:24s} | {line}")
         audio = tts.synthesize(line, emotion=emotion, delivery=delivery)
         if audio is None:
