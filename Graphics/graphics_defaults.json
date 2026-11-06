@@ -216,7 +216,7 @@
       "car_image": "Graphics/Logos/Beavertown.png"
     },
     "mattikake": {
-      "display": "mattikake",
+      "display": "Mattikake",
       "short": "MATTIKAKE",
       "number": "77",
       "country": "GBR",
@@ -226,16 +226,17 @@
       "car_image": "Graphics/Logos/McLaren.webp"
     },
     "Lucas Degen": {
-      "display": "Lucan Degen",
+      "display": "Lucas Degen",
       "short": "DEGEN",
       "number": "28",
       "country": "NLD",
       "team": "Mini",
+      "make": "MINI",
       "color": "#008000",
       "car_image": "Graphics/Logos/mini.png"
     },
     "[RCV]muzzer82": {
-      "display": "Liam Murray",
+      "display": "Muzzer",
       "short": "MURRAY",
       "number": "137",
       "country": "GBR",
@@ -250,6 +251,7 @@
       "number": "71",
       "country": "GBR",
       "team": "Team Gulf",
+      "make": "MINI",
       "color": "#04dddd",
       "car_image": "Graphics/Logos/gulf.png"
     },
@@ -269,6 +271,7 @@
       "number": "99",
       "country": "GBR",
       "team": "Mini",
+      "make": "MINI",
       "color": "#e10600",
       "car_image": "Graphics/Logos/mini.png"
     },
@@ -311,6 +314,36 @@
       "make": "Caterham",
       "color": "#16d50d",
       "car_image": "Graphics/Logos/CaterhamWhite.png"
+    },
+    "dmk": {
+      "display": "DMK",
+      "short": "DMK",
+      "number": "14",
+      "country": "POL",
+      "team": "Mini Poland",
+      "make": "MINI",
+      "color": "",
+      "car_image": "Graphics/Logos/mini.png"
+    },
+    "[RCV]kenevo": {
+      "display": "Kenevo Mini",
+      "short": "KENEVO_MINI",
+      "number": "27",
+      "country": "GBR",
+      "team": "Mulch",
+      "make": "MINI",
+      "color": "",
+      "car_image": "Graphics/Logos/Mulch2.png"
+    },
+    "[RCV]RayFin [MINI Cooper JCW] DNS: clinton.nortje": {
+      "display": "Clinton Nortje",
+      "short": "NORTJE",
+      "number": "",
+      "country": "",
+      "team": "",
+      "make": "",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/clinton.nortje.dds"
     }
   },
   "sponsors": {
