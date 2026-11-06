@@ -225,7 +225,13 @@ class GeminiTTS:
             }
             if self.accent:
                 voice_req["accent"] = self.accent
-            created = self.client.voices.create(store=True, voice=voice_req)
+            # La conception de voix est lente (souvent > 20 s) : client dédié avec un délai long,
+            # sans toucher au timeout court utilisé pour la synthèse en direct.
+            design_client = genai.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(timeout=180_000),  # 180 s
+            )
+            created = design_client.voices.create(store=True, voice=voice_req)
             voice_id = getattr(created, "id", None)
             if not voice_id:
                 logger.error("Voice design returned no id; falling back to prebuilt voice.")
@@ -328,14 +334,14 @@ class GeminiTTS:
         s = self._normalise_for_speech(s)
         return s, cues
 
-    @staticmethod
-    def _normalise_for_speech(s: str) -> str:
+    #@staticmethod
+    def _normalise_for_speech(self, s: str) -> str:
         """Small fixes so numbers read the way an engineer would say them."""
-        # 1.4s -> 1.4 seconds ; 1s -> 1 second
-        s = re.sub(r"\b(\d+(?:\.\d+)?)\s?s\b(?![a-z])", lambda m: f"{m.group(1)} {'second' if m.group(1) == '1' else 'seconds'}", s)
-        # "~" approx
-        s = s.replace("~", "about ")
-        # Strip markdown emphasis
+        fr = self.language_code.lower().startswith("fr")
+        one, many = ("seconde", "secondes") if fr else ("second", "seconds")
+        s = re.sub(r"\b(\d+(?:\.\d+)?)\s?s\b(?![a-z])",
+                   lambda m: f"{m.group(1)} {one if m.group(1) == '1' else many}", s)
+        s = s.replace("~", "environ " if fr else "about ")
         s = s.replace("**", "").replace("__", "")
         return s
 
