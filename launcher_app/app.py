@@ -400,7 +400,9 @@ class App:
             messagebox.showerror("Copy prompt", f"Could not read the prompt:\n{e}")
             return
         notes = racefiles.notes_text(racefiles.race_file(folder, "race_notes")) if step.get("race_notes") is not False else ""
-        extra =f"\n\nProject Specific Instructions:\n{notes}" if notes else ""
+        extra = f"\n\nProject Specific Instructions:\n{notes}" if notes else ""
+        if step.get("graphics_notes"):
+            extra += racefiles.graphics_notes_block(folder)
         data = ""
         inputs = [k for k in step["args"] if k != "OUTPUT"]
         source = pipeline.input_path(folder, inputs[0]) if inputs else None

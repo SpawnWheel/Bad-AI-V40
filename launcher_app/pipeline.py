@@ -70,7 +70,7 @@ STEPS = {
         hint="Place the timing tower and pop-ups, and set names, logos and car images."),
     "graphics_plan": dict(
         title="Plan the pop-up graphics",
-        kind="auto", script="AI Steps/graphic_creator.py", prompt_folder="Graphics",
+        kind="auto", script="AI Steps/graphic_creator.py", prompt_folder="Graphics", graphics_notes=True,
         args=[], needs=["graphics_config", "commentary"], output="graphics_plan",
         hint="The AI decides when each pop-up graphic appears."),
     "export": dict(
@@ -84,7 +84,8 @@ STAGES = [
     dict(id="notes", title="Race notes", steps=[],
          about="Tell the AI about this race before you start. The race notes are read by the spice step, "
                "the commentary writer and the graphics. Camera notes are only for the camera director, which "
-               "doesn't read the race notes. You can change them at any time."),
+               "doesn't read the race notes. Graphics notes are background facts the pop-up graphics can pick "
+               "from. You can change them at any time."),
     dict(id="film", title="Film the replay", steps=["camera"],
          about="1. Open the Camera Director and press Generate - the AI plans the camera shots from your race log.\n"
                "2. Load the race replay in the sim and start recording your screen (OBS or similar).\n"

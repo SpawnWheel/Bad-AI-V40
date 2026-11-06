@@ -330,7 +330,10 @@ class RaceScreen(tk.Frame):
                 ("race_notes", "Race notes", "Championship, storylines, rivalries, nicknames, how to pronounce names, "
                                              "who to focus on. Used by the spice, commentary and graphics steps."),
                 ("camera_notes", "Camera notes", "Only for the camera director - e.g. 'Focus on car #24 whenever it "
-                                                 "is battling for position.'")):
+                                                 "is battling for position.'"),
+                ("graphics_notes", "Graphics notes", "Background facts for the pop-up graphics, one per line. The "
+                                                     "graphics AI picks the ones that fit - e.g. 'Thommo has won "
+                                                     "three of the last four rounds here.'")):
             c = t.card(parent, padx=18, pady=14)
             c.pack(fill="x", pady=5)
             head = tk.Frame(c, bg=t.CARD)
