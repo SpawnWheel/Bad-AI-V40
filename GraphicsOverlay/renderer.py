@@ -16,7 +16,7 @@ from PIL import Image
 
 from . import config as gcfg
 from .drawing import ease_in, ease_out
-from .race_data import commentator_names, read_commentary, read_radio_calls, read_stewards
+from .race_data import FASTEST_LAP_FROM, commentator_names, read_commentary, read_radio_calls, read_stewards
 from .templates import Templates, race_time_label
 
 POPUP_IN = 0.45
@@ -30,7 +30,6 @@ ANIMATED = {'overtake': (1.0, 0.7), 'new_leader': (0.4, 1.1), 'commentators': (0
             'title_card': (0.0, 1.6), 'chequered': (0.0, 1.0), 'last_laps': (0.5, 1.2), 'pit_timer': (0.0, 1.0)}
 ANIM_RATE = {'commentators': 15, 'chequered': 15, 'pit_timer': 10}  # steps per second, else the video fps
 TOWER_OFF_AFTER = 3.0      # the timing tower comes off this long after the winner crosses the line
-FASTEST_LAP_FROM = 5       # fastest laps only count from this lap (early laps are in traffic and on cold tyres)
 PIT_TIMER_LEAD = 1.2       # the pit timer card is up this long before the car stops in its box
 PIT_TIMER_TOP = 4          # only the top 4 get the pit timer; the rest a small IN PITS tag
 PIT_TAG_DUR = 6.0          # seconds an IN PITS tag stays up

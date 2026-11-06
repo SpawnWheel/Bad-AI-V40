@@ -24,6 +24,7 @@ DEBUG_DIR = "debug"
 FILES = {
     "race_notes": "race_notes.txt",
     "camera_notes": "camera_notes.txt",
+    "graphics_notes": "graphics_notes.txt",
     "race_log": "01_race_log.txt",
     "timing": "01_race_log_timing.jsonl",
     "camera_sequence": "02_camera_sequence.json",
@@ -67,6 +68,18 @@ def notes_text(path):
             return "\n".join(l for l in f.read().splitlines() if not l.lstrip().startswith("#")).strip()
     except OSError:
         return ""
+
+
+def graphics_notes_block(folder):
+    """The graphics notes as a prompt section for the pop-up graphics AI, or "" when there are none."""
+    notes = notes_text(race_file(folder, "graphics_notes"))
+    if not notes:
+        return ""
+    return ("\n\nGRAPHICS NOTES (background facts from the producer for the pop-ups):\n"
+            "Pick the ones that fit a moment in the race and use them in the words of a pop-up, e.g. a driver_card, "
+            "headline or insight, shown when that driver is on camera or the commentators touch on that story. "
+            "You don't have to use them all; use each one at most once, and keep its facts as written.\n"
+            f"{notes}")
 
 
 def emit_status(**fields):

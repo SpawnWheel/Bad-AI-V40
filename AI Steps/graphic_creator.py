@@ -41,7 +41,8 @@ def main():
         prompt_text = f.read()
 
     notes = racefiles.notes_text(racefiles.race_file(project_path, "race_notes"))
-    full_prompt = f"{prompt_text}\n\nProject Specific Notes:\n{notes or '(none)'}\n\n{brief}"
+    full_prompt = (f"{prompt_text}\n\nProject Specific Notes:\n{notes or '(none)'}"
+                   f"{racefiles.graphics_notes_block(project_path)}\n\n{brief}")
 
     debug_dir = os.path.join(project_path, racefiles.DEBUG_DIR)
     os.makedirs(debug_dir, exist_ok=True)

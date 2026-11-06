@@ -41,6 +41,7 @@ ROWS_BOTTOM = H - 8
 LEAD_X_MAX = W - 52        # the leader's nose never goes further right than this
 FIELD_X_MIN = 76           # nor the last car's nose further left
 VIEW_MIN, VIEW_MAX = 1.0, 2.6   # laps visible across the screen
+SWAP_SEC = 1.1             # an overtake takes this long to swap rows
 FALL_SEC = 1.6             # retired cars take this long to fall off
 
 FINISH_FINISHED = 1
@@ -601,7 +602,7 @@ class Replay:
         # On screen: distance in the leader's time, with the last bit of sampling noise smoothed out
         wdist = race.warp(dist)
         for j in range(N):
-            wdist[:, j] = _smooth(wdist[:, j], 0.3 * FPS)
+            wdist[:, j] = _smooth(_smooth(wdist[:, j], 0.4 * FPS), 0.4 * FPS)
         # Game positions per frame (cars missing from a snapshot keep their last place)
         pos = np.zeros((F, N))
         last = {c.name: c.index + 1 for c in cars}
@@ -639,13 +640,13 @@ class Replay:
         lead_x = np.minimum(LEAD_X_MAX, FIELD_X_MIN + avail / 2 + field_w / 2 + 40)
         ppl = _smooth(np.log(ppl), 2.5 * FPS)
         ppl = np.exp(ppl)
-        lead_x = _smooth(lead_x, 1.2 * FPS)
+        lead_x = _smooth(lead_x, 2.0 * FPS)
 
         x = lead_x[:, None] - (lead[:, None] - wdist) * ppl[:, None]
         down = np.floor(lead[:, None] - wdist + 1e-6)
         clamped = x < FIELD_X_MIN
         x = np.maximum(x, FIELD_X_MIN)
-        y = ROWS_TOP + _ease_rows(rank, 0.22 * FPS) * self.row_h
+        y = ROWS_TOP + _ease_rows(rank, SWAP_SEC * FPS) * self.row_h
 
         # Retired cars fall off the back and off the bottom
         for j, c in enumerate(cars):
@@ -913,16 +914,13 @@ def _smooth(a, window):
 
 
 def _ease_rows(rank, frames):
-    """Rows glide to new places instead of jumping: an exponential follow, frame by frame."""
-    k = 1 - math.exp(-1 / max(1.0, frames))
-    out = np.empty_like(rank)
-    cur = rank[0].copy()
-    for f in range(rank.shape[0]):
-        cur += (rank[f] - cur) * k * 2.2
-        # Snap the last bit so cars settle exactly on their row
-        close = np.abs(rank[f] - cur) < 0.02
-        cur[close] = rank[f][close]
-        out[f] = cur
+    """Rows glide to new places with an ease in and out over `frames`: three box filters in a row turn
+    each step into a smooth S-curve. A swap that flickers back within that time only nudges the cars."""
+    out = rank.astype(float).copy()
+    width = frames / 3
+    for j in range(out.shape[1]):
+        for _ in range(3):
+            out[:, j] = _smooth(out[:, j], width)
     return out
 
 

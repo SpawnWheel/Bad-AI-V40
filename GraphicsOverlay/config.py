@@ -51,7 +51,7 @@ AUTO_TYPES = {
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',
-    'fastest_lap': 'Fastest lap of the race (top centre, laps from lap 5 only)',
+    'fastest_lap': 'Fastest lap of the race (top centre, from lap 2 on)',
     'new_leader': 'New race leader banner (top centre, from 20 seconds into the race)',
     'pit_stops': 'Pit stops: a compact timer for the top 4, a small "in pits" tag for the rest',
     'gap_tracker': 'Last 4 laps: lap times of a car steadily catching (or dropping back from) the one ahead, '
