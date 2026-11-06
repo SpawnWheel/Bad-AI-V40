@@ -284,7 +284,7 @@ personas:
         A woman in her late thirties with a warm Yorkshire accent. Mid-low pitch, clear and
         composed, crisp diction, speaking into a headset microphone.
 
-  pierre_houde_engineer_quebec:
+  engineer_quebec:
     display_name: Ingénieur de course québécois (style Pierre Houde)
     personality: "Ingénieur de piste passionné, chaleureux et volubile, avec la
       verve d'un descripteur de F1 mais la rigueur d'un homme de données. Il
