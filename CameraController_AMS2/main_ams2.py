@@ -44,7 +44,8 @@ class AMS2CameraController:
         self.playback_start_time = datetime.now()
         self.time_offset = tk.DoubleVar(value=0.0)
         self.timer_display = tk.StringVar(value="00:00:00")
-        
+        self.next_change = None # (sequence second, description) of the camera change coming up
+
         self.current_driver = None
         self.is_paused = False
         self.pause_start_time = None
@@ -134,6 +135,7 @@ class AMS2CameraController:
         # Timer Display
         timer_f = ttk.Frame(self.main_frame); timer_f.pack(fill=tk.X, pady=10)
         tk.Label(timer_f, textvariable=self.timer_display, font=("Consolas", 32, "bold"), bg="#111", fg="#0f0").pack(side=tk.LEFT, expand=True, fill=tk.X)
+        self._build_countdown()
 
         # Offset Control
         offset_f = ttk.Frame(self.main_frame); offset_f.pack(fill=tk.X, pady=5)
@@ -223,6 +225,33 @@ class AMS2CameraController:
         log_f.pack(fill=tk.BOTH, expand=True, pady=5)
         self.log_text = tk.Text(log_f, height=10, font=("Consolas", 8), bg="#1e1e1e", fg="#00ff00", state="disabled")
         self.log_text.pack(fill=tk.BOTH, expand=True)
+
+    def _build_countdown(self):
+        """Countdown to the next camera change, under the timer."""
+        cd_f = tk.Frame(self.main_frame, bg="#111"); cd_f.pack(fill=tk.X)
+        self.countdown_lbl = tk.Label(cd_f, text="NEXT CUT  --", font=("Consolas", 20, "bold"), bg="#111", fg="#888")
+        self.countdown_lbl.pack(fill=tk.X)
+        self.next_lbl = tk.Label(cd_f, text="", font=("Helvetica", 9), bg="#111", fg="#aaa", wraplength=380)
+        self.next_lbl.pack(fill=tk.X, pady=(0, 4))
+
+    def _show_countdown(self, curr_sec=0.0):
+        """Seconds left until the next camera change: green, then amber inside 10 s, red inside 3 s."""
+        if self.next_change is None:
+            text, desc, colour = "NEXT CUT  --", "", "#888"
+        else:
+            target_sec, desc = self.next_change
+            left = max(0, math.ceil(target_sec - curr_sec))
+            text = f"NEXT CUT  {left // 60}:{left % 60:02}" if left >= 60 else f"NEXT CUT  {left}s"
+            colour = "#f33" if left <= 3 else "#fa0" if left <= 10 else "#0f0"
+        self.root.after(0, lambda: (self.countdown_lbl.config(text=text, fg=colour), self.next_lbl.config(text=desc)))
+
+    @staticmethod
+    def _change_text(item):
+        """What the next change cuts to, for the countdown."""
+        text = item.get("driver", "Unknown")
+        if item.get("position") is not None:
+            text += f" (P{item['position']})"
+        return text
 
     def update_settings(self):
         try:
@@ -533,16 +562,18 @@ class AMS2CameraController:
                     effective_elapsed = elapsed + timedelta(seconds=self.time_offset.get())
                     ts = int(max(0, effective_elapsed.total_seconds()))
                     self.timer_display.set(f"{ts//3600:02}:{(ts%3600)//60:02}:{ts%60:02}")
+                    self._show_countdown(effective_elapsed.total_seconds())
                 time.sleep(0.2)
         threading.Thread(target=update_timer, daemon=True).start()
 
         for item in self.sequence_data:
             if not self.is_playing_sequence: break
-            
+
             tc = item["timecode"]
             parts = list(map(int, tc.split(":")))
             target_sec = parts[0]*3600 + parts[1]*60 + parts[2]
-            
+            self.next_change = (target_sec, self._change_text(item))
+
             while self.is_playing_sequence:
                 if self.is_paused:
                     time.sleep(0.5)
@@ -557,6 +588,8 @@ class AMS2CameraController:
                 time.sleep(0.1)
 
         self.is_playing_sequence = False
+        self.next_change = None
+        self._show_countdown()
         self.root.after(0, lambda: self.play_btn.config(text="Play Sequence"))
         self.log_message("Sequence finished")
 
