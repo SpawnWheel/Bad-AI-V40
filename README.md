@@ -193,6 +193,7 @@ Then **Plan the pop-up graphics** lets the AI choose the moments for driver card
 | The engineer or recorder **stopped unexpectedly** | The live screen and the Activity panel show its last messages. |
 | No race was saved | Only race sessions of 5 minutes or more are kept. Check the recorder's output in **Activity**. |
 | RaceRoom replays have no driver data | RaceRoom doesn't share driver data during replays. Record the race live. |
+| The video won't open in **Review & sync the events** (or plays without a picture) | Windows is missing the video codecs. Install the free [K-Lite Codec Pack](https://codecguide.com/download_kl.htm) (the **Basic** version is enough), then open the review window again. |
 | Something in the app itself went wrong | Details are written to `launcher_errors.log` in this folder. |
 
 ## Upgrading from the old launcher
