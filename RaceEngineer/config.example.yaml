@@ -345,11 +345,11 @@ personas:
     voice:
       mode: designed
       prebuilt: Orus
-      description: A man in his late fifties, native Québécois French speaker from
+      description: >-
+        A man in his late fifties, native Québécois French speaker from
         Montréal, speaking French only. Warm baritone, mid-to-low pitch, slightly
         gravelly with a smoky edge. Melodic, sing-song intonation typical of a
         Québécois live sports broadcaster. Fast, rolling pace with strong dynamic
-      range: speeds up and rises in pitch as excitement builds, drops to a lower
+        range: speeds up and rises in pitch as excitement builds, drops to a lower
         confidential tone before a decisive moment. Enthusiastic, generous,
-        articulate, with a smile in the voice. Recorded close to a headset mic.     
-    
+        articulate, with a smile in the voice. Recorded close to a headset mic.

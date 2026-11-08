@@ -334,7 +334,6 @@ class GeminiTTS:
         s = self._normalise_for_speech(s)
         return s, cues
 
-    #@staticmethod
     def _normalise_for_speech(self, s: str) -> str:
         """Small fixes so numbers read the way an engineer would say them."""
         fr = self.language_code.lower().startswith("fr")
