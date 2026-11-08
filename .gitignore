@@ -30,3 +30,6 @@ launcher_state.json
 
 # Car preview images are personal to each user
 Graphics/CarPreviews/*
+
+# Sponsor and team logos are personal to each user
+Graphics/Logos/
