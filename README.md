@@ -26,14 +26,18 @@ You click one logo before you race. Afterwards you pick the race from a list and
 
 ## Install
 
-You need Windows, **Python 3.10 or newer** and a **Gemini API key** (free from [Google AI Studio](https://aistudio.google.com/)).
+You need Windows, **Python 3.10 to 3.13** and a **Gemini API key** (free from [Google AI Studio](https://aistudio.google.com/)).
 
-1. Install Python from [python.org](https://www.python.org/downloads/). Tick **"Add Python to PATH"** during the install.
+Newer Python versions (3.14, 3.15) are not supported yet. Some packages, PyTorch in particular, don't have installers for them, so `pip install` fails.
+
+1. Install Python 3.13 (or any version from 3.10 to 3.13) from [python.org](https://www.python.org/downloads/). Tick **"Add Python to PATH"** during the install.
 2. Install the packages. Open a terminal in this folder and run:
 
    ```bash
    pip install google-genai pillow pyyaml pynput pydirectinput pygetwindow PyQt5 pydub numpy sounddevice pygame-ce
    ```
+
+   On Python 3.13, also run `pip install audioop-lts`. Python 3.13 removed a module that `pydub` needs, and this package puts it back.
 
 3. Install **FFmpeg** (used to cut and export the video) and make sure `ffmpeg` works in a terminal. You can get it from [ffmpeg.org](https://ffmpeg.org/download.html) or with `winget install ffmpeg`.
 4. Install the voice generator. It needs an NVIDIA graphics card; see [TTS/TTSFast/README.md](TTS/TTSFast/README.md):

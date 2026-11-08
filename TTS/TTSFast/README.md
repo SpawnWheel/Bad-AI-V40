@@ -12,11 +12,13 @@ This application automates the conversion of race commentary text files into ind
 
 ## Installation
 
-Ensure you have Python 3.10+ and the required dependencies installed:
+Ensure you have Python 3.10 to 3.13 and the required dependencies installed:
 
 ```powershell
 pip install faster-qwen3-tts pydub soundfile torch
 ```
+
+*On Python 3.13, also install `audioop-lts`, which `pydub` needs.*
 
 *Note: You may need [FFmpeg](https://ffmpeg.org/) installed on your system for `pydub` to export MP3 files.*
 
