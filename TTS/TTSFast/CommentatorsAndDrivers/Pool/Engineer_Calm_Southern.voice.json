@@ -1,0 +1,12 @@
+{
+  "name": "Engineer Calm Southern",
+  "role": "pool_engineer",
+  "description": "A race engineer in his forties with a neutral southern English accent. Calm, clipped, precise, steady low voice, reads numbers like a pilot. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "British (Received Pronunciation)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_qk527c2aox8q",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:13:53"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Engineer Australian",
+  "role": "pool_engineer",
+  "description": "An Australian race engineer in his thirties. Relaxed, bright, dry and friendly voice, matter-of-fact. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "Australian (Melbourne)",
+  "language_code": "en-AU",
+  "gemini_voice_id": "voice_zgwsa2mxyqpj",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:14:37"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Driver German",
+  "role": "pool_driver",
+  "description": "A German in his forties speaking English with a German accent. Firm, mid-low voice, focused and serious. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "German (speaking English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_g1d38xipd5km",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:16:39"
+}

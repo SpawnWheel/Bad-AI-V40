@@ -1,0 +1,12 @@
+{
+  "name": "Engineer German",
+  "role": "pool_engineer",
+  "description": "A German race engineer in his fifties speaking English with a German accent. Deep, serious, very precise voice, no nonsense. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "German (speaking English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_2cdkxthkrjxr",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:15:26"
+}

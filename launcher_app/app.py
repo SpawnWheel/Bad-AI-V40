@@ -1,10 +1,12 @@
 """The main window: header navigation, the screens, the activity panel and everything that runs."""
 import json
 import os
+import re
 import threading
 import time
 import tkinter as tk
 import traceback
+import webbrowser
 from tkinter import messagebox
 
 import racefiles
@@ -23,6 +25,8 @@ ERROR_LOG = os.path.join(APP_DIR, "launcher_errors.log")
 
 LOGGERS = {"AMS2": "Logger_AMS2/ams2_logger.py", "RaceRoom": "Logger_Raceroom/raceroom_logger.py"}
 RACE_VISUALIZER = "RaceVisualizer/visualizer_app.py"
+VOICE_STUDIO = "TTS/TTSFast/app_gui.py"
+VOICE_STUDIO_LABEL = "Voice studio"
 CORNER_MAPPERS = {"AMS2": "CornerMapper_AMS2/corner_mapper.py", "RaceRoom": "CornerMapper_Raceroom/corner_mapper_raceroom.py"}
 ENGINEER_SIMS = {"AMS2": "ams2", "RaceRoom": "raceroom"}
 NAV = (("home", "Race"), ("library", "My races"), ("settings", "Settings"))
@@ -314,6 +318,29 @@ class App:
             return
         self.pm.start(f"Corner Mapper ({sim})", [python_exe(), script], cwd=APP_DIR, kind="tool")
         self.toast("Corner Mapper is opening in its own window.")
+
+    def launch_voice_studio(self):
+        """Opens the voice generator on its Voice Designer tab, without a race. If a voice generator is already
+        open (this one, or a race's Record the voices step), its page is opened again instead."""
+        for proc in self.pm.running():
+            if proc.label == VOICE_STUDIO_LABEL or proc.step_id == "tts":
+                url = next((m.group(0) for text, _ in reversed(proc.lines)
+                            for m in [re.search(r"https?://(?:127\.0\.0\.1|localhost):\d+/?", text)] if m), None)
+                if url:
+                    webbrowser.open(url)
+                    self.toast("The voice generator is already open - its page is opening in your browser "
+                               "(Voice Designer tab).")
+                else:
+                    self.toast("The voice generator is still starting - its page opens in your browser in a moment.")
+                return
+        script = os.path.join(APP_DIR, VOICE_STUDIO)
+        if not os.path.exists(script):
+            messagebox.showerror("Voice studio", f"Not found:\n{script}")
+            return
+        self.pm.start(VOICE_STUDIO_LABEL, [python_exe(), script], cwd=os.path.dirname(script),
+                      env=dict(self.ai_env(), BADAI_TTS_TAB="designer"), kind="tool")  # Gemini designs the voices
+        self.toast("The voice studio is opening in your browser. Design voices, try them and pick who sounds like "
+                   "whom. Its messages are under Activity.")
 
     def launch_race_visualizer(self, folder=None):
         script = os.path.join(APP_DIR, RACE_VISUALIZER)

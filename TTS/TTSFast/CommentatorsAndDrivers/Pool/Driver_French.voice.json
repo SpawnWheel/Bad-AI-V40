@@ -1,0 +1,12 @@
+{
+  "name": "Driver French",
+  "role": "pool_driver",
+  "description": "A Frenchman in his thirties speaking English with a French accent. Lively, slightly high voice, expressive and emotional. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "French (speaking English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_u8b2auds7wxs",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:16:20"
+}

@@ -33,3 +33,6 @@ Graphics/CarPreviews/*
 
 # Sponsor and team logos are personal to each user
 Graphics/Logos/
+
+# Designed voices of league drivers are personal to each user
+TTS/TTSFast/CommentatorsAndDrivers/Drivers/

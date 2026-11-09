@@ -93,6 +93,8 @@ class HomeScreen(tk.Frame):
                                                         else "No recorded races yet"), fill=t.DIM, font=(t.FONT, 9))
         self.items["link"] = c.link(0, 0, "Make a replay from a recorded race  →", lambda: self.app.show("library"),
                                     size=12, bold=True)
+        self.items["voices"] = c.link(0, 0, "Design driver and engineer voices in the Voice studio  →",
+                                      self.app.launch_voice_studio, size=10)
         c.on_layout = self._layout_pick
 
     def _on(self, key):
@@ -167,7 +169,7 @@ class HomeScreen(tk.Frame):
 
     def _layout_pick(self, w, h):
         c = self.canvas
-        cx, cy = w / 2, max(min(h * 0.47, h - 410), 310)
+        cx, cy = w / 2, max(min(h * 0.47, h - 436), 310)
         if "warn" in self.items:
             c.coords(self.items["warn"], cx - 50, cy - 290)
             c.coords(self.items["warn_link"], cx + 290, cy - 290)
@@ -188,6 +190,7 @@ class HomeScreen(tk.Frame):
         c.coords(self.items["line"], cx - 280, cy + 340, cx + 280, cy + 340)
         c.coords(self.items["count"], cx, cy + 362)
         c.coords(self.items["link"], cx, cy + 388)
+        c.coords(self.items["voices"], cx, cy + 414)
 
     # ------------------------------------------------------------------ live session
 

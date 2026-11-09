@@ -1,0 +1,12 @@
+{
+  "name": "Driver English Veteran",
+  "role": "pool_driver",
+  "description": "An Englishman in his sixties with a plummy upper-class accent. Crisp, clipped, polite but steely voice. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "British (upper-class English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_bba7mn3ilajr",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:18:53"
+}
