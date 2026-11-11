@@ -10,10 +10,10 @@
     "short_name": "RCV",
     "season": "Season 15",
     "round": "Round 3",
-    "event_name": "Barcelona",
+    "event_name": "Sebring ",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Flags/ESP.png"
+    "event_flag": "Graphics/Flags/USA.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -193,7 +193,7 @@
       "team": "Caterham",
       "make": "Caterham",
       "color": "#047857",
-      "car_image": "Graphics/Logos/caterham.png"
+      "car_image": "Graphics/Logos/CaterhamWhite.png"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
@@ -216,7 +216,7 @@
       "car_image": "Graphics/Logos/Beavertown.png"
     },
     "mattikake": {
-      "display": "mattikake",
+      "display": "Mattikake",
       "short": "MATTIKAKE",
       "number": "77",
       "country": "GBR",
@@ -226,16 +226,17 @@
       "car_image": "Graphics/Logos/McLaren.webp"
     },
     "Lucas Degen": {
-      "display": "Lucan Degen",
+      "display": "Lucas Degen",
       "short": "DEGEN",
       "number": "28",
       "country": "NLD",
       "team": "Mini",
+      "make": "MINI",
       "color": "#008000",
       "car_image": "Graphics/Logos/mini.png"
     },
     "[RCV]muzzer82": {
-      "display": "Liam Murray",
+      "display": "Muzzer",
       "short": "MURRAY",
       "number": "137",
       "country": "GBR",
@@ -250,6 +251,7 @@
       "number": "71",
       "country": "GBR",
       "team": "Team Gulf",
+      "make": "MINI",
       "color": "#04dddd",
       "car_image": "Graphics/Logos/gulf.png"
     },
@@ -269,6 +271,7 @@
       "number": "99",
       "country": "GBR",
       "team": "Mini",
+      "make": "MINI",
       "color": "#e10600",
       "car_image": "Graphics/Logos/mini.png"
     },
@@ -310,7 +313,57 @@
       "team": "Private",
       "make": "Caterham",
       "color": "#16d50d",
+      "car_image": "Graphics/Logos/Cloud.png"
+    },
+    "dmk": {
+      "display": "DMK",
+      "short": "DMK",
+      "number": "14",
+      "country": "POL",
+      "team": "Mini Poland",
+      "make": "MINI",
+      "color": "",
+      "car_image": "Graphics/Logos/mini.png"
+    },
+    "[RCV]kenevo": {
+      "display": "Kenevo Mini",
+      "short": "KENEVO_MINI",
+      "number": "27",
+      "country": "GBR",
+      "team": "Mulch",
+      "make": "MINI",
+      "color": "",
+      "car_image": "Graphics/Logos/Mulch2.png"
+    },
+    "[RCV]RayFin [MINI Cooper JCW] DNS: clinton.nortje": {
+      "display": "Clinton Nortje",
+      "short": "NORTJE",
+      "number": "",
+      "country": "",
+      "team": "",
+      "make": "",
+      "color": "",
+      "car_image": "Graphics/CarPreviews/clinton.nortje.dds"
+    },
+    "laurie_[Slip]": {
+      "display": "Laurie",
+      "short": "LAURIE",
+      "number": "13",
+      "country": "GBR",
+      "team": "Stig",
+      "make": "Caterham",
+      "color": "#D32F2F",
       "car_image": "Graphics/Logos/CaterhamWhite.png"
+    },
+    "laurie_": {
+      "display": "Laurie",
+      "short": "LAURIE_",
+      "number": "",
+      "country": "GBR",
+      "team": "",
+      "make": "",
+      "color": "",
+      "car_image": ""
     }
   },
   "sponsors": {
@@ -336,9 +389,18 @@
     },
     "Toni Cuquerella": {
       "bio": "Veteran Formula 1 engineer and race analyst."
+    },
+    "Mike Joy": {
+      "bio": "Longtime lead NASCAR lap-by-lap commentator for Fox Sports."
+    },
+    "Darrell Waltrip": {
+      "bio": "Three-time NASCAR Cup champion and Hall of Fame broadcaster."
+    },
+    "Larry McReynolds": {
+      "bio": "Championship-winning NASCAR crew chief and technical race analyst."
     }
   },
-  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_ome2pkome2pkome2.jfif",
+  "commentator_photo": "Graphics/Logos/Mike-Joy-Larry-McReynolds-Darrell-Waltrip.jpg",
   "commentator_disclaimer": null,
   "championship_preset": "RCV Caterham - Season 15"
 }
