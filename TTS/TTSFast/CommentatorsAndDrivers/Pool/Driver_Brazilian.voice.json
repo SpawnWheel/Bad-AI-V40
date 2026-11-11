@@ -1,0 +1,12 @@
+{
+  "name": "Driver Brazilian",
+  "role": "pool_driver",
+  "description": "A Brazilian in his twenties speaking English with a Brazilian accent. Bright, fast, excitable voice. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "Brazilian Portuguese (speaking English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_64n5sr3ehzwu",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:18:01"
+}

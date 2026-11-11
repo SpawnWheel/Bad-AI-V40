@@ -1,0 +1,12 @@
+{
+  "name": "Driver American",
+  "role": "pool_driver",
+  "description": "A Texan in his fifties with a Southern drawl. Deep, slow, easy-going voice. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "American (Texas)",
+  "language_code": "en-US",
+  "gemini_voice_id": "voice_ajnpp5pp24u3",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:17:37"
+}

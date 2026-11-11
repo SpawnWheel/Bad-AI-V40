@@ -6,6 +6,8 @@ import torch
 import soundfile as sf
 from pydub import AudioSegment
 from faster_qwen3_tts import FasterQwen3TTS
+import voice_lookup
+from radio_fx import apply_radio
 import argparse
 import sys
 import threading
@@ -25,27 +27,8 @@ def parse_line(line):
     return None
 
 def find_voice_file(speaker_name, voices_dir, mappings):
-    # 1. Check mappings
-    voice_file_name = mappings.get(speaker_name)
-    if voice_file_name:
-        path = os.path.join(voices_dir, voice_file_name)
-        if os.path.exists(path):
-            return path
-        # If it was just the name without path, or filename changed
-    
-    # 2. Search in voices_dir
-    files = os.listdir(voices_dir)
-    norm_key = speaker_name.lower().replace(" ", "").replace("_", "")
-    
-    # Try fuzzy match
-    for f in files:
-        if not f.endswith(".wav"):
-            continue
-        norm_f = f.lower().replace(".wav", "").replace("commentator_", "").replace(" ", "").replace("_", "")
-        if norm_key in norm_f or norm_f in norm_key:
-            return os.path.join(voices_dir, f)
-            
-    return None
+    """The voice for a speaker: see voice_lookup.resolve (commentators by name, team radio by driver)."""
+    return voice_lookup.resolve(speaker_name, voices_dir, mappings)[0]
 
 def main():
     parser = argparse.ArgumentParser(description="Faster Qwen3 TTS Processor")
@@ -141,12 +124,17 @@ def main():
     speaker_styles = {}
     missing_speakers = []
 
+    # Worked out for every speaker in the script at once, so no two drivers share a generic pool voice
+    # (and a partial run or a redo gets the same voices as the full run)
+    assignments = voice_lookup.resolve_all(sorted({p[1] for p in all_parsed.values()}), args.voices, mappings)
+
     def resolve_speaker(s):
         nonlocal new_mappings_found
-        voice_path = find_voice_file(s, args.voices, mappings)
+        voice_path = assignments[s][0] if s in assignments else find_voice_file(s, args.voices, mappings)
         if not voice_path:
             return None
-        filename = os.path.basename(voice_path)
+        # Relative to the voices folder: designed voices sit in subfolders (Drivers/, Engineers/, Pool/)
+        filename = os.path.relpath(voice_path, args.voices).replace("\\", "/")
         speaker_files[s] = voice_path
 
         # Look for reference text (same name as wav but .txt)
@@ -161,7 +149,9 @@ def main():
             with open(style_path, 'r', encoding='utf-8') as style_file:
                 speaker_styles[s] = style_file.read().strip()
 
-        if s not in mappings or mappings[s] != filename:
+        # Commentators found by name are remembered; team radio voices are only stored when picked in the app,
+        # so a voice designed for a driver later takes over from the generic one
+        if not voice_lookup.is_radio(s) and (s not in mappings or mappings[s] != filename):
             mappings[s] = filename
             new_mappings_found = True
         return filename
@@ -292,6 +282,10 @@ def main():
                 continue
                 
             audio = audio_list[0]
+            radio = voice_lookup.radio_speaker(speaker)
+            if radio:
+                # Team radio: the voice goes through the broadcast radio sound (static, engine, open/close tones)
+                audio = apply_radio(audio, sr, role=radio[0], seed=line_seed)
             
             # Save temporary wav
             temp_wav = f"temp_{os.getpid()}.wav"
@@ -305,7 +299,7 @@ def main():
             else:
                 # Convert to MP3
                 safe_time = timecode.replace(":", "")
-                safe_speaker = speaker.replace(" ", "_").replace(".", "")
+                safe_speaker = re.sub(r"[\\/:*?\"<>|'’]", "", speaker).replace(" ", "_").replace(".", "")
                 base_filename = f"{safe_time}_{safe_speaker}"
                 output_filename = f"{base_filename}.mp3"
                 output_path = os.path.join(args.output, output_filename)

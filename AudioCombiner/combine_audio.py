@@ -29,6 +29,14 @@ def parse_speaker(filename):
         return clean_speaker
     return None
 
+def is_radio_speaker(speaker):
+    """Team radio clips are named after their speaker tag, e.g. '001230_RADIO_Dom_Payne.mp3'."""
+    return bool(speaker) and speaker.upper().startswith("RADIO_")
+
+
+RADIO_OVERLAP_MS = 250  # about the length of a radio clip's closing static and tone
+
+
 def detect_speech_offset(audio, silence_threshold, chunk_size=10, min_sustained_ms=60, lookahead_ms=250):
     """
     Finds the millisecond offset where sustained speech begins, ignoring
@@ -262,7 +270,14 @@ def main(input_folder, output_file):
                     prev_speaker.lower() != curr_speaker.lower()
                 )
                 
-                if different_speakers:
+                radio_pair = [is_radio_speaker(prev_speaker), is_radio_speaker(curr_speaker)]
+                if different_speakers and all(radio_pair):
+                    # Two team radio messages never talk over each other: the reply waits for the close tone
+                    allowed_overlap = 0
+                elif different_speakers and any(radio_pair):
+                    # A commentator may come in over the radio's closing static and tone, not over the words
+                    allowed_overlap = min(RADIO_OVERLAP_MS, max(0, prev_item['duration'] - 200))
+                elif different_speakers:
                     # Allow overlap up to 800ms, ensuring previous clip has played for at least 200ms
                     allowed_overlap = min(MAX_OVERLAP_MS, max(0, prev_item['duration'] - 200))
                 else:

@@ -1,0 +1,12 @@
+{
+  "name": "Engineer Northern",
+  "role": "pool_engineer",
+  "description": "A race engineer, a woman in her forties with a Sheffield accent. Firm, warm, level voice, encouraging but strict. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "female",
+  "accent": "British (Sheffield, Northern England)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_xabhbh9v8rjz",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:15:49"
+}

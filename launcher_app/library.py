@@ -35,8 +35,10 @@ class LibraryScreen(tk.Frame):
         self.b_sub = b.create_text(36, 100, text="Every race you've recorded. Open one to turn it into a replay - "
                                                  "the app walks you through it.", fill=t.MUTED, font=(t.FONT, 10), anchor="w")
         self.folder_btn = t.button(b, "Open races folder", self.open_folder)
+        self.voices_btn = t.button(b, "Voice studio", self.app.launch_voice_studio)
         self.import_btn = t.button(b, "", self.import_old, kind="primary")
         self.folder_win = b.create_window(0, 62, window=self.folder_btn, anchor="e")
+        self.voices_win = b.create_window(0, 62, window=self.voices_btn, anchor="e")
         self.import_win = b.create_window(0, 62, window=self.import_btn, anchor="e", state="hidden")
 
         bar = tk.Frame(self, bg=t.BG)
@@ -75,7 +77,9 @@ class LibraryScreen(tk.Frame):
     def _layout_banner(self, w, h=None):
         self.banner.coords(self.folder_win, w - 36, 62)
         self.update_idletasks()
-        self.banner.coords(self.import_win, w - 36 - self.folder_btn.winfo_reqwidth() - 10, 62)
+        x = w - 36 - self.folder_btn.winfo_reqwidth() - 10
+        self.banner.coords(self.voices_win, x, 62)
+        self.banner.coords(self.import_win, x - self.voices_btn.winfo_reqwidth() - 10, 62)
 
     def set_filter(self, name):
         self.filter = name

@@ -61,5 +61,32 @@ python process_tts.py --output "final_commentary" --start_line 45
 | `--temperature`| Controls randomness (0.1 - 1.0). | `0.9` |
 | `--dry_run` | Show what would happen without generating. | `False` |
 
+## Designing New Voices (Voice Designer tab)
+Open the app (or **Voice studio** on the launcher's home screen or My races, no race needed) and go to **Voice Designer**. Voices are designed with **Gemini 3.8 Flash TTS**, using the Gemini API key from the launcher's Settings. Qwen3-TTS VoiceDesign was tried first and made every accent American.
+1. Pick who the voice is for: a driver, a driver's engineer, a generic pool voice or a commentator. *Fill in from a championship* copies a driver's name, other names, accent and a sample line in that accent from a championship file.
+2. Set the gender, accent (e.g. `Scottish (Glasgow)`) and language code, then describe the person's permanent traits: age, pitch, texture, pace and manner. Make each driver different from the others. Ask for a clean close-mic voice: the radio sound is added later.
+3. Generate a few takes. Each take is a new Gemini voice saying the sample line (about 20 s each). Listen (with or without the radio sound) and save the one you like.
+
+The take is saved as `.wav` + `.txt` (its words) + `.voice.json` (description, gender, accent and the Gemini voice id). From then on the commentary clones that clip with Qwen3-TTS on your graphics card, so the voice and its accent are the same in every race. **Try a saved voice** lets you hear any library voice say a new line, cloned the same way.
+
+**Changing a voice:** open **Edit a saved voice**, pick it and press *Load into the form*. Then either:
+- change the sample line and press **Record a new sample**: the same Gemini voice says the new line (say, angrier or calmer), so it stays the same person, or
+- change the description and press **Generate takes** to design a new voice for them.
+
+Either way, save with *Replace* ticked (loading ticks it for you).
+
+**Adding a voice** from a recording you already have (a `.wav` plus what it says) works in the **Load New Voice** tab, as before.
+
+Where voices go in `CommentatorsAndDrivers`:
+- `Drivers/`: one voice per driver, found by any of the names in its `.voice.json` (`aliases`).
+- `Engineers/`: an engineer for a particular driver (`for` lists the driver's names).
+- `Pool/`: generic driver and engineer voices. A driver or engineer without their own voice gets one of these, picked from the name, so they sound the same every race.
+- Top level: commentators, as before.
+
+## Team Radio
+In the commentary script, a line tagged `[RADIO <driver>]` or `[RADIO <driver>'s engineer]` is a team radio message (the V23 commentary prompts write these). It's voiced by that driver's or engineer's voice and gets a broadcast radio sound: narrow band, distortion, static and crackle, engine noise in the car or pit-wall noise behind the engineer, plus open and close tones (`radio_fx.py`). To use your own tones, put `radio_in.wav` / `radio_out.wav` in a `RadioSounds` folder here.
+
+To use a different voice for any speaker, open **Pick a voice for a speaker** on the Generation tab. Your pick is saved in `speaker_mappings.json`, and **(automatic)** gives the choice back to the app.
+
 ## Improving Voice Quality (ICL Mode)
 By default, the system uses the reference audio for tone. To significantly improve pronunciation and emotion, create a `.txt` file with the **exact same name** as your reference `.wav` file (e.g., `AlexJacques.txt`) containing the transcript of that audio. The script will automatically detect it and enable High-Quality ICL mode.

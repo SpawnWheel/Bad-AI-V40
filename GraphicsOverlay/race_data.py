@@ -641,7 +641,8 @@ def read_radio_calls(paths):
 def commentator_names(commentary):
     names = []
     for _, speaker, _ in commentary:
-        if speaker.isupper() or speaker in names:
+        # Upper-case tags are not people; "RADIO <driver>" lines are team radio, not the booth
+        if speaker.isupper() or speaker in names or speaker.upper().startswith("RADIO "):
             continue
         names.append(speaker)
     return names

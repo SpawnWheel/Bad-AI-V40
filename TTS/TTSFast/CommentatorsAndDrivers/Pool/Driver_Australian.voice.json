@@ -1,0 +1,12 @@
+{
+  "name": "Driver Australian",
+  "role": "pool_driver",
+  "description": "An Australian man in his forties with a broad accent. Laid-back, raspy voice, cheeky and confident. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "Australian (Brisbane)",
+  "language_code": "en-AU",
+  "gemini_voice_id": "voice_s0jeg4i64hxa",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:17:11"
+}

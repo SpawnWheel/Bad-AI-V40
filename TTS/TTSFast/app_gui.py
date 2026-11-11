@@ -9,6 +9,9 @@ import time
 import re
 import sys
 
+import voice_designer
+import voice_lookup
+
 # Tags process_tts.py prints for each finished or failed clip (kept in step with process_tts.py)
 CLIP_TAG = "@@CLIP "
 FAILED_TAG = "@@FAILED "
@@ -27,6 +30,10 @@ elif r3e_project_path:
     default_output_folder = os.path.join(r3e_project_path, "AudioClipsRAW")
 
 VOICES_DIR = "CommentatorsAndDrivers"
+MAPPINGS_FILE = "speaker_mappings.json"
+AUTO_VOICE = "(automatic)"
+# The tab to open on: "designer" when the launcher opens the voice studio without a race
+START_TAB = os.environ.get("BADAI_TTS_TAB", "generation")
 IDLE_UNLOAD_SECONDS = 60  # a finished run frees the GPU after this long without a redo
 
 
@@ -280,6 +287,8 @@ def run_tts_process(input_file, output_folder, model_size, xvec_only, temperatur
     if limit and int(limit) > 0:
         line_args.extend(["--limit", str(int(limit))])
 
+    # The designer's model would share the graphics card with the run
+    voice_designer.models.unload()
     if not runner.start(base_args, line_args):
         gr.Warning("A run is already going. Use Redo on a clip to add it to the queue.")
     return runner.log
@@ -344,6 +353,9 @@ CLIPS_JS = """
 (clips) => {
     const T = window.__tts || (window.__tts = {decided: new Map(), current: null, clips: []});
     if (Array.isArray(clips)) T.clips = clips;
+    // The Generation tab isn't drawn until it is shown (the voice studio opens on the Voice Designer tab);
+    // it runs again when the tab is selected
+    if (!document.getElementById('tts-card')) return;
     const key = c => c.line + ':' + c.takes;
     // What the page shows for a clip: a decision made here counts before the server has caught up
     const stateOf = c => c.review === 'new' && T.decided.has(key(c))
@@ -520,6 +532,14 @@ def save_mappings(text):
     except Exception as e:
         return f"Error saving mappings: {e}"
 
+def load_mappings():
+    try:
+        with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def refresh_speakers(file_path):
     if file_path is None:
         return "Please upload a commentary file to see detected speakers."
@@ -528,32 +548,71 @@ def refresh_speakers(file_path):
     if not speakers:
         return "No speakers detected in file."
 
-    # Load mappings to find where the voices are
-    mappings = {}
-    if os.path.exists("speaker_mappings.json"):
-        with open("speaker_mappings.json", "r", encoding="utf-8") as f:
-            mappings = json.load(f)
+    mappings = load_mappings()
+    assigned = voice_lookup.resolve_all(speakers, VOICES_DIR, mappings)
+    commentators = [s for s in speakers if not voice_lookup.is_radio(s)]
+    radio = [s for s in speakers if voice_lookup.is_radio(s)]
 
-    status_lines = [f"### Detected Speakers ({len(speakers)}):"]
+    def line(s):
+        path, how = assigned[s]
+        if not path:
+            return f"- **{s}**: ❌ No voice" + (" (design one, or add generic voices to the pool)" if s in radio else "")
+        rel = os.path.relpath(path, VOICES_DIR).replace("\\", "/")
+        base = path.rsplit('.', 1)[0]
+        quality = "✅ with transcript" if os.path.exists(base + ".txt") else "⚠️ no transcript (standard quality)"
+        style = " · 🎭 style note" if os.path.exists(base + ".style.txt") else ""
+        return f"- **{s}** → `{rel}` · {how} · {quality}{style}"
 
-    for s in speakers:
-        found_msg = "❌ No voice file mapped"
-        voice_file = mappings.get(s)
-
-        if voice_file:
-            path = os.path.join(VOICES_DIR, voice_file)
-            if os.path.exists(path):
-                ref_text_path = path.rsplit('.', 1)[0] + '.txt'
-                if os.path.exists(ref_text_path):
-                    found_msg = "✅ Found Voice + Transcript (High Quality)"
-                else:
-                    found_msg = "⚠️ Found Voice (Standard Quality)"
-                if os.path.exists(path.rsplit('.', 1)[0] + '.style.txt'):
-                    found_msg += " · 🎭 style note"
-
-        status_lines.append(f"- **{s}**: {found_msg}")
-
+    status_lines = [f"### Detected Speakers ({len(speakers)}):"] + [line(s) for s in commentators]
+    if radio:
+        status_lines += ["", f"**Team radio ({len(radio)})** · these get the radio sound"] + [line(s) for s in radio]
     return "\n".join(status_lines)
+
+
+def picker_speakers(file_path):
+    """The speaker dropdown for 'Pick a voice', from the script's speakers."""
+    return gr.update(choices=get_speakers_from_file(file_path), value=None)
+
+
+def show_pick(speaker):
+    """The voice a speaker uses now (for the voice dropdown) and a preview of it."""
+    if not speaker:
+        return gr.update(value=None), None
+    mappings = load_mappings()
+    path, how = voice_lookup.resolve(speaker, VOICES_DIR, mappings)
+    picked = mappings.get(speaker) if how == "picked" else None
+    choices = [(AUTO_VOICE + " · let the app choose", AUTO_VOICE)] + voice_designer.voice_choices(VOICES_DIR)
+    if picked and picked not in [rel for _, rel in choices]:
+        choices.append((picked, picked))
+    return gr.update(choices=choices, value=picked or AUTO_VOICE), path
+
+
+def preview_voice(speaker, rel):
+    """The clip of the chosen voice, or of the automatic one."""
+    if not rel or rel == AUTO_VOICE:
+        if not speaker:
+            return None
+        mappings = load_mappings()
+        mappings.pop(speaker, None) if voice_lookup.is_radio(speaker) else None
+        return voice_lookup.resolve(speaker, VOICES_DIR, mappings)[0]
+    path = os.path.join(VOICES_DIR, rel)
+    return path if os.path.exists(path) else None
+
+
+def save_pick(speaker, rel, file_path):
+    if not speaker:
+        raise gr.Error("Pick a speaker first.")
+    mappings = load_mappings()
+    if not rel or rel == AUTO_VOICE:
+        mappings.pop(speaker, None)
+        msg = f"{speaker} now gets a voice automatically."
+    else:
+        mappings[speaker] = rel
+        msg = f"{speaker} will use {rel}."
+    with open(MAPPINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(mappings, f, indent=4)
+    gr.Info(msg)
+    return refresh_speakers(file_path), get_mappings()
 
 def write_style(wav_name, style):
     """Saves (or clears) a voice's delivery note, read by process_tts.py as the model's instruct."""
@@ -630,9 +689,7 @@ def save_voice_transcript(voice_filename, text, style):
         return f"❌ Error: {e}"
 
 def list_voices_dropdown():
-    if os.path.exists(VOICES_DIR):
-        return sorted([f for f in os.listdir(VOICES_DIR) if f.endswith(".wav")])
-    return []
+    return [v["rel"] for v in voice_lookup.list_voices(VOICES_DIR)]
 
 STYLE_HINT = ("Optional. Tells the model how to deliver the line, e.g. \"Speak English with a strong Spanish accent.\" "
               "Works best with Fast Mode off; leave blank to rely on the reference audio alone.")
@@ -642,113 +699,127 @@ with gr.Blocks(title="Faster Qwen3 TTS - Race Commentary", css=CLIPS_CSS) as dem
     gr.Markdown("# 🏎️ Faster Qwen3 TTS Commentary Processor")
     gr.Markdown("Transform your commentary text files into individual MP3 files optimized for the 3060 Ti.")
     
-    with gr.Tab("Generation"):
-        with gr.Row():
-            with gr.Column():
-                input_file = gr.File(label="Commentary Text File", file_types=[".txt"], value=default_input_file)
-                output_folder = gr.Textbox(label="Output Folder", value=default_output_folder, lines=1, max_lines=2)
+    with gr.Tabs(selected=START_TAB):
+        with gr.Tab("Generation", id="generation") as generation_tab:
+            with gr.Row():
+                with gr.Column():
+                    input_file = gr.File(label="Commentary Text File", file_types=[".txt"], value=default_input_file)
+                    output_folder = gr.Textbox(label="Output Folder", value=default_output_folder, lines=1, max_lines=2)
                 
-                with gr.Row():
-                    model_size = gr.Dropdown(
-                        label="Model Size", 
-                        choices=["0.6B-Base", "1.7B-Base"], 
-                        value="1.7B-Base"
-                    )
-                    cloning_mode = gr.Checkbox(label="Fast Mode (xvec_only)", value=False)
+                    with gr.Row():
+                        model_size = gr.Dropdown(
+                            label="Model Size", 
+                            choices=["0.6B-Base", "1.7B-Base"], 
+                            value="1.7B-Base"
+                        )
+                        cloning_mode = gr.Checkbox(label="Fast Mode (xvec_only)", value=False)
                 
-                with gr.Row():
-                    temp = gr.Slider(minimum=0.1, maximum=1.5, value=0.9, step=0.1, label="Temperature")
-                    start_line = gr.Number(label="Start Line Index", value=0, precision=0)
-                    limit = gr.Number(label="Limit (0 for all)", value=5, precision=0)
+                    with gr.Row():
+                        temp = gr.Slider(minimum=0.1, maximum=1.5, value=0.9, step=0.1, label="Temperature")
+                        start_line = gr.Number(label="Start Line Index", value=0, precision=0)
+                        limit = gr.Number(label="Limit (0 for all)", value=5, precision=0)
                 
-                with gr.Row():
-                    lock_seed = gr.Checkbox(label="Lock Seed", value=False,
-                                            info="Off: each line gets a new random seed (shown in the log). On: every line uses the seed below.")
-                    seed = gr.Number(label="Seed", value=42, precision=0, minimum=0)
+                    with gr.Row():
+                        lock_seed = gr.Checkbox(label="Lock Seed", value=False,
+                                                info="Off: each line gets a new random seed (shown in the log). On: every line uses the seed below.")
+                        seed = gr.Number(label="Seed", value=42, precision=0, minimum=0)
                 
-                with gr.Row():
-                    generate_btn = gr.Button("🚀 Start Processing", variant="primary", scale=3)
-                    unload_btn = gr.Button("⏏️ Unload Model", scale=1)
-                with gr.Row():
-                    speaker_info = gr.Markdown("Select a file to see detected speakers...")
-                    refresh_spk_btn = gr.Button("🔄 Refresh Status", size="sm")
+                    with gr.Row():
+                        generate_btn = gr.Button("🚀 Start Processing", variant="primary", scale=3)
+                        unload_btn = gr.Button("⏏️ Unload Model", scale=1)
+                    with gr.Row():
+                        speaker_info = gr.Markdown("Select a file to see detected speakers...")
+                        refresh_spk_btn = gr.Button("🔄 Refresh Status", size="sm")
+                    with gr.Accordion("🎙️ Pick a voice for a speaker", open=False):
+                        gr.Markdown("Drivers and engineers on the radio get their designed voice, or a generic one from "
+                                    "the pool. Pick a different voice here for any speaker in this script.")
+                        pick_speaker = gr.Dropdown(label="Speaker", choices=get_speakers_from_file(default_input_file), allow_custom_value=True)
+                        pick_voice = gr.Dropdown(label="Voice", choices=[], allow_custom_value=True)
+                        pick_preview = gr.Audio(label="The voice's reference clip", type="filepath", interactive=False)
+                        pick_save = gr.Button("✅ Use this voice", size="sm")
             
-            with gr.Column():
-                run_status = gr.Markdown("")
-                gr.HTML(REVIEW_HTML)
-                with gr.Accordion("Processing Log", open=False):
-                    status_log = gr.Textbox(show_label=False, interactive=False, lines=12, max_lines=12)
-                clips_json = gr.JSON(value=[], elem_classes=["tts-hidden"])
-                seen_state = gr.State({})
+                with gr.Column():
+                    run_status = gr.Markdown("")
+                    gr.HTML(REVIEW_HTML)
+                    with gr.Accordion("Processing Log", open=False):
+                        status_log = gr.Textbox(show_label=False, interactive=False, lines=12, max_lines=12)
+                    clips_json = gr.JSON(value=[], elem_classes=["tts-hidden"])
+                    seen_state = gr.State({})
         
-        input_file.change(refresh_speakers, inputs=[input_file], outputs=[speaker_info])
-        refresh_spk_btn.click(refresh_speakers, inputs=[input_file], outputs=[speaker_info])
-        generate_btn.click(run_tts_process, 
-                          inputs=[input_file, output_folder, model_size, cloning_mode, temp, start_line, limit, lock_seed, seed], 
-                          outputs=[status_log])
-        unload_btn.click(unload_model, queue=False)
-        gr.Timer(1.0).tick(poll_runner, inputs=[seen_state], outputs=[status_log, run_status, clips_json, seen_state],
-                           show_progress="hidden", queue=False)  # off the queue: a queued tick takes 2-3 s
-        clips_json.change(None, inputs=[clips_json], js=CLIPS_JS)
+            input_file.change(refresh_speakers, inputs=[input_file], outputs=[speaker_info])
+            input_file.change(picker_speakers, inputs=[input_file], outputs=[pick_speaker])
+            pick_speaker.change(show_pick, inputs=[pick_speaker], outputs=[pick_voice, pick_preview])
+            pick_voice.change(preview_voice, inputs=[pick_speaker, pick_voice], outputs=[pick_preview])
+            refresh_spk_btn.click(refresh_speakers, inputs=[input_file], outputs=[speaker_info])
+            generate_btn.click(run_tts_process, 
+                              inputs=[input_file, output_folder, model_size, cloning_mode, temp, start_line, limit, lock_seed, seed], 
+                              outputs=[status_log])
+            unload_btn.click(unload_model, queue=False)
+            gr.Timer(1.0).tick(poll_runner, inputs=[seen_state], outputs=[status_log, run_status, clips_json, seen_state],
+                               show_progress="hidden", queue=False)  # off the queue: a queued tick takes 2-3 s
+            clips_json.change(None, inputs=[clips_json], js=CLIPS_JS)
+        generation_tab.select(None, inputs=[clips_json], js=CLIPS_JS)
 
-    with gr.Tab("Manage Library"):
-        gr.Markdown("### 📚 Manage Voices & Transcripts")
-        gr.Markdown("Select an existing voice to add or edit its transcript for **High Quality** mode.")
-        with gr.Row():
-            with gr.Column():
-                voice_select = gr.Dropdown(label="Select Voice from Library", choices=list_voices_dropdown())
-                refresh_library_btn = gr.Button("🔄 Refresh Library List", size="sm")
-                transcript_editor = gr.Textbox(label="Voice Transcript", placeholder="Write what the speaker says in their reference WAV...", lines=8)
-                style_editor = gr.Textbox(label="Style / Accent (optional)", info=STYLE_HINT, lines=2)
-                save_transcript_btn = gr.Button("💾 Save Transcript", variant="primary")
-            with gr.Column():
-                library_status = gr.Markdown("")
+        with gr.Tab("Voice Designer", id="designer"):
+            designer_voice = voice_designer.build_tab(runner, VOICES_DIR)
 
-        voice_select.change(load_voice_transcript, inputs=[voice_select], outputs=[transcript_editor, style_editor])
-        save_transcript_btn.click(save_voice_transcript, inputs=[voice_select, transcript_editor, style_editor], outputs=[library_status])
-        refresh_library_btn.click(lambda: gr.update(choices=list_voices_dropdown()), outputs=[voice_select])
+        with gr.Tab("Manage Library", id="library"):
+            gr.Markdown("### 📚 Manage Voices & Transcripts")
+            gr.Markdown("Select an existing voice to add or edit its transcript for **High Quality** mode.")
+            with gr.Row():
+                with gr.Column():
+                    voice_select = gr.Dropdown(label="Select Voice from Library", choices=list_voices_dropdown())
+                    refresh_library_btn = gr.Button("🔄 Refresh Library List", size="sm")
+                    transcript_editor = gr.Textbox(label="Voice Transcript", placeholder="Write what the speaker says in their reference WAV...", lines=8)
+                    style_editor = gr.Textbox(label="Style / Accent (optional)", info=STYLE_HINT, lines=2)
+                    save_transcript_btn = gr.Button("💾 Save Transcript", variant="primary")
+                with gr.Column():
+                    library_status = gr.Markdown("")
 
-    with gr.Tab("Load New Voice"):
-        gr.Markdown("### 🎙️ Upload Reference Audio")
-        gr.Markdown(f"Adds a new voice to your library (copied into `{VOICES_DIR}`). Providing a transcript enables High-Quality ICL mode.")
-        with gr.Row():
-            with gr.Column():
-                new_wav = gr.File(label="Select WAV File", file_types=[".wav"])
-                gr.Markdown("---")
-                gr.Markdown("**Transcript (Optional)**")
-                new_txt_input = gr.Textbox(label="Type Transcript Here", placeholder="Paste the text from the audio clip...", lines=5)
-                new_txt_file = gr.File(label="OR Upload Transcript File", file_types=[".txt"])
-                new_style = gr.Textbox(label="Style / Accent (optional)", info=STYLE_HINT, lines=2)
-                upload_btn = gr.Button("📤 Upload to Library", variant="primary")
-            with gr.Column():
-                upload_status = gr.Textbox(label="Upload Status", interactive=False)
+            voice_select.change(load_voice_transcript, inputs=[voice_select], outputs=[transcript_editor, style_editor])
+            save_transcript_btn.click(save_voice_transcript, inputs=[voice_select, transcript_editor, style_editor], outputs=[library_status])
+            refresh_library_btn.click(lambda: gr.update(choices=list_voices_dropdown()), outputs=[voice_select])
 
-        upload_btn.click(upload_voice, inputs=[new_wav, new_txt_file, new_txt_input, new_style], outputs=[upload_status, voice_select])
+        with gr.Tab("Load New Voice", id="upload"):
+            gr.Markdown("### 🎙️ Upload Reference Audio")
+            gr.Markdown(f"Adds a new voice to your library (copied into `{VOICES_DIR}`). Providing a transcript enables High-Quality ICL mode.")
+            with gr.Row():
+                with gr.Column():
+                    new_wav = gr.File(label="Select WAV File", file_types=[".wav"])
+                    gr.Markdown("---")
+                    gr.Markdown("**Transcript (Optional)**")
+                    new_txt_input = gr.Textbox(label="Type Transcript Here", placeholder="Paste the text from the audio clip...", lines=5)
+                    new_txt_file = gr.File(label="OR Upload Transcript File", file_types=[".txt"])
+                    new_style = gr.Textbox(label="Style / Accent (optional)", info=STYLE_HINT, lines=2)
+                    upload_btn = gr.Button("📤 Upload to Library", variant="primary")
+                with gr.Column():
+                    upload_status = gr.Textbox(label="Upload Status", interactive=False)
 
-    with gr.Tab("Speaker Mappings"):
-        gr.Markdown("Edit the manual mappings between name tags and WAV files.")
-        mapping_text = gr.Code(value=get_mappings(), language="json", label="speaker_mappings.json")
-        with gr.Row():
-            refresh_map_btn = gr.Button("🔄 Refresh from File")
-            save_map_btn = gr.Button("💾 Save Mappings", variant="primary")
+            upload_btn.click(upload_voice, inputs=[new_wav, new_txt_file, new_txt_input, new_style], outputs=[upload_status, voice_select])
 
-        save_status = gr.Markdown("")
+        with gr.Tab("Speaker Mappings", id="mappings"):
+            gr.Markdown("Edit the manual mappings between name tags and WAV files.")
+            mapping_text = gr.Code(value=get_mappings(), language="json", label="speaker_mappings.json")
+            with gr.Row():
+                refresh_map_btn = gr.Button("🔄 Refresh from File")
+                save_map_btn = gr.Button("💾 Save Mappings", variant="primary")
 
-        refresh_map_btn.click(get_mappings, outputs=[mapping_text])
-        save_map_btn.click(save_mappings, inputs=[mapping_text], outputs=[save_status])
+            save_status = gr.Markdown("")
 
-    with gr.Tab("Voices Preview"):
-        gr.Markdown(f"Current files in `{VOICES_DIR}` folder.")
+            refresh_map_btn.click(get_mappings, outputs=[mapping_text])
+            save_map_btn.click(save_mappings, inputs=[mapping_text], outputs=[save_status])
+            pick_save.click(save_pick, inputs=[pick_speaker, pick_voice, input_file], outputs=[speaker_info, mapping_text])
 
-        def list_voices():
-            if os.path.exists(VOICES_DIR):
-                files = [f for f in os.listdir(VOICES_DIR) if f.endswith(".wav")]
-                return "\n".join([f"- {f}" for f in files])
-            return "Folder not found."
+        with gr.Tab("Voices Preview", id="preview"):
+            gr.Markdown(f"Current files in `{VOICES_DIR}` folder.")
 
-        voices_list = gr.Markdown(list_voices())
-        refresh_voices = gr.Button("Refresh List")
-        refresh_voices.click(list_voices, outputs=[voices_list])
+            def list_voices():
+                choices = voice_designer.voice_choices(VOICES_DIR)
+                return "\n".join(f"- {label}  (`{rel}`)" for label, rel in choices) if choices else "Folder not found."
+
+            voices_list = gr.Markdown(list_voices())
+            refresh_voices = gr.Button("Refresh List")
+            refresh_voices.click(list_voices, outputs=[voices_list])
 
     # Check the speakers of the file the launcher handed over straight away
     demo.load(refresh_speakers, inputs=[input_file], outputs=[speaker_info])

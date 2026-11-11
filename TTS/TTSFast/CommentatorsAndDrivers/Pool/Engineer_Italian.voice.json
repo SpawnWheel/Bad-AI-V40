@@ -1,0 +1,12 @@
+{
+  "name": "Engineer Italian",
+  "role": "pool_engineer",
+  "description": "An Italian race engineer in his fifties speaking English with an Italian accent. Warm, husky baritone, precise but expressive. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "male",
+  "accent": "Italian (speaking English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_eij5xub9ukpq",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:14:16"
+}

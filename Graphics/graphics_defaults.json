@@ -10,10 +10,10 @@
     "short_name": "RCV",
     "season": "Season 15",
     "round": "Round 3",
-    "event_name": "Barcelona",
+    "event_name": "Sebring ",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Flags/ESP.png"
+    "event_flag": "Graphics/Flags/USA.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -193,7 +193,7 @@
       "team": "Caterham",
       "make": "Caterham",
       "color": "#047857",
-      "car_image": "Graphics/Logos/caterham.png"
+      "car_image": "Graphics/Logos/CaterhamWhite.png"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
@@ -313,7 +313,7 @@
       "team": "Private",
       "make": "Caterham",
       "color": "#16d50d",
-      "car_image": "Graphics/Logos/CaterhamWhite.png"
+      "car_image": "Graphics/Logos/Cloud.png"
     },
     "dmk": {
       "display": "DMK",
@@ -344,6 +344,26 @@
       "make": "",
       "color": "",
       "car_image": "Graphics/CarPreviews/clinton.nortje.dds"
+    },
+    "laurie_[Slip]": {
+      "display": "Laurie",
+      "short": "LAURIE",
+      "number": "13",
+      "country": "GBR",
+      "team": "Stig",
+      "make": "Caterham",
+      "color": "#D32F2F",
+      "car_image": "Graphics/Logos/CaterhamWhite.png"
+    },
+    "laurie_": {
+      "display": "Laurie",
+      "short": "LAURIE_",
+      "number": "",
+      "country": "GBR",
+      "team": "",
+      "make": "",
+      "color": "",
+      "car_image": ""
     }
   },
   "sponsors": {
@@ -369,9 +389,18 @@
     },
     "Toni Cuquerella": {
       "bio": "Veteran Formula 1 engineer and race analyst."
+    },
+    "Mike Joy": {
+      "bio": "Longtime lead NASCAR lap-by-lap commentator for Fox Sports."
+    },
+    "Darrell Waltrip": {
+      "bio": "Three-time NASCAR Cup champion and Hall of Fame broadcaster."
+    },
+    "Larry McReynolds": {
+      "bio": "Championship-winning NASCAR crew chief and technical race analyst."
     }
   },
-  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_ome2pkome2pkome2.jfif",
+  "commentator_photo": "Graphics/Logos/Mike-Joy-Larry-McReynolds-Darrell-Waltrip.jpg",
   "commentator_disclaimer": null,
   "championship_preset": "RCV Caterham - Season 15"
 }

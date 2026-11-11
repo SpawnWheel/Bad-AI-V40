@@ -1,0 +1,12 @@
+{
+  "name": "Driver Scandinavian",
+  "role": "pool_driver",
+  "description": "A Swedish woman in her thirties speaking English with a Swedish accent. Calm, clear, determined voice. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "female",
+  "accent": "Swedish (speaking English)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_cgbxoepwapri",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:18:28"
+}

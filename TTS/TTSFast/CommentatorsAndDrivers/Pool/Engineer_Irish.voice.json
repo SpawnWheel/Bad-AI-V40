@@ -1,0 +1,12 @@
+{
+  "name": "Engineer Irish",
+  "role": "pool_engineer",
+  "description": "An Irish race engineer, a woman in her thirties from Dublin. Clear, confident mid-pitched voice, crisp and composed under pressure. Clean close-mic recording, no background noise.",
+  "language": "English",
+  "gender": "female",
+  "accent": "Irish (Dublin)",
+  "language_code": "en-GB",
+  "gemini_voice_id": "voice_e9sv5573em40",
+  "model": "gemini-3.8-flash-tts",
+  "created": "2026-11-09T23:15:01"
+}
