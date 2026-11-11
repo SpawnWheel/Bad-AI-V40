@@ -171,6 +171,7 @@ Events tagged `[COMMENTARY]` contain a talking point from the writers' room, not
      `HH:MM:SS - [RADIO <driver>'s engineer] the engineer's exact words`
    * Copy the quoted words exactly, nothing added or left out. If two people speak, one line each, in the order they speak. Anything outside the quotes (a long silence, no reply) isn't heard on the radio: the booth can point it out.
    * `<driver>` is the driver's name the way the booth says it, without clan tags (e.g. `Dom Payne`, not `[RCV]Dom.Payne`), and the same every time for that driver. A message to a driver from their crew, team or pit wall is their engineer. Two drivers talking to each other each get their own `[RADIO <driver>]` line.
+   * Never describe a radio call instead of playing it ("Payne is on the radio, yelling that..."). If an event says a driver is on the radio but gives no quoted words, write a short RADIO line for them yourself: clipped and breathless, a few words, like a driver mid-fight.
    * Don't introduce it ("Listen to this...") and don't repeat or paraphrase it afterwards: the booth reacts straight to what everyone just heard.
    * The radio words count toward that timestamp's word budget.
 
