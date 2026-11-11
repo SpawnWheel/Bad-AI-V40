@@ -57,7 +57,6 @@ AUTO_TYPES = {
     'gap_tracker': 'Last 4 laps: lap times of a car steadily catching (or dropping back from) the one ahead, '
                    'side by side, from lap 5',
     'radio': 'Team radio quotes (middle right)',
-    'stewards': 'Stewards messages from the commentary (top centre: incident noted, under investigation, decision)',
     'chequered': 'Chequered flag banner (top centre; the timing tower comes off)',
     'results': 'Final classification panel',
 }

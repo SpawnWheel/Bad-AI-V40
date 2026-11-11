@@ -10,7 +10,7 @@ import re
 
 from . import config as gcfg
 from .race_data import commentator_names, fmt_clock, norm_key, parse_clock, read_commentary
-from .renderer import OverlayRenderer
+from .renderer import STEWARDS_WORDS, OverlayRenderer
 from .templates import race_time_label
 
 RACE_CONTROL_FLAGS = ('yellow', 'double yellow', 'blue', 'white', 'red', 'green', 'chequered')
@@ -342,6 +342,8 @@ def resolve_entry(raw, cfg, race, resolve, facts):
     elif typ == 'race_control':
         if not g['title']:
             return None, 'race_control needs a message title'
+        if STEWARDS_WORDS.search(f"{g.get('label', '')} {g['title']} {g.get('text', '')}"):
+            return None, 'no stewards or penalty messages'
         flag = str(raw.get('flag') or 'yellow').lower()
         data = {'flag': flag if flag in RACE_CONTROL_FLAGS else 'yellow'}
         if data['flag'] in ('yellow', 'double yellow'):

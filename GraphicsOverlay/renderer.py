@@ -16,7 +16,7 @@ from PIL import Image
 
 from . import config as gcfg
 from .drawing import ease_in, ease_out
-from .race_data import FASTEST_LAP_FROM, commentator_names, read_commentary, read_radio_calls, read_stewards
+from .race_data import FASTEST_LAP_FROM, commentator_names, read_commentary, read_radio_calls
 from .templates import Templates, race_time_label
 
 POPUP_IN = 0.45
@@ -49,15 +49,8 @@ LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening se
 LEADER_HOLD = 5.0          # a new leader has to keep P1 this long before the banner is shown
 LEADER_LOCKOUT = 10.0      # and no other lead change gets a banner this soon after one
 RADIO_SPLIT = (' to ', ' over ', ' on ')
-STEWARDS_AFTER = 4.0       # a stewards message is up this long after the commentators start reading it
-STEWARDS_DUR = 8.0
-# 'Incident involving A and B at The Esses noted: contact ...' / 'Incident involving A and B: no further action'
-STEWARDS_MSG_RE = re.compile(r'^(?:(?:an?\s+)?incident\s+involving\s+)?(.+?)(?:\s+at\s+(.+?))?'
-                             r'\s*(noted|under investigation|being investigated|investigated)?\s*:\s*(.+?)\.?$', re.I)
-# Decision wording -> headline, first match wins
-STEWARDS_VERDICTS = (('no further action', 'NO FURTHER ACTION'), ('reprimand', 'REPRIMAND'),
-                     ('penalty point', 'PENALTY POINTS'), ('black and white', 'BLACK AND WHITE FLAG'),
-                     ('warning', 'WARNING'), ('penalty', 'PENALTY'))
+# Race control messages about stewards, investigations or penalties (old plans) are not shown
+STEWARDS_WORDS = re.compile(r'stewar|investigat|penalt|reprimand|no further action|black and white', re.I)
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
 AUTO_MAX_SHIFT = 30.0
@@ -166,10 +159,8 @@ class OverlayRenderer:
             items.extend(self._gap_items())
         if auto.get('radio'):
             items.extend(self._radio_items())
-        if auto.get('stewards', True):
-            items.extend(self._stewards_items())
         if lf is not None and auto.get('chequered'):
-            winner = race.finish[0][1]
+            winner = race.winner_finish[1]
             items.append({'id': 'auto_cheq', 'type': 'chequered', 'time': lf + 0.3, 'duration': 9.0,
                           'lane': 'top', 'auto': True, 'driver': winner})
         if lf is not None and auto.get('results'):
@@ -345,43 +336,6 @@ class OverlayRenderer:
                           'data': {'speaker': parts[0], 'segments': segments}})
         return items
 
-    def _stewards_items(self):
-        """The stewards storyline from the commentary as F1-style messages: STEWARDS: INCIDENT NOTED / UNDER
-        INVESTIGATION / the decision, with the drivers, the corner and the reason under it. A decision repeats
-        the corner and reason given when the incident was noted."""
-        from .creator import NameResolver  # creator imports this module
-        resolve = NameResolver(self.cfg, self.race.drivers)
-        files = gcfg.project_files(self.project_path)
-        items, incidents = [], {}
-        for i, (t, msg) in enumerate(read_stewards(files['video_timed'])):
-            m = STEWARDS_MSG_RE.match(msg)
-            if not m:
-                continue
-            who, corner, status, detail = m.groups()
-            names = []
-            for part in re.split(r'\s*(?:,|&|\band\b)\s*', who):
-                name = resolve(part)
-                label = self.tpl.meta(name)['short'].upper() if name else part.strip().upper()
-                if label and label not in names:
-                    names.append(label)
-            seen = incidents.setdefault(frozenset(names), {})
-            if status:
-                head = 'INCIDENT NOTED' if status.lower() == 'noted' else 'UNDER INVESTIGATION'
-                reason = detail
-                seen.setdefault('reason', detail)
-            else:
-                low = detail.lower()
-                head = next((h for k, h in STEWARDS_VERDICTS if k in low), 'DECISION')
-                reason = seen.get('reason') or detail
-            corner = corner or seen.get('corner')
-            if corner:
-                seen.setdefault('corner', corner)
-            sub = '  -  '.join(x for x in (', '.join(names), (corner or '').upper(), reason.rstrip('.').upper()) if x)
-            items.append({'id': f'auto_stewards_{i}', 'type': 'stewards', 'time': float(t) + STEWARDS_AFTER,
-                          'duration': STEWARDS_DUR, 'lane': 'top', 'auto': True,
-                          'title': f'STEWARDS: {head}', 'text': sub})
-        return items
-
     def _ticker_item(self, item_id, t, title, subtitle, rows):
         tk = self.cfg['layout']['ticker']
         strip = self.tpl.ticker_strip('standings', rows, tk['h'])
@@ -396,7 +350,6 @@ class OverlayRenderer:
 
     def _schedule(self):
         auto = self._auto_items()
-        stewards = any(a['type'] == 'stewards' for a in auto)
         enabled = self.cfg['popup_types']
         planned = []
         for i, g in enumerate(self.plan.get('graphics', [])):
@@ -405,9 +358,8 @@ class OverlayRenderer:
                 continue
             if g['type'] == 'race_control' and (g.get('data') or {}).get('flag', 'yellow') in YELLOW_FLAGS:
                 continue
-            if (g['type'] == 'race_control' and stewards
-                    and 'STEWARD' in f"{g.get('label', '')} {g.get('title', '')}".upper()):
-                continue  # the automatic stewards messages cover it
+            if g['type'] == 'race_control' and STEWARDS_WORDS.search(f"{g.get('label', '')} {g.get('title', '')} {g.get('text', '')}"):
+                continue  # stewards and penalties were dropped: they never had any consequence
             g = dict(g)
             g.setdefault('id', f'plan_{i}')
             g.setdefault('duration', self.cfg.get('popup_duration', 7.0))

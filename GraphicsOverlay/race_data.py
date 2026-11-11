@@ -12,7 +12,8 @@ TAG_RE = re.compile(r'\[[^\]]*\]')
 
 OVERTAKE_RE = re.compile(r'^(.+?) overtook (.+?) for P(\d+) in (.+?)(?: at (.+?))?\.\s*$')
 STANDING_RE = re.compile(r'^P(\d+):\s*(.+?)\s*\(([^()]*)\)\s*$')
-GRID_RE = re.compile(r'^P(\d+):\s*(.+?)(?:\s*\[([^\]]*)\])?\s*$')
+# The class/car comes after a space; brackets inside a name ("laurie_[Slip]") are part of the name
+GRID_RE = re.compile(r'^P(\d+):\s*(.+?)(?:\s+\[([^\]]*)\])?\s*$')
 # AMS2: entered / arrived at box / leaving.  Raceroom: "entered Pit Lane." / "exited Pit Lane."
 PIT_RE = re.compile(r'^(.+?) (has entered the pit lane|has arrived at their pit box|is leaving the pits'
                     r'|entered Pit Lane|exited Pit Lane)')
@@ -23,7 +24,7 @@ FINISH_RE = re.compile(r'Checkered Flag!\s*(.+?) comes past the line to take P(\
 R3E_WIN_RE = re.compile(r'^(.+?) has taken the win')
 R3E_FINISH_RE = re.compile(r'^(.+?) has finished the race in P(\d+)')
 CLASS_PREFIX_RE = re.compile(r'^\[[^\]]*\]\s*(?=P\d)')
-VEHICLE_SUFFIX_RE = re.compile(r'\s*\[[^\]]*\]\s*$')
+VEHICLE_SUFFIX_RE = re.compile(r'\s+\[[^\]]*\]\s*$')
 WATCH_RE = re.compile(r'Watching (.+?) \(P(\d+)\)')
 PASSIVE_LEAD = 8.0      # stopped/pit alerts can be logged a few seconds after cars start passing
 PIT_EXIT_GRACE = 3.0
@@ -36,9 +37,6 @@ FASTEST_LAP_RE =re.compile(r'^(.+?) \(P(\d+)\) (?:holds the|sets a new) fastest 
 RADIO_RE = re.compile(r'\(Radio\)\s*(.*)$', re.I)
 RADIO_SEGMENT_RE = re.compile(r'([^"“”:]{1,60}?):\s*["“]([^"“”]+)["”]')
 WORD_COUNT_RE = re.compile(r'\s*Commentate in \d+ words\.?\s*$', re.I)
-# Stewards messages, same step: (Stewards) Incident involving A and B at The Esses noted: contact ...
-# (up to the next tag or event on the line)
-STEWARDS_RE = re.compile(r'\(Stewards\)\s*(.+?)(?=\s+-\s+\[|\s+\([A-Z][A-Za-z ]{2,20}\)\s|\s*Commentate in \d+ words|$)')
 
 
 def hms_to_sec(h, m, s):
@@ -180,7 +178,9 @@ class RaceData:
                         # Raceroom adds "[Class] " before a class's first entry and " [car - livery]" after names
                         m = STANDING_RE.match(CLASS_PREFIX_RE.sub('', part.strip()))
                         if m:
-                            name = VEHICLE_SUFFIX_RE.sub('', m.group(2)).strip()
+                            name = m.group(2).strip()
+                            if name not in self.drivers:
+                                name = VEHICLE_SUFFIX_RE.sub('', name).strip()
                             rows.append((int(m.group(1)), name, m.group(3).strip()))
                             self._add_driver(name)
                     # Older AMS2 logs carry a scrambled leaderboard after the chequered flag; the finish
@@ -368,7 +368,13 @@ class RaceData:
 
     @property
     def leader_finish_video(self):
-        return self.to_video(self.finish[0][0]) if self.finish else None
+        return self.to_video(self.winner_finish[0]) if self.finish else None
+
+    @property
+    def winner_finish(self):
+        """(t_log, name, pos) of the winner. Finish lines logged in the same second can come out of order
+        (P2 before P1), so this is the lowest position, not the first line."""
+        return min(self.finish, key=lambda f: (f[2], f[0])) if self.finish else None
 
     def order_at(self, t_video):
         t = self.to_log(t_video)
@@ -607,15 +613,6 @@ def read_commentary(path):
             if m:
                 out.append((hms_to_sec(*m.group(1, 2, 3)), m.group(4).strip(), m.group(5).strip()))
     return out
-
-
-def read_stewards(paths):
-    """[(video seconds, message)] from the first video-timed log with (Stewards) entries."""
-    for path in paths:
-        msgs = [(t, m.group(1).strip()) for t, _, msg in read_raw_lines(path) for m in [STEWARDS_RE.search(msg)] if m]
-        if msgs:
-            return msgs
-    return []
 
 
 def read_radio_calls(paths):

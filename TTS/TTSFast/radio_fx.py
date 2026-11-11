@@ -15,11 +15,11 @@ from scipy.signal import butter, resample_poly, sosfilt, sosfiltfilt
 
 SOUNDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "RadioSounds")
 
-# Levels are dB relative to the voice
+# Levels are dB relative to the voice (static was 6 dB louder until Nov 2026: too much)
 SETTINGS = {
-    "driver": dict(band=(480, 2900), drive=5.0, bed_db=-13.0, static_db=-25.0, crackle_rate=12.0,
+    "driver": dict(band=(480, 2900), drive=5.0, bed_db=-13.0, static_db=-31.0, crackle_rate=6.0,
                    dropouts=2, codec_rate=8000),
-    "engineer": dict(band=(420, 3100), drive=3.5, bed_db=-21.0, static_db=-27.0, crackle_rate=7.0,
+    "engineer": dict(band=(420, 3100), drive=3.5, bed_db=-21.0, static_db=-33.0, crackle_rate=3.5,
                      dropouts=1, codec_rate=8000),
 }
 
@@ -161,8 +161,8 @@ def apply_radio(audio, sr, role="driver", seed=None):
     stat = _band(_static(rng, n, sr, s["crackle_rate"]), sr, s["band"][0] * 0.8, s["band"][1] * 1.3, order=2)
     stat = stat / (_rms(stat) + 1e-9) * _rms(x) * _db(s["static_db"])
     squelch = np.ones(n)
-    squelch[:pre] = np.linspace(3.0, 1.2, pre)
-    squelch[n - post:] = np.linspace(1.2, 2.5, post)
+    squelch[:pre] = np.linspace(2.0, 1.0, pre)
+    squelch[n - post:] = np.linspace(1.0, 1.7, post)
     x = x + stat * squelch
 
     # Dropouts: the signal ducks for a few tens of milliseconds
