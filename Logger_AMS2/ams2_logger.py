@@ -780,10 +780,12 @@ class AMS2EventLogger:
         # Flags (suppress Double Yellow and Green-after-yellow when safety car handles it)
         if self.data.mHighestFlagColour != self.last_flag_colour:
             flag_name = FLAG_COLOURS.get(self.data.mHighestFlagColour, "None")
+            # A yellow usually clears to no flag at all (0), not green: log the clear whatever it goes to
+            if self.last_flag_colour in [6, 7] and self.data.mHighestFlagColour not in [6, 7]:
+                if not self.safety_car_active:
+                    self.log("FLAG", "Flag: Green again (Yellow cleared).", sim_time=self.get_session_time())
             if self.data.mHighestFlagColour == 1: # Green
-                if self.last_flag_colour in [6, 7]: # Only log if clearing a Yellow or Double Yellow
-                    if not self.safety_car_active:
-                        self.log("FLAG", "Flag: Green again (Yellow cleared).", sim_time=self.get_session_time())
+                pass # Only news after a yellow, logged above
             elif self.data.mHighestFlagColour == 2: # Blue
                 pass # Suppress blue flag messages
             elif self.data.mHighestFlagColour == 7: # Double Yellow
