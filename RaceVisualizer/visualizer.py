@@ -43,6 +43,12 @@ FIELD_X_MIN = 76           # nor the last car's nose further left
 VIEW_MIN, VIEW_MAX = 1.0, 2.6   # laps visible across the screen
 SWAP_SEC = 1.1             # an overtake takes this long to swap rows
 FALL_SEC = 1.6             # retired cars take this long to fall off
+SPIN_SEC = 0.8             # a car that has an accident spins round once in this long
+SKID_FADE = 4.0            # skid marks stay on the track this long after the slide, fading out
+SKID = (8, 10, 16)
+TRAIL_SEC = 1.2            # every car's faint tyre tracks reach back this far
+TRAIL_ALPHA = 0.4          # and are this dark at the car, fading to nothing at the end
+YELLOW_UNCLEARED = 20      # log seconds a yellow is shown for when the log never says it cleared
 
 FINISH_FINISHED = 1
 OUT_STATUS = {2: "DNF", 3: "DNQ", 4: "DNS", 5: "DSQ"}
@@ -147,6 +153,7 @@ class Race:
         log = racefiles.race_file(folder, "race_log")
         self.log_finishes = self._read_log_finishes(log)
         self.yellows = self._read_log_yellows(log)
+        self.accidents = self._read_log_accidents(log)
         if len(self.states) < 2:
             raise ValueError("This race has no recorded live timing (01_race_log_timing.jsonl), so it can't be "
                              "visualized. Races recorded with the current loggers have it.")
@@ -212,16 +219,22 @@ class Race:
     @staticmethod
     def _read_log_yellows(path):
         """[(start, end, label)] yellow flag periods from the race log's [FLAG] lines, in log seconds.
-        RaceRoom names the sectors ('Yellow in sector 2'); AMS2 only says Yellow or Double Yellow."""
+        RaceRoom names the sectors ('Yellow in sector 2'); AMS2 only says Yellow or Double Yellow.
+
+        Older AMS2 logs never say when a yellow cleared (it clears to no flag, which wasn't logged), so a
+        yellow that no green follows is shown for YELLOW_UNCLEARED seconds after its last line."""
         out = []
-        start, sectors, double = None, set(), False
         pattern = re.compile(r"^(\d+):(\d\d):(\d\d) - \[FLAG\] Flag: (.+)$")
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
         except OSError:
             return out
-        t = 0
+        start, last_t, last_text, sectors, double = None, 0, "", set(), False
+
+        def close(end):
+            out.append((start, max(end, start + 1), _yellow_label(sectors, double)))
+
         for line in lines:
             m = pattern.match(line.strip())
             if not m:
@@ -230,17 +243,39 @@ class Race:
             text = m.group(4).lower()
             if text.startswith("green"):
                 if start is not None:
-                    out.append((start, max(t, start + 1), _yellow_label(sectors, double)))
+                    close(t)
                 start, sectors, double = None, set(), False
             elif "yellow" in text:
+                if start is not None and text == last_text and "sector" not in text:
+                    # AMS2 logs a yellow only when the flag changes, so the same yellow again means it
+                    # cleared in between without a line saying so
+                    close(min(t, last_t + YELLOW_UNCLEARED))
+                    start, sectors, double = None, set(), False
                 if start is None:
                     start = t
+                last_t, last_text = t, text
                 double = double or "double" in text
                 sec = re.search(r"sector (\d)", text)
                 if sec:
                     sectors.add(int(sec.group(1)))
         if start is not None:
-            out.append((start, t + 5, _yellow_label(sectors, double)))
+            close(last_t + YELLOW_UNCLEARED)
+        return out
+
+    @staticmethod
+    def _read_log_accidents(path):
+        """[(log time, driver)] for each 'slow/stopped on track' alert in the race log (both loggers)."""
+        out = []
+        pattern = re.compile(r"^(\d+):(\d\d):(\d\d) - \[ACCIDENT\] Alert: (.+?) \(P\d+.*slow/stopped on track")
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    m = pattern.match(line.strip())
+                    if m:
+                        t = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+                        out.append((t, m.group(4)))
+        except OSError:
+            pass
         return out
 
     def _find_green(self):
@@ -554,6 +589,68 @@ class Replay:
         self.watch = stopwatch(PURPLE)
         self._layout()
         self._yellow_periods()
+        self._spin_times()
+
+    def _spin_times(self):
+        """{car name: [video seconds a spin starts]}, one per accident alert, none overlapping."""
+        self.spins = {}
+        for te, name in self.race.accidents:
+            if name not in self.race.cars or not self.t0 < te < self.t1:
+                continue
+            v = self.video_time(te)
+            starts = self.spins.setdefault(name, [])
+            if not starts or v - starts[-1] >= SPIN_SEC * 1.5:
+                starts.append(v)
+        self._tyre_tracks()
+
+    def _tyre_tracks(self):
+        """Where every car's two rear tyres are on every frame, for its tracks: track distance (so the marks
+        stay where they were laid and scroll back with the lap lines) and height on screen (so a car changing
+        rows leaves a track from one row to the other). A spinning car's tyres swing round with it.
+        Also the slides: (car column, first frame, last frame) from a spin until the car has settled into
+        the row it dropped to, which leave dark skid marks."""
+        F, N, L = self.frames, len(self.cars), self.sprite_len
+        wheels = [(-7.5, -6.5), (-7.5, 6.5)] if self.large else [(-5.5, -4.5), (-5.5, 4.5)]
+        ang = np.zeros((F, N))
+        valid = ~self.out
+        self.slides = []
+        for j, car in enumerate(self.cars):
+            if car.finish_t is not None:
+                valid[:, j] &= self.t < car.finish_t
+            i = np.clip(np.searchsorted(car.t, self.t, side="right") - 1, 0, len(car.pit) - 1)
+            valid[:, j] &= ~np.asarray(car.pit, dtype=bool)[i]
+            dy = np.abs(np.gradient(self.y[:, j]))
+            for s in self.spins.get(car.name, ()):
+                fs = int(math.ceil(s * FPS))
+                fe = min(F - 1, int(math.ceil((s + SPIN_SEC) * FPS)))
+                if fs >= F:
+                    continue
+                for f in range(fs, fe + 1):
+                    ang[f, j] = math.radians(self.spin_angle(car, self.v[f]))
+                # The slide down the rows can start a moment before the alert and carry on after the spin
+                fa, fb = fs, fe
+                while fa > 0 and fs - fa < SWAP_SEC * FPS / 2 and dy[fa - 1] > 0.1:
+                    fa -= 1
+                while fb < F - 1 and fb - fe < 2 * FPS and dy[fb + 1] > 0.1:
+                    fb += 1
+                self.slides.append((j, fa, fb))
+        centre = self.wdist - (L / 2 - 1) / self.ppl[:, None]
+        mid = self.y + self.row_h / 2
+        self.tyre_d = np.zeros((F, N, len(wheels)))
+        self.tyre_y = np.zeros((F, N, len(wheels)))
+        for w, (dx, dy) in enumerate(wheels):
+            self.tyre_d[:, :, w] = centre + (dx * np.cos(ang) + dy * np.sin(ang)) / self.ppl[:, None]
+            self.tyre_y[:, :, w] = mid - dx * np.sin(ang) + dy * np.cos(ang)
+        self.tyre_ok = valid
+
+    def spin_angle(self, car, v):
+        """How far round the car is in a spin right now (0 when it isn't spinning): quick, then easing off."""
+        for s in self.spins.get(car.name, ()):
+            p = (v - s) / SPIN_SEC
+            if 0 <= p < 1:
+                angle = 360 * (1 - (1 - p) ** 2)
+                return angle if car.index % 2 else -angle
+        return 0.0
 
     def _yellow_periods(self):
         """Yellows in video seconds: each shown for at least a second, ones close together merged."""
@@ -661,7 +758,7 @@ class Replay:
             y0, x0 = y[max(0, f0 - 1), j], x[max(0, f0 - 1), j]
             y[f0:, j] = y0 + (H + 30 - y0) * p ** 2
             x[f0:, j] = x0 - 260 * p ** 2
-        self.dist, self.x, self.y, self.out = dist, x, y, out
+        self.dist, self.wdist, self.x, self.y, self.out = dist, wdist, x, y, out
         self.lead, self.lead_x, self.ppl, self.down, self.clamped = lead, lead_x, ppl, down, clamped
         self.lead_j = lead_j
 
@@ -696,6 +793,7 @@ class Replay:
 
         self._draw_rows(d, img)
         self._draw_lap_lines(d, img, f)
+        self._draw_tracks(d, f, v)
         self._draw_cars(img, d, f, t, v)
         self._draw_header(img, d, f, t, v, flag)
         self._draw_feed(img, d, v)
@@ -734,12 +832,48 @@ class Replay:
             if total is None or k < total:
                 draw_text(img, (x + 5, HEADER_H + 4), f"LAP {k + 1}", LAP_LABEL, scale=2)
 
+    def _draw_tracks(self, d, f, v):
+        """Faint tyre tracks behind every car, and black skid marks where cars slid."""
+        lead, lx, ppl = self.lead[f], self.lead_x[f], self.ppl[f]
+
+        def line(j, frames, colour):
+            frames = [k for k in frames if self.tyre_ok[k, j]]
+            for w in range(self.tyre_d.shape[2]):
+                pts = [(lx - (lead - self.tyre_d[k, j, w]) * ppl, self.tyre_y[k, j, w]) for k in frames]
+                run = []
+                for p in pts + [None]:
+                    if p is not None and p[0] >= 18:
+                        run.append(p)
+                        continue
+                    if len(run) > 1:
+                        d.line(run, fill=colour, width=1)
+                    run = []
+
+        back = int(TRAIL_SEC * FPS)
+        if v >= INTRO:
+            step, chunks = 2, 4
+            for j in range(len(self.cars)):
+                frames = list(range(max(0, f - back), f + 1, step))
+                if frames[-1] != f:
+                    frames.append(f)
+                n = len(frames)
+                for c in range(chunks):   # older chunks fainter
+                    part = frames[c * n // chunks: (c + 1) * n // chunks + 1]
+                    line(j, part, mix(BG, SKID, TRAIL_ALPHA * (c + 1) / chunks))
+        for j, fa, fb in self.slides:
+            if f < fa or v > fb / FPS + SKID_FADE:
+                continue
+            fade = 1.0 if f <= fb else 1 - (v - fb / FPS) / SKID_FADE
+            line(j, range(fa, min(f, fb) + 1), mix(BG, SKID, fade))
+
     def _draw_cars(self, img, d, f, t, v):
         L, CH = self.sprite_len, self.sprite_h
         fastest = self.fastest_at(t) if v > INTRO else None
-        order = np.argsort(self.y[f])
         leader_finish = self.race.leader_finish()
-        for j in order[::-1]:
+        spin = [self.spin_angle(c, v) for c in self.cars]
+        # A spinning car sticks out of its row: draw it over its neighbours
+        order = sorted(range(len(self.cars)), key=lambda j: (spin[j] != 0, -self.y[f, j]))
+        for j in order:
             car = self.cars[j]
             x, y = self.x[f, j], self.y[f, j]
             if y > H + 4 or x < -60:
@@ -770,7 +904,12 @@ class Replay:
 
             # The car
             sprite = car_sprite(car.body, car.stripe, self.large)
-            img.paste(sprite, (nose - L + 1, cy), sprite)
+            if spin[j] and not (done or gone or in_pit):
+                rot = _spun(sprite, spin[j])
+                cx, cyy = nose - L + 1 + L / 2, cy + CH / 2
+                img.paste(rot, (int(round(cx - rot.width / 2)), int(round(cyy - rot.height / 2))), rot)
+            else:
+                img.paste(sprite, (nose - L + 1, cy), sprite)
             if in_pit:
                 px0 = nose - L + 1
                 d.rectangle([px0 - 1, cy - 1, nose + 1, cy + CH], fill=PIT_BG, outline=PIT)
@@ -893,6 +1032,20 @@ def _merge_labels(a, b):
     double = a.startswith("DOUBLE") or b.startswith("DOUBLE")
     sectors = {int(c) for lab in (a, b) for c in re.findall(r"(\d)", lab)}
     return _yellow_label(sectors, double)
+
+
+_spun_cache = {}
+
+
+def _spun(sprite, angle):
+    """The car sprite turned by `angle` degrees, in 15 degree steps so it stays crisp pixel art."""
+    step = int(round(angle / 15.0)) * 15 % 360
+    key = (id(sprite), step)
+    rot = _spun_cache.get(key)
+    if rot is None:
+        rot = sprite.rotate(step, resample=Image.NEAREST, expand=True) if step else sprite
+        _spun_cache[key] = rot
+    return rot
 
 
 def _tyre_colour(life):
