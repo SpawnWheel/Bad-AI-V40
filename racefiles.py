@@ -231,6 +231,16 @@ class RaceRecording:
         if self.green_at is None and "Green Flag!" in line:
             self.green_at = seconds
 
+    def rewrite(self, lines):
+        """Replaces everything logged so far (a logger correcting its log before the race is closed)."""
+        if not self.file:
+            return
+        text = "".join(line + "\n" for line in lines)
+        self.file.seek(0)
+        self.file.truncate()
+        self.file.write(text)
+        self.file.flush()
+
     @property
     def duration(self):
         return self.last_at - (self.green_at or 0)
