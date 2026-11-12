@@ -80,7 +80,7 @@ What gets recorded:
 - **Only races that ran at least 5 minutes** from the green flag. Restarts, quick tests and races you quit early are thrown away.
 - Every race gets its own folder, named after the date, time, track and car, e.g. `Races\2026-10-27 12.16 Circuit Zolder - Grand Prix - Super Touring`.
 
-> **Tip:** If the end of a race isn't detected (it sometimes isn't in timed races), press **F12** on the last lap.
+> **Tip:** If the end of a live race isn't detected (it sometimes isn't in timed races), press **F12** on the last lap. You don't need to when logging an AMS2 replay (see below).
 
 ### Engineer only, or recorder only
 
@@ -96,7 +96,9 @@ To make a new race from an **AMS2 replay**:
 
 1. Set the engineer **OFF** (recorder **ON**) and click the **AMS2** logo.
 2. In AMS2, open the race replay and play it **from the start**, past the green flag, to the finish. Don't rewind once the race has started — the recorder would take that as a restart.
-3. When the replay ends, click **Stop session**. The race appears in **My races** like any other.
+3. When the replay reaches its end, AMS2 jumps back to the start of the replay and the recorder saves the race by itself. Then click **Stop session**. The race appears in **My races** like any other.
+
+AMS2 doesn't say when a race has finished during a replay, so the recorder works the finish out itself when you stop: the winner is the first car to complete the last lap, and every other car finishes the next time it crosses the line. The **Activity** panel then shows *Race end worked out from the replay* with the winner. Let the replay run to its end (or at least until the cars you care about have crossed the line) before you stop. If you stop while the cars are still racing, no finish is written. Pressing **F12** on the last lap still works and takes priority if you'd rather mark the finish yourself.
 
 RaceRoom doesn't share driver data during replays, so RaceRoom races have to be recorded live.
 

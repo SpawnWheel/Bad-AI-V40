@@ -11,6 +11,7 @@ from leaderboard_recorder_ams2 import AMS2LeaderboardRecorder
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import racefiles  # noqa: E402
+import replay_finish  # noqa: E402
 from battle_vision import START_BATTLE_DELAY, START_REPORT_AT, BattleVision, start_report  # noqa: E402
 
 def sanitize_filename(name):
@@ -325,6 +326,17 @@ class AMS2EventLogger:
         self.green_flag_logged = False
         self.manual_timer_expired = False # Set True when F12 is pressed
         self.f12_was_pressed = False # Tracks the previous state of the F12 key
+        # A replay never flags the finish, so it is worked out when the recording ends (replay_finish.py)
+        self.line_crossings = {} # name -> [(sim_time, laps completed, position, total distance)], one per lap
+        self.last_progress = {} # name -> total distance when last seen
+        self.race_clock_high = 0.0 # Latest sim time seen this race
+        self.lead_laps = 0 # Most laps any car has completed
+        self.safety_car_laps = set() # Lap counts the leader completed behind the safety car
+        self.finish_lines_logged = 0 # [FINISH] lines written this race
+        self.replay_ticks = 0 # Reads of this race taken from a replay ...
+        self.live_ticks = 0 # ... and from a live race
+        self.signals_key = None # What the game last said about the session (see note_signals)
+        self.signals_written = 0
         self.safety_car_active = False # Whether we are currently under safety car
         self.sc_vehicle_on_track = False # Whether the SC vehicle is on track (not in pits)
         self.participant_pit_schedules = {} # name -> pit_schedule (for penalty detection)
@@ -435,12 +447,73 @@ class AMS2EventLogger:
             print(f"Live timing is not recorded ({e}); the race log is unaffected.")
 
     def end_race(self):
+        if self.recording:
+            try:
+                self.write_replay_finish()
+            except Exception as e:
+                print(f"The race end could not be worked out ({e}); the race log is as it was recorded.", flush=True)
         if self.recorder:
             self.recorder.close()
             self.recorder = None
         if self.recording:
             self.recording.finish()
             self.recording = None
+
+    def write_replay_finish(self):
+        """A replay never flags the end of the race, so when the recording of one ends without a finish
+        (no F12 either), the finish is worked out from what the cars did and written into the log."""
+        if self.finish_lines_logged or self.replay_ticks <= self.live_ticks:
+            return
+        track_length = self.data.mTrackLength if self.data else 0.0
+        result, reason = replay_finish.infer_finish(self.line_crossings, self.last_progress, self.race_clock_high,
+                                                    track_length, self.safety_car_laps)
+        if not result:
+            print(f"No race end written: {reason}. If the race did finish, log the replay again and press F12 "
+                  "on the last lap.", flush=True)
+            return
+        with open(self.recording.log_path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        self.recording.rewrite(replay_finish.apply_to_log(lines, result["finishers"]))
+        self.finish_lines_logged = len(result["finishers"])
+        stamp = datetime.timedelta(seconds=int(result["time"]))
+        print(f"Race end worked out from the replay: {result['winner']} won at {stamp} after {result['lap']} laps, "
+              f"{len(result['finishers'])} cars took the chequered flag.", flush=True)
+
+    def note_signals(self, sim_now):
+        """Keeps a small record, in the race's debug folder, of what the game itself says about the
+        state of the race (and when it changes), to show which finish signals a session gives."""
+        if not self.recording or self.signals_written >= 500:
+            return
+        d = self.data
+        finished = sum(1 for i in range(d.mNumParticipants)
+                       if d.mParticipantInfo[i].mIsActive and d.mRaceStates[i] == 3)
+        key = (d.mGameState, d.mSessionState, d.mRaceState, d.mHighestFlagColour == 11, d.mLapsInEvent,
+               d.mEventTimeRemaining > 0, round(d.mSessionDuration, 2), d.mSessionAdditionalLaps,
+               d.mYellowFlagState, finished, self.lead_laps)
+        if key == self.signals_key:
+            return
+        self.signals_key = key
+        self.signals_written += 1
+        line = (f"{datetime.timedelta(seconds=max(0, int(sim_now)))}"
+                f" game={GAME_STATES.get(d.mGameState, d.mGameState)}"
+                f" session={SESSION_STATES.get(d.mSessionState, d.mSessionState)}"
+                f" race={RACE_STATES.get(d.mRaceState, d.mRaceState)}"
+                f" flag={FLAG_COLOURS.get(d.mHighestFlagColour, d.mHighestFlagColour)}"
+                f" lapsInEvent={d.mLapsInEvent} timeRemaining={d.mEventTimeRemaining:.1f}"
+                f" sessionDuration={d.mSessionDuration:.1f} additionalLaps={d.mSessionAdditionalLaps}"
+                f" yellowState={d.mYellowFlagState} carsFinished={finished} leaderLaps={self.lead_laps}")
+        try:
+            folder = os.path.join(self.recording.folder, racefiles.DEBUG_DIR)
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, "recorder_signals.txt")
+            new = not os.path.exists(path)
+            with open(path, "a", encoding="utf-8") as f:
+                if new:
+                    f.write("What AMS2 said about the race while it was recorded: one line whenever a value "
+                            "changed or the leader completed a lap.\n")
+                f.write(line + "\n")
+        except OSError:
+            self.signals_written = 500
 
     def log(self, category, message, sim_time=None, print_to_console=True, write_to_file=True):
         if sim_time is not None:
@@ -586,6 +659,16 @@ class AMS2EventLogger:
             self.green_flag_fired = False
             self.green_flag_logged = False
             self.manual_timer_expired = False
+            self.line_crossings.clear()
+            self.last_progress.clear()
+            self.race_clock_high = 0.0
+            self.lead_laps = 0
+            self.safety_car_laps.clear()
+            self.finish_lines_logged = 0
+            self.replay_ticks = 0
+            self.live_ticks = 0
+            self.signals_key = None
+            self.signals_written = 0
             self.safety_car_active = False
             self.sc_vehicle_on_track = False
             self.participant_pit_schedules.clear()
@@ -697,10 +780,12 @@ class AMS2EventLogger:
         # Flags (suppress Double Yellow and Green-after-yellow when safety car handles it)
         if self.data.mHighestFlagColour != self.last_flag_colour:
             flag_name = FLAG_COLOURS.get(self.data.mHighestFlagColour, "None")
+            # A yellow usually clears to no flag at all (0), not green: log the clear whatever it goes to
+            if self.last_flag_colour in [6, 7] and self.data.mHighestFlagColour not in [6, 7]:
+                if not self.safety_car_active:
+                    self.log("FLAG", "Flag: Green again (Yellow cleared).", sim_time=self.get_session_time())
             if self.data.mHighestFlagColour == 1: # Green
-                if self.last_flag_colour in [6, 7]: # Only log if clearing a Yellow or Double Yellow
-                    if not self.safety_car_active:
-                        self.log("FLAG", "Flag: Green again (Yellow cleared).", sim_time=self.get_session_time())
+                pass # Only news after a yellow, logged above
             elif self.data.mHighestFlagColour == 2: # Blue
                 pass # Suppress blue flag messages
             elif self.data.mHighestFlagColour == 7: # Double Yellow
@@ -811,6 +896,18 @@ class AMS2EventLogger:
                 is_finished = False
                 
                 crossed_line = (laps_completed > old_laps) or (lap > old_lap)
+
+                # Every completed lap is kept, to work out the finish of a replay (see write_replay_finish)
+                if self.recording and self.green_flag_fired and sim_now >= self.race_clock_high:
+                    crossings = self.line_crossings.setdefault(name, [])
+                    if laps_completed > old_laps and (not crossings or laps_completed > crossings[-1][1]):
+                        crossings.append((sim_now, laps_completed, pos, total_dist))
+                        if laps_completed > self.lead_laps:
+                            self.lead_laps = laps_completed
+                            if sc_on_track_now:
+                                self.safety_car_laps.add(laps_completed)
+                    self.last_progress[name] = total_dist
+
                 if not is_finished and self.checkered_flag_shown and name not in self.finished_participants:
                     if crossed_line:
                         is_finished = True
@@ -822,6 +919,7 @@ class AMS2EventLogger:
                     else:
                         self.log("FINISH", f"Checkered Flag! {name} comes past the line to take P{pos}.", sim_time=self.get_session_time())
                     self.finished_participants.add(name)
+                    self.finish_lines_logged += 1
                 
                 # Other terminal states
                 if race_state != old_race_state and name not in self.finished_participants:
@@ -1029,6 +1127,14 @@ class AMS2EventLogger:
         self.last_lap_distances = new_lap_distances
         self.last_laps_completed = new_laps_completed
         self.last_laps = new_laps
+
+        if self.recording and self.green_flag_fired:
+            self.race_clock_high = max(self.race_clock_high, sim_now)
+            if self.is_replay():
+                self.replay_ticks += 1
+            else:
+                self.live_ticks += 1
+        self.note_signals(sim_now)
 
         if self.recorder:
             self.recorder.update(sim_now)

@@ -222,9 +222,33 @@ def main(input_folder, output_file):
             'actual_start': scheduled_start_ms
         })
 
+    place_clips(timeline_items)
+    build_timeline(timeline_items, output_file)
+
+
+def spare_share_ms(timeline_items, i):
+    """An even share of the time the event of clip i has left over before the next event starts: one share
+    for each pause between its lines and one for the silence after the last. 0 for the last event."""
+    scheduled = timeline_items[i]['scheduled_start']
+    first = last = i
+    while first > 0 and timeline_items[first - 1]['scheduled_start'] == scheduled:
+        first -= 1
+    while last + 1 < len(timeline_items) and timeline_items[last + 1]['scheduled_start'] == scheduled:
+        last += 1
+    if last + 1 == len(timeline_items):
+        return 0
+    lines = timeline_items[first:last + 1]
+    spare = (timeline_items[last + 1]['scheduled_start'] - lines[0]['actual_start']
+             - sum(item['duration'] for item in lines))
+    return spare / len(lines)
+
+
+def place_clips(timeline_items):
+    """Sets every clip's actual_start (and trims a clip that would run too far into the next event)."""
     # Timeline layout constants
     MIN_GAP_MS = 10           # Minimum natural gap between clips (10ms)
     MAX_GAP_MS = 800          # Maximum natural gap between clips (800ms)
+    MAX_LINE_PAUSE_MS = 1500  # Longest pause between two lines of one event that has time to spare
     MAX_SHIFT_MS = 4000       # Maximum allowed delay (4s) from scheduled timecode
     MAX_OVERLAP_MS = 800      # Maximum allowed overlap between different speakers (up to 800ms)
     FADE_OUT_MS = 100         # Fade-out duration when truncating a clip
@@ -246,8 +270,12 @@ def main(input_folder, output_file):
         natural_start = prev_end + gap_ms
         
         if item['scheduled_start'] == prev_item['scheduled_start']:
-            # Same timecode: play sequentially after previous clip
-            item['actual_start'] = max(item['scheduled_start'], natural_start)
+            # Same timecode: play sequentially after previous clip. An event with time to spare takes a longer
+            # pause between its lines, so the silence is not all left at the end, before the next event
+            share = min(spare_share_ms(timeline_items, i), MAX_LINE_PAUSE_MS)
+            if share > gap_ms:
+                gap_ms = max(gap_ms, int(share * random.uniform(0.75, 1.0)))
+            item['actual_start'] = max(item['scheduled_start'], prev_end + gap_ms)
         else:
             # Different timecodes: apply 4-second maximum delay limit
             max_allowed_start = item['scheduled_start'] + MAX_SHIFT_MS
@@ -341,7 +369,9 @@ def main(input_folder, output_file):
             shift = item['actual_start'] - item['scheduled_start']
             print(f"  Shifted {item['filename']} by {shift}ms")
 
-    # Build final timeline
+
+
+def build_timeline(timeline_items, output_file):
     print("Building final WAV...")
     
     # Determine total duration required
