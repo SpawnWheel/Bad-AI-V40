@@ -15,6 +15,13 @@ import sys
 # room for the short pauses the audio combiner puts between lines. Raise it for more talk, lower it for more air.
 WORDS_PER_SEC = 2.5
 MAX_WORDS = 90
+# A share of the gap is the right amount of air for a short gap, but on a long one it adds up: a 20 second gap
+# ended on 5 to 8 seconds of silence. From about 11 seconds up, the budget instead fills the gap up to a fixed pause.
+# Measured over a race: the voices speak about 2.9 words a second and the AI writes about 85% of the words asked for.
+# A shorter pause fills more, but lines start running into the next event (at 2.5 the odd clip had to be cut short).
+PAUSE_SEC = 3.0
+VOICE_WORDS_PER_SEC = 2.9
+WRITTEN_SHARE = 0.85
 # The start is shouted and rushed: events in the first seconds after the green flag get more words
 START_WORDS_PER_SEC = 2.8
 START_SECONDS = 25
@@ -89,7 +96,8 @@ def main():
 
         at_start = green_flag is not None and 0 <= (timestamp - green_flag).total_seconds() < START_SECONDS
         rate = START_WORDS_PER_SEC if at_start else WORDS_PER_SEC
-        word_count = max(3, min(int(round(duration * rate)), MAX_WORDS))
+        words = max(duration * rate, (duration - PAUSE_SEC) * VOICE_WORDS_PER_SEC / WRITTEN_SHARE)
+        word_count = max(3, min(int(round(words)), MAX_WORDS))
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"
