@@ -61,6 +61,9 @@ VOICE_WPS = 2.9         # words a second, to estimate when lines play without th
 EST_LINE_GAP = 0.4
 # Race control messages about stewards, investigations or penalties (old plans) are not shown
 STEWARDS_WORDS = re.compile(r'stewar|investigat|penalt|reprimand|no further action|black and white', re.I)
+COMM_INFO_AT = 0.33         # the commentator info box goes up this share of the way into the race
+COMM_INFO_EARLIEST = 120.0  # ... but never sooner than this after the green flag
+COMM_INFO_MAX_SHIFT = 120.0 # ... waiting at most this long for team radio to clear the right-hand side
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
 AUTO_MAX_SHIFT = 30.0
@@ -108,6 +111,10 @@ class OverlayRenderer:
                 items.append({'id': 'auto_comm', 'type': 'commentators', 'time': gf + 10.5, 'duration': dur,
                               'lane': 'side', 'auto': True,
                               'data': {'names': names, 'bios': bios, 'anim_dur': dur - 0.2 - POPUP_OUT}})
+        if gf is not None and auto.get('commentator_info', True):
+            item = self._commentator_info_item(gf, lf)
+            if item:
+                items.append(item)
         tk = cfg['layout']['ticker']
         if tk['enabled']:
             if gf is not None and auto.get('start_ticker') and race.grid:
@@ -186,6 +193,20 @@ class OverlayRenderer:
             items.append({'id': 'auto_results', 'type': 'results', 'time': start, 'duration': 90.0,
                           'lane': 'center', 'auto': True, 'data': {'rows': rows}})
         return items
+
+    def _commentator_info_item(self, gf, lf):
+        """One info box about the commentary team (a short paragraph the graphics step's AI researched for this
+        race), under the map on the right about a third of the way into the race. None without that paragraph."""
+        info = self.plan.get('commentator_info') or {}
+        text = ' '.join(str(info.get('text') or '').split())
+        if not text:
+            return None
+        end = lf if lf is not None else gf + 1200.0
+        t = gf + max(COMM_INFO_EARLIEST, (end - gf) * COMM_INFO_AT)
+        dur = max(10.0, min(16.0, 4.0 + len(text.split()) / 4.0))
+        return {'id': 'auto_comm_info', 'type': 'commentator_info', 'time': t, 'duration': dur, 'lane': 'side',
+                'auto': True, 'max_shift': COMM_INFO_MAX_SHIFT,
+                'title': info.get('title') or '', 'data': {'names': info.get('names') or [], 'text': text}}
 
     def _pit_items(self):
         """Pit stops in their own corner by the timing tower: a compact timer for a top-4 car (up as it
@@ -495,12 +516,14 @@ class OverlayRenderer:
             if self._place(it, blocking, AUTO_MAX_SHIFT if it.get('auto') else MAX_SHIFT):
                 placed.append(it)
         # Team radio and the top centre slot (leader banner, fastest lap) have their own slots, one at a time;
-        # the commentators list shares the right-hand side with team radio
+        # the commentators list and the commentator info box share the right-hand side with team radio
         for lanes in (('side', 'radio'), ('top',)):
             lane_blocking = []
             # The cards of one radio exchange hand over to each other, so they are placed (and moved) as one
             units, chains = [], {}
-            for it in sorted([a for a in auto if a['lane'] in lanes], key=lambda x: (x['lane'] != 'side', x['time'])):
+            # The commentators list comes first, then team radio (timed to its voices), then the info box
+            order = lambda x: (0 if x['type'] == 'commentators' else 1 if x['lane'] in ('radio', 'top') else 2, x['time'])
+            for it in sorted([a for a in auto if a['lane'] in lanes], key=order):
                 c = it.get('chain')
                 if c in chains:
                     chains[c].append(it)
@@ -512,7 +535,7 @@ class OverlayRenderer:
                 first = unit[0]
                 span = {'type': first['type'], 'time': first['time'],
                         'duration': max(m['time'] + m['duration'] for m in unit) - first['time']}
-                if self._place(span, lane_blocking, AUTO_MAX_SHIFT):
+                if self._place(span, lane_blocking, first.get('max_shift', AUTO_MAX_SHIFT)):
                     shift = span['time'] - first['time']
                     for m in unit:
                         m['time'] += shift

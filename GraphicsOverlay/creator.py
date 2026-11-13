@@ -553,6 +553,70 @@ def merge_driver_info(cfg, info, overwrite=False):
     return changed
 
 
+# ---------------------------------------------------------------- commentator info box
+COMMENTATOR_INFO_PROMPT = """You are researching the commentators for a motorsport broadcast graphic. Search the web.
+
+This race's commentary is an AI recreation of these real commentators' voices and styles:
+{names}
+
+The race:
+* Circuit: {track}
+* Championship: {championship}
+* Cars: {cars}
+
+Write ONE short, factual paragraph for an info box that tells the viewer something genuinely interesting about
+these commentators: 30-40 words in total, about the team or one or two of them (not a list, not a line each).
+Pick the most interesting facts you can find, for example:
+* What they are known as as a team: a nickname fans gave them (e.g. a Spanish F1 trio fans call "the three
+  musketeers"), the broadcaster or series they made their name on, how long they have worked together.
+* A link to THIS race: one of them lives in or comes from the city or country of the circuit, raced or won
+  there, or called its famous races; or a link to these cars or this kind of racing. Work out where the circuit
+  is. A link like this is the best kind of fact when there is one.
+* Why one of them is iconic: a famous call, a catchphrase, a title, a record, a surprising career fact.
+Only use facts and links you found in your search; if there is no real link to the race, use another fact
+rather than stretch one.
+
+Rules:
+* Every fact must come from your search. No invented numbers, dates or quotes. Leave out anything you are unsure of.
+* Plain, lively broadcast-graphic English, third person. No markdown, no citations, no URLs.
+
+Reply with ONLY this JSON:
+{{"title": "a short heading for the box, at most 4 words, e.g. THE COMMENTARY TEAM", "text": "the paragraph"}}"""
+
+
+def make_gemini_searcher(api_key, model, thinking_level='MEDIUM', max_tokens=8192):
+    """Like make_gemini_asker, but the model can search the web (Google Search grounding). Replies in text."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+
+    def ask(prompt):
+        thinking = None
+        if 'gemini-3' in model.lower() and thinking_level.upper() != 'NONE':
+            thinking = types.ThinkingConfig(thinking_level=thinking_level.upper())
+        resp = client.models.generate_content(
+            model=model, contents=prompt,
+            config=types.GenerateContentConfig(max_output_tokens=max_tokens, thinking_config=thinking,
+                                               tools=[types.Tool(google_search=types.GoogleSearch())]))
+        return resp.text or ''
+
+    return ask
+
+
+def ai_commentator_info(names, track, championship, cars, ask):
+    """{'title', 'names', 'text'} for the commentator info box: one short paragraph about the whole commentary team,
+    researched and written by the AI for this race. Raises ValueError when the reply has no paragraph."""
+    prompt = COMMENTATOR_INFO_PROMPT.format(names='\n'.join(f'* {n}' for n in names), track=track or 'unknown',
+                                            championship=championship or 'unknown', cars=cars or 'unknown')
+    data = parse_ai_json(ask(prompt))
+    text = ' '.join(str(data.get('text') or '').split())
+    if not text:
+        raise ValueError('no paragraph in the reply')
+    title = ' '.join(str(data.get('title') or '').split())[:40]
+    return {'title': title, 'names': list(names), 'text': text}
+
+
 def make_gemini_asker(api_key, model, thinking_level='MEDIUM', max_tokens=32768):
     from google import genai
     from google.genai import types

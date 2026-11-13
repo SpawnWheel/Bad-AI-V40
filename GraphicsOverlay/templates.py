@@ -1203,6 +1203,34 @@ class Templates:
             fade = int(255 * (1 - 0.55 * b / bars) * (0.55 + 0.45 * level))
             round_rect(img, (bx, cy - bh / 2, bx + bw, cy + bh / 2), bw / 2, self.th.accent2[:3] + (fade,))
 
+    COMM_INFO_NOTE = "The voices you're hearing are AI recreations of these commentators."
+
+    def card_commentator_info(self, g):
+        """Commentator info box for under the map on the right: the commentators' names, one short paragraph
+        about them (written for this race by the graphics step's AI) and a line saying the voices are AI."""
+        th = self.th
+        d = g.get('data') or {}
+        text = d.get('text') or ''
+        if not text:
+            return None
+        W, pad = self.COMM_W, 18
+        f_names = font(18, 'bold_cond')
+        f_text = font(19, 'regular')
+        f_note = font(15, 'regular')
+        names = wrap('  ·  '.join(n.upper() for n in d.get('names') or []), f_names, W - pad * 2, 2)
+        lines = wrap(text, f_text, W - pad * 2, 9)
+        note = wrap(self.COMM_INFO_NOTE, f_note, W - pad * 2, 2)
+        panel_h = (14 + (22 * len(names) + 8 if names else 0) + 26 * len(lines) + 12 + 1 + 10
+                   + 19 * len(note) + 12)
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'THE COMMENTARY TEAM').upper(), stripe=th.accent)
+        y = top + 14
+        if names:
+            y = self.text_lines(img, pad, y, names, f_names, th.accent2, 22) + 8
+        y = self.text_lines(img, pad, y, lines, f_text, th.text, 26) + 12
+        round_rect(img, (pad, y, W - pad, y + 1), 0, (255, 255, 255, 30))
+        self.text_lines(img, pad, y + 10, note, f_note, th.muted, 19)
+        return img
+
     def card_start_movers(self, g):
         """Biggest gainer and biggest loser since the grid, side by side."""
         th = self.th

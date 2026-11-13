@@ -48,6 +48,8 @@ CIRCUIT_LABELS = ('THE CIRCUIT', 'HISTORY', 'FROM THE ARCHIVE', 'LOCAL KNOWLEDGE
 AUTO_TYPES = {
     'title_card': 'Opening title card',
     'commentators': 'AI commentator names and bios',
+    'commentator_info': 'Commentator info box: a paragraph the AI researches each race on who the commentators '
+                        'are, why they are iconic and their link to the track (a third of the way in)',
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',

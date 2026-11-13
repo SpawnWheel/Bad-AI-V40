@@ -11,7 +11,32 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import racefiles  # noqa: E402
 from GraphicsOverlay import config as gcfg  # noqa: E402
 from GraphicsOverlay import creator  # noqa: E402
+from GraphicsOverlay import race_data  # noqa: E402
 from GraphicsOverlay.renderer import OverlayRenderer  # noqa: E402
+
+
+def commentator_info(project_path, cfg, race, api_key, model, thinking):
+    """The commentator info box for this race: the AI searches the web and writes a short paragraph about the
+    commentators heard in the commentary, linked to this track where it can. None if it is off or fails."""
+    if not cfg['auto_graphics'].get('commentator_info', True):
+        return None
+    names = race_data.commentator_names(race_data.read_commentary(gcfg.project_files(project_path)['commentary_text']))
+    if not names:
+        return None
+    if not api_key:
+        print("No Gemini API key set; no commentator info box.")
+        return None
+    track = gcfg.clean_track_name(race.track)
+    cars = ', '.join((racefiles.read_race(project_path).get('summary') or {}).get('cars') or [])
+    print(f"Researching the commentators ({', '.join(names)}) for the info box...")
+    try:
+        ask = creator.make_gemini_searcher(api_key, model, thinking)
+        info = creator.ai_commentator_info(names, track, cfg['championship'].get('name', ''), cars, ask)
+    except Exception as e:
+        print(f"Could not write the commentator info box ({e}); it is left out.")
+        return None
+    print(f"Commentator info box ({info['title'] or 'no title'}): {info['text']}")
+    return info
 
 
 def main():
@@ -91,6 +116,9 @@ def main():
             print(f"Filled {changed} missing driver details from the race notes.")
 
     plan = creator.build_plan(project_path, cfg, race, raw_entries, source)
+    info = commentator_info(project_path, cfg, race, api_key, model, thinking)
+    if info:
+        plan['commentator_info'] = info
     path = creator.save_plan(project_path, plan)
 
     counts = {}
