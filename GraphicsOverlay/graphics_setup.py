@@ -806,7 +806,7 @@ class GraphicsSetup:
             messagebox.showwarning("No API key", "Set the Gemini API key in the launcher Settings first.")
             return
         notes = gcfg.racefiles.notes_text(self.files['project_notes'])
-        model = os.environ.get("GEMINI_MODEL_NAME") or self._launcher_setting('gemini_model') or 'gemini-3.8-flash'
+        model = os.environ.get("GEMINI_MODEL_NAME") or self._launcher_setting('gemini_model') or 'gemini-4-hydrogen'
         self.set_status("Asking the AI to read the race notes…")
 
         def work():

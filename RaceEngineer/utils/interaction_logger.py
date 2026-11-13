@@ -86,10 +86,10 @@ class InteractionLogger:
             f"[SESSION INFO]: {session_info}",
             f"[DRIVER INPUT / TRIGGER]: {driver_input}",
             sub_sep,
-            "[FULL PROMPT SENT TO GEMINI 3.8 FLASH]:",
+            "[FULL PROMPT SENT TO GEMINI]:",
             full_prompt_sent.strip(),
             sub_sep,
-            "[RESPONSE RETURNED BY GEMINI 3.8 FLASH]:",
+            "[RESPONSE RETURNED BY GEMINI]:",
             ai_response_text.strip(),
             separator,
             "\n"

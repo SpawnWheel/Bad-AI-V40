@@ -21,10 +21,9 @@ ENGINEER_SETTINGS = [
     ]),
     ("Race engineer - Gemini", [
         (("gemini", "thinking_model"), "Model", "entry", None),
-        (("gemini", "thinking_level"), "Thinking level", "choice", ["LOW", "MEDIUM", "HIGH"]),
+        (("gemini", "thinking_level"), "Thinking level", "choice", ["LOW", "MEDIUM", "HIGH", "XHIGH"]),
         (("gemini", "fast_model"), "Fast model (routine calls, blank = Model)", "entry", None),
         (("gemini", "fallback_model"), "Fallback model (blank = none)", "entry", None),
-        (("gemini", "temperature"), "Temperature", "float", None),
         (("tts", "model"), "Voice model", "entry", None),
         (("streaming", "enabled"), "Stream replies (starts talking sooner)", "bool", None),
     ]),
@@ -132,14 +131,14 @@ class SettingsScreen(tk.Frame):
         c = self._card("Gemini (AI)", "Used by the race engineer and every AI step of the replay. Get a key from "
                                       "Google AI Studio.")
         self.vars["gemini_api_key"] = tk.StringVar(value=s.get("gemini_api_key", ""))
-        self.vars["gemini_model"] = tk.StringVar(value=s.get("gemini_model", "gemini-3.8-flash"))
+        self.vars["gemini_model"] = tk.StringVar(value=s.get("gemini_model", "gemini-4-hydrogen"))
         self.vars["gemini_max_output_tokens"] = tk.StringVar(value=str(s.get("gemini_max_output_tokens", 65536)))
-        self.vars["gemini_thinking_level"] = tk.StringVar(value=s.get("gemini_thinking_level", "HIGH"))
+        self.vars["gemini_thinking_level"] = tk.StringVar(value=s.get("gemini_thinking_level", "MEDIUM"))
         self._field(c, 2, 0, "API key", self.vars["gemini_api_key"], width=50, show="•")
         self._field(c, 2, 1, "Model for the replay steps", self.vars["gemini_model"])
         self._field(c, 4, 0, "Max output tokens", self.vars["gemini_max_output_tokens"], width=14)
         self._field(c, 4, 1, "Thinking level", self.vars["gemini_thinking_level"], "choice",
-                    ["HIGH", "MEDIUM", "LOW", "MINIMAL", "NONE"], width=18)
+                    ["XHIGH", "HIGH", "MEDIUM", "LOW", "NONE"], width=18)
 
     def _folders_card(self):
         c = self._card("Replay recordings", "The folder your screen recorder (OBS or similar) saves to. The newest "

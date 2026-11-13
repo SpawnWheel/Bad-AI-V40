@@ -209,7 +209,6 @@ class TestVarietyEngine(unittest.TestCase):
         self.assertIn("DELIVERY VARIETY", hist)
         brain.reset_session()
         self.assertEqual(len(brain.variety.recent_lines), 0)
-        self.assertEqual(brain.temperature, 1.0)
 
 
 if __name__ == "__main__":

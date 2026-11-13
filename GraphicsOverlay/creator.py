@@ -593,7 +593,7 @@ def make_gemini_searcher(api_key, model, thinking_level='MEDIUM', max_tokens=819
 
     def ask(prompt):
         thinking = None
-        if 'gemini-3' in model.lower() and thinking_level.upper() != 'NONE':
+        if not model.lower().startswith(('gemini-1', 'gemini-2')) and thinking_level.upper() != 'NONE':
             thinking = types.ThinkingConfig(thinking_level=thinking_level.upper())
         resp = client.models.generate_content(
             model=model, contents=prompt,
@@ -625,7 +625,7 @@ def make_gemini_asker(api_key, model, thinking_level='MEDIUM', max_tokens=32768)
 
     def ask(prompt):
         thinking = None
-        if 'gemini-3' in model.lower() and thinking_level.upper() != 'NONE':
+        if not model.lower().startswith(('gemini-1', 'gemini-2')) and thinking_level.upper() != 'NONE':
             thinking = types.ThinkingConfig(thinking_level=thinking_level.upper())
         resp = client.models.generate_content(
             model=model, contents=prompt,

@@ -4,7 +4,7 @@
         "step_gap": 0.01,
         "max_participants": 17,
         "api_key": "",
-        "gemini_model": "gemini-3.8-flash",
-        "gemini_thinking_level": "MEDIUM"
+        "gemini_model": "gemini-4-hydrogen",
+        "gemini_thinking_level": "HIGH"
     }
 }

@@ -44,7 +44,8 @@ class App:
 
         self.config_data = self._load_config()
         self.settings = self.config_data.setdefault("global_settings", {})
-        self.settings.pop("live_mode", None)  # settings of the old live commentator
+        for key in ("live_mode", "live_mode_presets"):  # settings of the old live commentator
+            self.settings.pop(key, None)
         self.pm = ProcessManager()
         self.pm.listeners.append(self._on_process_event)
         self.session = None
@@ -91,7 +92,7 @@ class App:
     def ai_env(self):
         s = self.settings
         env = {"GEMINI_MAX_OUTPUT_TOKENS": str(s.get("gemini_max_output_tokens", 65536)),
-               "GEMINI_THINKING_LEVEL": str(s.get("gemini_thinking_level", "HIGH"))}
+               "GEMINI_THINKING_LEVEL": str(s.get("gemini_thinking_level", "MEDIUM"))}
         if s.get("gemini_api_key"):
             env["GEMINI_API_KEY"] = s["gemini_api_key"]
         if s.get("gemini_model"):

@@ -1,5 +1,5 @@
 """
-Gemini 3.8 Flash Brain for AMS2 AI Race Engineer.
+Gemini Hydrogen Brain for AMS2 AI Race Engineer.
 Handles real-time telemetry analysis, strategic reasoning, and voice radio Q&A
 with a config-driven persona (see engineer/persona.py), accent, delivery, and emotional steering.
 
@@ -128,7 +128,7 @@ class RaceEngineerBrain:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "gemini-3.8-flash",
+        model_name: str = "gemini-4-hydrogen",
         personality: str = "Gianpiero Lambiase (GP) style — sharp, authoritative, dry-witted British race engineer. Candid, blunt, unflappable on the pit wall with a Max Verstappen-style dynamic. Zero fluff, direct data, sarcastic when needed, laser-focused in battles.",
         accent: str = "British",
         delivery: str = "sharp, authoritative, dry, and focused",
@@ -137,8 +137,6 @@ class RaceEngineerBrain:
         thinking_budget: Optional[int] = None,
         max_output_tokens: int = 8192,
         persona=None,
-        temperature: float = 1.0,
-        report_temperature: Optional[float] = None,
         fast_model: Optional[str] = None,
         fast_thinking_level: Optional[str] = None,
         fallback_model: Optional[str] = None,
@@ -154,9 +152,6 @@ class RaceEngineerBrain:
         self.personality = persona.personality if persona else personality
         self.accent = persona.accent if persona else accent
         self.delivery = persona.baseline_delivery if persona else delivery
-        # Gemini 3.x models are tuned for temperature 1.0; lower values make calls repetitive.
-        self.temperature = float(temperature)
-        self.report_temperature = float(report_temperature) if report_temperature is not None else self.temperature
         self.verbosity = verbosity
         self.max_output_tokens = max_output_tokens
         self.fast_model = (fast_model or "").strip() or None
@@ -167,8 +162,8 @@ class RaceEngineerBrain:
         # The driver's pre-race notes from the launcher (rivalries, planned strategy); blank = none
         self.driver_brief = (driver_brief or "").strip()
 
-        # Resolve thinking configuration for Gemini 3.8 Flash (supports LOW / MEDIUM / HIGH)
-        if thinking_level and str(thinking_level).upper() in ("HIGH", "MEDIUM", "LOW", "MINIMAL"):
+        # Resolve thinking configuration (Gemini Hydrogen supports LOW / MEDIUM / HIGH / XHIGH)
+        if thinking_level and str(thinking_level).upper() in ("XHIGH", "HIGH", "MEDIUM", "LOW"):
             self.thinking_level = str(thinking_level).upper()
         elif thinking_budget is not None:
             if thinking_budget >= 3000:
@@ -567,7 +562,7 @@ class RaceEngineerBrain:
         s = str(e)
         return any(k in s for k in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "overloaded", "DEADLINE", "timed out", "Timeout"))
 
-    def _call_model(self, contents, temperature: float, use_fast: bool = False,
+    def _call_model(self, contents, use_fast: bool = False,
                     on_partial=None) -> Tuple[Optional[str], str, str]:
         """
         Returns (raw_text, model_used, token_summary). Raises on unrecoverable error.
@@ -584,7 +579,6 @@ class RaceEngineerBrain:
         for model_id, level in models:
             cfg = dict(
                 system_instruction=self.system_prompt,
-                temperature=temperature,
                 max_output_tokens=self.max_output_tokens,
                 thinking_config=types.ThinkingConfig(thinking_level=level),
                 # No tools are used; also silences the SDK's AFC warning on streaming calls
@@ -683,7 +677,6 @@ class RaceEngineerBrain:
         kind: str,
         prompt: str,
         extra_parts: Optional[List[types.Part]] = None,
-        temperature: Optional[float] = None,
         use_fast: bool = False,
         speaker=None,
         fallback_emotion: str = "",
@@ -711,8 +704,7 @@ class RaceEngineerBrain:
                 speaker.update(response, emotion or fallback_emotion, delivery or fallback_delivery, known)
 
         raw, model_used, tokens = self._call_model(
-            contents, self.temperature if temperature is None else temperature,
-            use_fast=use_fast, on_partial=on_partial,
+            contents, use_fast=use_fast, on_partial=on_partial,
         )
         if not raw:
             return EngineerReply(latency=time.time() - start_t, model=model_used, tokens=tokens), final_prompt
@@ -880,7 +872,7 @@ class RaceEngineerBrain:
 
         prompt = PRACTICE_BRIEFING_PROMPT.format(telemetry_context=context_str) + self._prompt_extras()
         try:
-            reply, final_prompt = self._generate("practice_briefing", prompt, temperature=self.report_temperature)
+            reply, final_prompt = self._generate("practice_briefing", prompt)
             if reply.ok and reply.response:
                 emotion = reply.emotion or fallback_emotion
                 delivery = reply.delivery or fallback_delivery
@@ -903,7 +895,7 @@ class RaceEngineerBrain:
 
         prompt = QUALI_SITREP_PROMPT.format(telemetry_context=context_str, radio_history=self._prompt_extras())
         try:
-            reply, final_prompt = self._generate("quali_update", prompt, temperature=self.report_temperature, speaker=speaker,
+            reply, final_prompt = self._generate("quali_update", prompt, speaker=speaker,
                                                   fallback_emotion=fallback_emotion, fallback_delivery=fallback_delivery)
             if reply.ok and reply.response:
                 emotion = reply.emotion or fallback_emotion
@@ -938,7 +930,7 @@ class RaceEngineerBrain:
             template = RACE_UPDATE_PROMPT
         prompt = template.format(telemetry_context=context_str, radio_history=self._prompt_extras())
         try:
-            reply, final_prompt = self._generate("sitrep", prompt, temperature=self.report_temperature, speaker=speaker,
+            reply, final_prompt = self._generate("sitrep", prompt, speaker=speaker,
                                                   fallback_emotion=fallback_emotion, fallback_delivery=fallback_delivery)
             if reply.ok and reply.response:
                 emotion = reply.emotion or fallback_emotion
