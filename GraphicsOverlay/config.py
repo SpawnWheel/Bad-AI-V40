@@ -416,6 +416,37 @@ def match_car_image(log_name, files=None):
     return best
 
 
+def match_grid_car(names, prefer=(), files=None):
+    """The car preview for a driver known by any of `names` (log name, display name, short name). A file
+    that also names the car (`prefer`, e.g. 'mini' for 'Thommo_Mini.dds' over 'Thommo.dds') wins, then an
+    exact name, then the longest match."""
+    files = files if files is not None else list_images(CAR_PREVIEW_DIR)
+    keys = {k for k in (race_data.norm_key(n) for n in names if n) if len(k) >= 4}
+    # Words of the names ('GrizzlyCliff' -> grizzly, 'muzzer82' -> muzzer, 'kf.MTG' -> mtg) only count at the
+    # start of a file name ('Grizzly_Mini', 'MTG_Mini')
+    words = set()
+    for n in names:
+        for w in re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?![a-z])', race_data.strip_tags(n or '')):
+            if len(w) >= 3:
+                words.add(w.lower())
+    prefer = [p for p in (race_data.norm_key(w) for w in prefer if w) if len(p) >= 3]
+    # When the folder has cars named after this car ('_Mini'), a driver without one gets no car rather than
+    # their car from another series
+    named = [f for f in files if any(p in race_data.norm_key(f) for p in prefer)]
+    best, best_score = None, 0
+    for f in (named or files):
+        fk = race_data.norm_key(os.path.splitext(f)[0])
+        if len(fk) < 3:
+            continue
+        hits = [k for k in keys if k == fk or k in fk or fk in k] + [w for w in words if fk.startswith(w)]
+        if not hits:
+            continue
+        score = (100 if any(p in fk for p in prefer) else 0) + (50 if fk in keys else 0) + max(map(len, hits))
+        if score > best_score:
+            best, best_score = f, score
+    return best
+
+
 def tidy_name(name):
     name = race_data.strip_tags(name)
     if '.' in name and ' ' not in name:
@@ -441,6 +472,7 @@ def default_driver(log_name, files=None):
         'make': '',
         'color': '',
         'car_image': f"Graphics/CarPreviews/{image}" if image else '',
+        'logo': '',
     }
 
 

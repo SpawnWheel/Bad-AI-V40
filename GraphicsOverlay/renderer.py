@@ -67,6 +67,9 @@ COMM_INFO_MAX_SHIFT = 120.0 # ... waiting at most this long for team radio to cl
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
 AUTO_MAX_SHIFT = 30.0
+GRID_LEAD = 5.0       # the starting grid is up this long before its commentary is due (the video opens ~0.5 s before)
+GRID_ANIM_AT = GRID_LEAD - 0.6  # ... and its scene starts playing in here, as the video opens
+GRID_ANIM_DUR = 2.2   # about how long the cars take to come in (see starting_grid.py)
 PIT_GROUP_GAP = 12.0  # pit entries this close together share one IN PITS tag
 PIT_GROUP_MAX = 5
 
@@ -90,6 +93,16 @@ class OverlayRenderer:
         self.static = self.tpl.static_layer(self.size)
         self._cards = {}
         self._strips = {}
+        # Starting grid intro (video times of the grid event, green flag and replay start), or None
+        self.intro = gcfg.racefiles.grid_intro_window(project_path) if project_path else None
+        # The held replay frame behind the grid (the export grabs it; grabbed here for previews)
+        self.grid_backdrop = None
+        if self.intro:
+            self.grid_backdrop = gcfg.racefiles.grid_hold_frame_path(project_path, self.intro['hold'])
+            video = gcfg.racefiles.read_race(project_path).get('video')
+            if not os.path.exists(self.grid_backdrop) and video and multiprocessing.parent_process() is None:
+                os.makedirs(os.path.dirname(self.grid_backdrop), exist_ok=True)
+                extract_frame(video, self.intro['hold'], self.grid_backdrop)
         self.items = self._schedule()
 
     # ------------------------------------------------------------------ scheduling
@@ -540,8 +553,20 @@ class OverlayRenderer:
                     for m in unit:
                         m['time'] += shift
                         placed.append(m)
+        if self.intro:
+            # Nothing else starts while the grid is up (it would only be hidden behind it)
+            hold = self.intro['hold']
+            placed = [it for it in placed if it['time'] >= hold] + [self.grid_item(self.intro)]
         placed.sort(key=lambda x: x['time'])
         return placed
+
+    @staticmethod
+    def grid_item(intro):
+        """The full-screen starting grid: up from before the video starts until the replay starts playing,
+        the cars coming in GRID_ANIM_AT after the grid event's commentary is due (about when the video opens)."""
+        start = intro['start'] - GRID_LEAD
+        return {'id': 'auto_grid', 'type': 'starting_grid', 'lane': 'full', 'auto': True, 'time': start,
+                'duration': max(1.0, intro['hold'] - start), 'data': {}}
 
     def _refresh_overtake(self, g):
         """Re-reads a planned overtake from the race data (plans made before passes on pitting or
@@ -579,7 +604,9 @@ class OverlayRenderer:
 
     # ------------------------------------------------------------------ per-frame state
     def _active(self, t):
-        return [it for it in self.items if it['time'] <= t < it['time'] + it['duration']]
+        """Items on screen at t; the full-screen starting grid last, so it covers everything."""
+        return sorted((it for it in self.items if it['time'] <= t < it['time'] + it['duration']),
+                      key=lambda it: it['lane'] == 'full')
 
     def _phase(self, it, t, t_in, t_out):
         """('in'|'hold'|'out', frame index within the transition)."""
@@ -627,6 +654,9 @@ class OverlayRenderer:
                 phase, idx = self._phase(it, t, TICKER_SLIDE, TICKER_SLIDE)
                 scroll = int(self._ticker_scroll(it, t))
                 key.append((it['id'], phase, idx, scroll))
+            elif it['lane'] == 'full':
+                # The grid scene moves all the time (the background slowly pushes in)
+                key.append((it['id'], int((t - it['time']) * self.fps)))
             else:
                 key.append((it['id'],) + self._phase(it, t, POPUP_IN, POPUP_OUT) + (self._anim_step(it, t),))
         return tuple(key)
@@ -690,6 +720,10 @@ class OverlayRenderer:
                 band = self.tpl.ticker_frame(self.size, it['title'], it.get('subtitle', ''),
                                              self._strips[it['id']], self._ticker_scroll(it, t), slide)
                 frame.alpha_composite(band)
+                continue
+            if it['lane'] == 'full':
+                scene = self.tpl.starting_grid(self.size)
+                frame.alpha_composite(scene.frame(t - it['time'], it['duration'], self.grid_backdrop, GRID_ANIM_AT))
                 continue
             built = self._card(it, t)
             if not built:
@@ -870,15 +904,15 @@ def render_overlay(project_path, start, end, out_dir, fps=30.0, size=(1920, 1080
     return concat_path
 
 
-def overlay_filter(fps, video_size, base_size=(1920, 1080), overlay_input=2):
-    """filter_complex fragment producing [vout] from [0:v] and the overlay input."""
+def overlay_filter(fps, video_size, base_size=(1920, 1080), overlay_input=2, base='0:v'):
+    """filter_complex fragment producing [vout] from [base] (the video) and the overlay input."""
     scale = ''
     if tuple(video_size) != tuple(base_size):
         scale = f",scale={video_size[0]}:{video_size[1]}"
     # Convert (and scale) each overlay image once, before fps repeats it for every video frame, and in the
     # video's own pixel format so the overlay filter blends without converting every frame again
     return (f"[{overlay_input}:v]format=rgba{scale},format=yuva420p,fps={fps}[ov];"
-            f"[0:v][ov]overlay=0:0:eof_action=pass:format=yuv420[vout]")
+            f"[{base}][ov]overlay=0:0:eof_action=pass:format=yuv420[vout]")
 
 
 def graphics_enabled(project_path):

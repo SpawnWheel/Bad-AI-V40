@@ -111,10 +111,21 @@ Go to **My races** and click **Make replay** on a race. The race screen shows th
 | **Race notes** | Notes that every AI step reads: championship, storylines, rivalries, nicknames, how to pronounce names. **Camera notes** are only for the camera director. | Type them in. They save automatically. Optional, but they make a big difference. |
 | **1. Film the replay** | The **Camera Director** plans the camera shots with AI and switches cameras while the replay plays. | Press **Generate**, load the replay in the sim, start your screen recorder (OBS), sync at the green flag, press **Play Sequence**. Then pick the video in the **Replay video** box. The newest recordings are suggested. |
 | **2. Build the event list** | Merges the camera notes into the race log, then the AI picks the moments worth talking about. | In **Review & sync the events**, watch the video, fix or add events, and sync the log to the video. Press **Save**. It saves into the race; no file name needed. |
-| **3. Write the commentary** | Adds colour from your race notes, gives each event a word count, and writes the commentators' script. | Press **Run all**. Pick a different commentary prompt (commentator pair) first if you like. |
+| **3. Write the commentary** | Adds colour from your race notes, gives each event a word count, and writes the commentators' script. | Press **Run all**. Pick a different commentary prompt (commentator pair) first if you like. Tick **Starting grid before the start** first for a pre-race intro (see below). |
 | **4. Voice it** | Generates the voices, then stitches them into one commentary track. | The voice generator opens in your browser. When the clips are done, press **Stop** on that step, then **Run** to stitch the audio. |
 | **5. Graphics** | Broadcast graphics: timing tower, pop-ups, driver cards. | Set the graphics up once (they carry over to your next race), then let the AI plan the pop-ups. |
 | **6. Export** | Cuts the replay to the commentary, adds the audio and graphics, and saves the MP4. | Press **Run**, then **Watch**. |
+
+### Starting grid before the start (optional)
+
+On **Write the commentary**, tick **Starting grid before the start** and the video opens on a full-screen starting grid while the commentators welcome the viewers and talk through the grid, then fades into the replay.
+
+- **Grid shown for:** how many seconds of commentary before the green flag (5–30, default 10).
+- **Replay starts:** how many seconds before the green flag the replay starts moving (default 2). The recording before that is usually the sim's menus, so the video holds the frame at that point under the grid. **Check frame** shows it; pick a moment where the replay is already on screen.
+- **Music:** **Add track…** copies a song into the `Music` folder. It plays under the grid, ducks under the commentators and fades out as the replay starts. **Quiet / Normal / Loud** sets its level.
+- The grid shows each car's position, name, number, flag, team, logo and car, over the blurred race frame. The car comes from `Graphics\CarPreviews`: the Drivers tab car image when it is a car preview, else the file named after the driver, preferring one named after this race's car (`Thommo_Mini.dds` in a Mini race). The logo comes from the Drivers tab **Logo** (or a logo set as the car image).
+- Nothing after the start moves: the intro uses the time before the green flag that was cut away before. Switching it on or off, or changing the length, marks **Work out how long each line can be** out of date, so run the commentary, voices and export again. Changing the music or the replay start only needs a new export.
+- The recording has to start at least that long before the green flag; if it doesn't, the intro is shortened to fit.
 
 How the step badges work:
 
@@ -149,7 +160,7 @@ Each race is one folder in `Races\`, and every file has the same name in every r
 | `history\` | The previous version of a file, kept whenever a step runs again |
 | `debug\` | The graphics AI's prompt and raw reply, and the graphics test clips |
 
-Your screen recording stays where your recorder saved it. The race only remembers its path.
+Your screen recording stays where your recorder saved it. The race only remembers its path. Music for the starting grid lives in the `Music` folder next to the app.
 
 **Archive** on a race card moves the race to `Races\_Archive`. Nothing is ever deleted.
 
@@ -178,7 +189,7 @@ Settings are saved when you click **Save settings** or leave the screen.
 
 - **Layout tab:** pick a region (leaderboard, map, logo, pop-ups, ticker, team radio) and drag a box over the video to place it.
 - **Branding tab:** championship name, season, round, logo (from `Graphics\Logos`) and colours. Sponsor and manufacturer logos go here too.
-- **Drivers tab:** links each name in the race log to a display name and a car image from `Graphics\CarPreviews`. **AI fill from race notes** reads your notes for numbers, countries and liveries.
+- **Drivers tab:** links each name in the race log to a display name, a car image from `Graphics\CarPreviews` and a team logo from `Graphics\Logos`. **AI fill from race notes** reads your notes for numbers, countries and liveries. **Preview starting grid** shows the pre-race grid on the preview.
 - **Championships:** the bar under the header shows the championship you're working in. Championships hold the branding, layout and every driver, and live in `Graphics\Championships`. When one is overwritten or deleted, the old version goes to `Graphics\Championships\Backups` (the last 10 are kept).
 - **Timing tower:** both sims get a full timing tower drawn from the live timing the recorder saves (`01_race_log_timing.jsonl`). For AMS2, hide the in-game leaderboard when you record. To go back to a frame around the game's own leaderboard, untick **Show timing tower** on the Layout tab.
 - **Automatic graphics:** biggest gainer and loser one minute after the start, a Fastest Lap card, and team-radio quotes for every (Radio) line in the reviewed events. Each can be switched off.

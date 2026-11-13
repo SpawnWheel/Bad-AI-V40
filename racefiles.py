@@ -124,6 +124,108 @@ def update_race(folder, **fields):
     return data
 
 
+# ---------------------------------------------------------------- grid intro
+# Optional pre-race intro: the timing step adds a [GRID] event GRID seconds before the green flag, so the
+# commentators talk over a full-screen starting grid. The export holds one frame of the replay under it
+# (the recording before the start is the sim's menus), and an optional music track plays underneath.
+# Everything stays in video time, so no other event, clip or graphic moves.
+
+GRID_TAG = "[GRID]"
+MUSIC_DIR = os.path.join(APP_DIR, "Music")
+MUSIC_EXTS = (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac")
+GRID_INTRO_DEFAULTS = {
+    "enabled": False,
+    "seconds": 10,        # commentary over the grid, before the green flag
+    "hold_lead": 2.0,     # the replay starts playing this long before the green flag (the held frame)
+    "music": "",          # file name in Music/
+    "music_level": "Normal",
+}
+GRID_SECONDS_RANGE = (5, 30)
+STAMP_RE = re.compile(r"^(\d{2}):(\d{2}):(\d{2})\s*-\s*")
+
+
+def grid_intro_settings(folder):
+    """The race's grid intro settings (race.json "grid_intro") over the defaults."""
+    data = read_race(folder).get("grid_intro") or {}
+    s = {**GRID_INTRO_DEFAULTS, **{k: v for k, v in data.items() if k in GRID_INTRO_DEFAULTS}}
+    try:
+        s["seconds"] = max(GRID_SECONDS_RANGE[0], min(GRID_SECONDS_RANGE[1], int(s["seconds"])))
+        s["hold_lead"] = max(0.0, min(10.0, float(s["hold_lead"])))
+    except (TypeError, ValueError):
+        s["seconds"], s["hold_lead"] = GRID_INTRO_DEFAULTS["seconds"], GRID_INTRO_DEFAULTS["hold_lead"]
+    return s
+
+
+def grid_music_path(settings):
+    name = (settings.get("music") or "").strip()
+    path = os.path.join(MUSIC_DIR, name) if name else ""
+    return path if path and os.path.isfile(path) else ""
+
+
+def list_music():
+    try:
+        return sorted(f for f in os.listdir(MUSIC_DIR) if f.lower().endswith(MUSIC_EXTS))
+    except OSError:
+        return []
+
+
+def stamp_seconds(line):
+    m = STAMP_RE.match(line)
+    return parse_seconds(*m.groups()) if m else None
+
+
+def is_green_flag_line(line):
+    return GRID_TAG not in line and "green flag" in line.lower()
+
+
+def green_flag_time(folder):
+    """Video time of the green flag in the latest event list (reviewed or later), or None."""
+    for key in ("events_timed", "events_spiced", "events_reviewed", "events"):
+        try:
+            with open(race_file(folder, key), "r", encoding="utf-8") as f:
+                for line in f:
+                    t = stamp_seconds(line)
+                    if t is not None and is_green_flag_line(line):
+                        return t
+        except OSError:
+            continue
+    return None
+
+
+def grid_intro_in_events(folder):
+    """(grid event time, green flag time) as written in the timed events, or None without a grid intro."""
+    grid = green = None
+    try:
+        with open(race_file(folder, "events_timed"), "r", encoding="utf-8") as f:
+            for line in f:
+                t = stamp_seconds(line)
+                if t is None:
+                    continue
+                if grid is None and GRID_TAG in line:
+                    grid = t
+                elif green is None and is_green_flag_line(line):
+                    green = t
+    except OSError:
+        return None
+    return (grid, green) if grid is not None and green is not None else None
+
+
+def grid_hold_frame_path(folder, hold):
+    """Where the frame held under the grid is saved (named by its time, so a new replay start grabs a new one)."""
+    return os.path.join(folder, DEBUG_DIR, f"grid_hold_frame_{hold:.2f}s.png")
+
+
+def grid_intro_window(folder):
+    """Video times of the grid intro that the commentary was written for: {'start' (the grid event), 'green',
+    'hold' (where the replay starts playing; the frame there is held before it)}, or None."""
+    found = grid_intro_in_events(folder)
+    if not found:
+        return None
+    grid, green = found
+    lead = grid_intro_settings(folder)["hold_lead"]
+    return {"start": float(grid), "green": float(green), "hold": max(float(grid) + 1.0, green - lead)}
+
+
 # ---------------------------------------------------------------- reading a race log
 
 LINE_RE = re.compile(r"^\s*(\d+):(\d{2}):(\d{2})\s*-\s*\[(\w+)\]\s*(.*)$")

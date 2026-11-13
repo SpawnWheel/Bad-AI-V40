@@ -702,6 +702,7 @@ class GraphicsSetup:
         styled_button(btns, "Re-match car images", self.rematch_images).pack(side='left')
         styled_button(btns, "AI fill from race notes", self.ai_fill_drivers, primary=True).pack(side='left', padx=6)
         styled_button(btns, "Show on preview", self.preview_selected_driver).pack(side='left')
+        styled_button(btns, "Preview starting grid", self.preview_starting_grid).pack(side='left', padx=6)
         self.refresh_driver_tree()
 
     def refresh_driver_tree(self):
@@ -755,6 +756,25 @@ class GraphicsSetup:
             self.schedule_preview()
         cb.bind("<<ComboboxSelected>>", lambda e: set_image(img_var.get()))
         styled_button(self.driver_form, "Browse…", lambda: set_image(self.browse_image(gcfg.CAR_PREVIEW_DIR))).grid(
+            row=r, column=3, sticky='w')
+
+        # Team logo, kept apart from the car so the starting grid can show both
+        r += 1
+        self.label(self.driver_form, "Logo", row=r, column=0, sticky='w', pady=2)
+        logos = ['(none)'] + [f"Graphics/Logos/{x}" for x in gcfg.list_images(gcfg.LOGO_DIR)]
+        logo_var = tk.StringVar(value=d.get('logo') or '(none)')
+        lcb = ttk.Combobox(self.driver_form, textvariable=logo_var, values=logos, width=34, state='readonly')
+        lcb.grid(row=r, column=1, columnspan=2, sticky='w', padx=6)
+
+        def set_logo(path):
+            if path is None:
+                return
+            d['logo'] = '' if path == '(none)' else path
+            logo_var.set(path)
+            self.show_car_thumb(d['logo'] or d.get('car_image'))
+            self.schedule_preview()
+        lcb.bind("<<ComboboxSelected>>", lambda e: set_logo(logo_var.get()))
+        styled_button(self.driver_form, "Browse…", lambda: set_logo(self.browse_image(gcfg.LOGO_DIR))).grid(
             row=r, column=3, sticky='w')
 
         self.label(self.driver_form, "Colour", row=r + 1, column=0, sticky='w', pady=2)
@@ -827,6 +847,15 @@ class GraphicsSetup:
                 return json.load(fh).get('global_settings', {}).get(key)
         except Exception:
             return None
+
+    def preview_starting_grid(self):
+        """Shows the full-screen starting grid (switched on per race on the launcher's commentary step)."""
+        t = float(self.time_var.get())
+        # Fully built (the cars already in) and held for a while
+        self.preview_grid = {'start': t - rnd.GRID_ANIM_DUR - 1, 'hold': t + 30}
+        self.preview_extra = {'graphics': []}
+        self.refresh_preview()
+        self.preview_extra = self.preview_grid = None
 
     def preview_selected_driver(self):
         sel = self.tree.selection()
@@ -1083,6 +1112,7 @@ class GraphicsSetup:
         self.preview_job = self.root.after(350, self.refresh_preview)
 
     preview_extra = None
+    preview_grid = None
 
     def refresh_preview(self):
         self.preview_job = None
@@ -1098,6 +1128,9 @@ class GraphicsSetup:
             if self.show_overlay.get():
                 plan = self.preview_extra or self.plan
                 r = rnd.OverlayRenderer(self.project_path, copy.deepcopy(self.cfg), plan, race=self.race)
+                if self.preview_grid:
+                    r.items.append(r.grid_item(self.preview_grid))
+                    r.grid_backdrop = self.tmp_png if self.video else None
                 frame.alpha_composite(r.render_frame(t))
                 active = [it['type'] for it in r._active(t)]
                 self.set_status(f"On screen: {', '.join(active) if active else 'frames only'}")

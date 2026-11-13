@@ -80,7 +80,10 @@ class Templates:
         return fit_image(load_image(path), max_w, max_h)
 
     def logo_path(self, name):
-        """The driver's team/make logo (any Drivers tab image that is not a car preview), or ''."""
+        """The driver's team/make logo: the Drivers tab Logo, else a car image that is not a car preview, or ''."""
+        logo = gcfg.resolve_path(self.meta(name).get('logo')) if name else ''
+        if logo and os.path.exists(logo):
+            return logo
         path = self._image_path(name)
         return path if path and not self._is_car_preview(path) and os.path.exists(path) else ''
 
@@ -294,13 +297,17 @@ class Templates:
     def lines_w(lines, f):
         return max([text_w(f, ln) for ln in lines] or [0])
 
-    def meta_row(self, img, x, cy, name, max_w):
+    def meta_row(self, img, x, cy, name, max_w, show_flag=True):
+        """#number, flag (the country code without one) and team on one line. show_flag=False leaves the flag
+        out for graphics that already show it (the starting grid's card undertone)."""
         m = self.meta(name)
         cx = x
         if m.get('number'):
             cx += self.chip(img, cx, cy, f"#{m['number']}", self.th.text, size=17) + 8
         flag = self.flag_img(m.get('country'), 20)
-        if flag:
+        if flag and not show_flag:
+            pass  # already shown elsewhere on the graphic
+        elif flag:
             img.alpha_composite(flag, (int(cx), int(cy - flag.height / 2)))
             cx += flag.width + 10
         elif m.get('country'):
@@ -520,6 +527,28 @@ class Templates:
         if img is None:
             return None
         return self.finish(img)
+
+    # ------------------------------------------------------------------ starting grid (full screen)
+    def starting_grid(self, size):
+        """The full-screen starting grid scene (starting_grid.StartingGrid), made once."""
+        if getattr(self, '_starting_grid', None) is None:
+            from .starting_grid import StartingGrid
+            self._starting_grid = StartingGrid(self, size)
+        return self._starting_grid
+
+    def grid_car(self, name, max_w, max_h):
+        """The car on the starting grid: the Drivers tab car image when it is a car preview, else the preview in
+        Graphics/CarPreviews that matches the driver (preferring one named after this race's car)."""
+        car = self.car(name, max_w, max_h)
+        if car is not None:
+            return car
+        if not hasattr(self, '_car_files'):
+            self._car_files = gcfg.list_images(gcfg.CAR_PREVIEW_DIR)
+        m = self.meta(name)
+        # The car the logger saw on the grid (e.g. 'MINI Cooper JCW') and the Drivers tab make
+        words = [m.get('make')] + (self.race.classes.get(name) or '').split()
+        f = gcfg.match_grid_car((name, m.get('display'), m.get('short')), words, self._car_files)
+        return fit_image(load_image(os.path.join(gcfg.CAR_PREVIEW_DIR, f)), max_w, max_h) if f else None
 
     def card_driver_card(self, g):
         """F1-style driver card: big bare position number, colour bar, first name over SURNAME, then the

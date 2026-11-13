@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def parse_time(line):
     """Extracts timestamp from the start of the line."""
@@ -60,6 +60,93 @@ def fold_winner_moment(parsed_data):
     return keep
 
 
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+import racefiles  # noqa: E402
+
+# The logger's grid list on the green flag line: up to the next event tag ("[OVERTAKE] ..."; a team tag in a
+# name, like "[RCV]Dom", has no space after it)
+GRID_LIST_RE = re.compile(r'\s*\[LEADERBOARD\]\s*Starting Grid Order:\s*(.*?)(?=\s\[[A-Z_]+\]\s|$)')
+GRID_ENTRY_RE = re.compile(r'P(\d+):\s*(.+?)(?:\s\[[^\]]*\])?\s*$')
+
+
+def driver_details(project_path):
+    """{log name: 'Display name, #12, Team, GBR'} from the graphics driver list (this race's, else the
+    championship's), or {} when there is none yet."""
+    try:
+        from GraphicsOverlay import config as gcfg
+        drivers = gcfg.load_config(project_path).get('drivers') or {}
+    except Exception:
+        return {}
+    out = {}
+    for name, d in drivers.items():
+        bits = []
+        if d.get('display') and d['display'] != name:
+            bits.append(d['display'])
+        if d.get('number'):
+            bits.append(f"#{d['number']}")
+        bits += [d[k] for k in ('team', 'country') if d.get(k)]
+        if bits:
+            out[name] = ', '.join(bits)
+    return out
+
+
+def grid_text(grid_list, details):
+    entries = []
+    for part in grid_list.split('|'):
+        m = GRID_ENTRY_RE.match(part.strip())
+        if not m:
+            continue
+        pos, name = m.group(1), m.group(2).strip()
+        extra = details.get(name)
+        entries.append(f"P{pos}: {name} ({extra})" if extra else f"P{pos}: {name}")
+    return ' | '.join(entries)
+
+
+def add_grid_intro(parsed_data, project_path):
+    """Adds the [GRID] event before the green flag when the race has the starting grid intro switched on
+    (see racefiles.GRID_TAG). The grid list moves from the green flag line into it."""
+    if not project_path:
+        return parsed_data
+    settings = racefiles.grid_intro_settings(project_path)
+    if not settings['enabled']:
+        return parsed_data
+    gi = next((i for i, p in enumerate(parsed_data)
+               if p['timestamp'] is not None and racefiles.is_green_flag_line(p['original_text'])), None)
+    if gi is None:
+        print("Starting grid: no green flag in the events, so no grid intro.")
+        return parsed_data
+    green = parsed_data[gi]['timestamp']
+    zero = datetime.strptime('00:00:00', '%H:%M:%S')
+    seconds = settings['seconds']
+    if (green - zero).total_seconds() < seconds:
+        seconds = int((green - zero).total_seconds())
+        print(f"Starting grid: the video starts only {seconds}s before the green flag, so the grid intro is "
+              f"{seconds}s long.")
+    if seconds < 3:
+        return parsed_data
+    start = green - timedelta(seconds=seconds)
+
+    line = parsed_data[gi]['original_text']
+    found = GRID_LIST_RE.search(line)
+    grid = ''
+    if found:
+        grid = grid_text(found.group(1), driver_details(project_path))
+        parsed_data[gi] = dict(parsed_data[gi], original_text=(line[:found.start()] + line[found.end():]).rstrip())
+    text = (f"{start:%H:%M:%S} - {racefiles.GRID_TAG} Before the start: the starting grid fills the screen while "
+            "the cars wait on the grid. Welcome the viewers to the race, set the scene and talk through the front of "
+            "the grid and the storylines to watch. The race has not started yet, so don't call the start or any "
+            "racing.")
+    if grid:
+        text += f" Starting grid: {grid}"
+    # Before any earlier event at or after its time (normally there are none before the green flag)
+    at = next((i for i, p in enumerate(parsed_data) if p['timestamp'] is not None and p['timestamp'] >= start), gi)
+    parsed_data.insert(at, {'timestamp': start, 'original_text': text})
+    print(f"Starting grid: {seconds}s of commentary over the grid from {start:%H:%M:%S}.")
+    return parsed_data
+
+
 def main():
     print("--- Race Event Word Count Calculator ---")
     
@@ -99,10 +186,11 @@ def main():
         })
 
     parsed_data = fold_winner_moment(parsed_data)
+    parsed_data = add_grid_intro(parsed_data, os.environ.get("R3E_PROJECT_PATH"))
 
     # The green flag: the event that says so, else the first event
     green_flag = next((p['timestamp'] for p in parsed_data
-                       if p['timestamp'] is not None and 'green flag' in p['original_text'].lower()),
+                       if p['timestamp'] is not None and racefiles.is_green_flag_line(p['original_text'])),
                       next((p['timestamp'] for p in parsed_data if p['timestamp'] is not None), None))
 
     output_lines = []

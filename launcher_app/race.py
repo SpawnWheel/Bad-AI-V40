@@ -1,6 +1,8 @@
 """One race: a guided path from the race log to the finished replay, one stage at a time."""
 import datetime
 import os
+import shutil
+import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -184,6 +186,8 @@ class RaceScreen(tk.Frame):
         tk.Frame(pad, bg=t.BG, height=10).pack()
         if stage["id"] == "notes":
             self._notes_editors(pad)
+        if stage["id"] == "commentary":
+            self._grid_intro_card(pad).pack(fill="x", pady=5)
         for sid in stage["steps"]:
             self._step_card(pad, sid).pack(fill="x", pady=5)
             if sid == "camera":
@@ -289,6 +293,133 @@ class RaceScreen(tk.Frame):
                 t.button(row, "Use this", lambda p=path: self.set_video(p), kind="link", size=9, padx=4,
                          pady=0).pack(side="right")
         return c
+
+    # ------------------------------------------------------------------ grid intro
+
+    def _grid_settings(self):
+        """This race's grid intro settings; a race that has none yet takes the last ones used."""
+        if "grid_intro" not in self.meta:
+            remembered = self.app.settings.get("grid_intro") or {}
+            racefiles.update_race(self.folder, grid_intro={**racefiles.GRID_INTRO_DEFAULTS, **remembered})
+            self.meta = racefiles.read_race(self.folder)
+        return racefiles.grid_intro_settings(self.folder)
+
+    def _save_grid(self, **changes):
+        s = {**self._grid_settings(), **changes}
+        racefiles.update_race(self.folder, grid_intro=s)
+        self.meta = racefiles.read_race(self.folder)
+        self.app.settings["grid_intro"] = s  # the next race starts with the same choices
+        self.app.save_settings()
+
+    def _grid_intro_card(self, parent):
+        s = self._grid_settings()
+        c = t.card(parent, padx=18, pady=14)
+        head = tk.Frame(c, bg=t.CARD)
+        head.pack(fill="x")
+        on = tk.BooleanVar(value=s["enabled"])
+        tk.Checkbutton(head, variable=on, bg=t.CARD, activebackground=t.CARD, selectcolor=t.INPUT,
+                       fg=t.TEXT, activeforeground=t.TEXT, font=(t.FONT, 11, "bold"), cursor="hand2",
+                       text="  Starting grid before the start", bd=0, highlightthickness=0,
+                       command=lambda: self._save_grid(enabled=on.get())).pack(side="left")
+        t.label(head, "  ·  optional", size=9, colour=t.DIM).pack(side="left")
+        t.label(c, "The video opens on a full-screen starting grid while the commentators set the scene, then "
+                   "fades into the replay. The replay is held on one frame under it, so the sim's menus never "
+                   "show. Nothing after the start moves. Change it before running the steps below.",
+                size=9, colour=t.MUTED, wraplength=640).pack(anchor="w", pady=(6, 8))
+
+        def spin(row, var, lo, hi, step, save):
+            box = tk.Spinbox(row, from_=lo, to=hi, increment=step, textvariable=var, width=5, bg=t.INPUT, fg=t.TEXT,
+                             buttonbackground=t.CARD, relief="flat", insertbackground=t.TEXT, justify="center",
+                             font=(t.FONT, 10), command=save)
+            box.bind("<FocusOut>", lambda e: save())
+            box.bind("<Return>", lambda e: save())
+            return box
+
+        row = tk.Frame(c, bg=t.CARD)
+        row.pack(fill="x", pady=2)
+        secs = tk.StringVar(value=str(s["seconds"]))
+        lo, hi = racefiles.GRID_SECONDS_RANGE
+
+        def save_secs():
+            try:
+                self._save_grid(seconds=max(lo, min(hi, int(float(secs.get())))))
+            except ValueError:
+                pass
+            secs.set(str(racefiles.grid_intro_settings(self.folder)["seconds"]))
+        t.label(row, "Grid shown for", size=9, colour=t.DIM, width=16, anchor="w").pack(side="left")
+        spin(row, secs, lo, hi, 1, save_secs).pack(side="left")
+        t.label(row, f"  seconds before the green flag ({lo}–{hi})", size=9, colour=t.MUTED).pack(side="left")
+
+        row = tk.Frame(c, bg=t.CARD)
+        row.pack(fill="x", pady=2)
+        lead = tk.StringVar(value=f"{s['hold_lead']:g}")
+
+        def save_lead():
+            try:
+                self._save_grid(hold_lead=max(0.0, min(10.0, float(lead.get()))))
+            except ValueError:
+                pass
+            lead.set(f"{racefiles.grid_intro_settings(self.folder)['hold_lead']:g}")
+        t.label(row, "Replay starts", size=9, colour=t.DIM, width=16, anchor="w").pack(side="left")
+        spin(row, lead, 0, 10, 0.5, save_lead).pack(side="left")
+        t.label(row, "  seconds before the green flag (the frame held under the grid)", size=9,
+                colour=t.MUTED).pack(side="left")
+        t.button(row, "Check frame", self.show_hold_frame, kind="link", size=9).pack(side="left", padx=(8, 0))
+
+        row = tk.Frame(c, bg=t.CARD)
+        row.pack(fill="x", pady=2)
+        t.label(row, "Music", size=9, colour=t.DIM, width=16, anchor="w").pack(side="left")
+        music = tk.StringVar(value=s["music"] or "(none)")
+        box = ttk.Combobox(row, textvariable=music, values=["(none)"] + racefiles.list_music(), state="readonly",
+                           width=34)
+        box.pack(side="left")
+        box.bind("<<ComboboxSelected>>",
+                 lambda e: self._save_grid(music="" if music.get() == "(none)" else music.get()))
+        t.button(row, "Add track…", self.add_music, kind="secondary", size=9).pack(side="left", padx=(8, 0))
+        level = tk.StringVar(value=s["music_level"])
+        lv = ttk.Combobox(row, textvariable=level, values=["Quiet", "Normal", "Loud"], state="readonly", width=8)
+        lv.pack(side="left", padx=(12, 0))
+        lv.bind("<<ComboboxSelected>>", lambda e: self._save_grid(music_level=level.get()))
+        t.label(c, "Plays under the grid and fades out as the replay starts. Tracks are kept in the Music folder. "
+                   "Changing the music or the replay start only needs a new export.",
+                size=8, colour=t.DIM, wraplength=640).pack(anchor="w", pady=(4, 0))
+        return c
+
+    def add_music(self):
+        path = filedialog.askopenfilename(parent=self, title="Choose a music track for the starting grid",
+                                          filetypes=[("Audio files", " ".join("*" + e for e in racefiles.MUSIC_EXTS)),
+                                                     ("All files", "*.*")])
+        if not path:
+            return
+        os.makedirs(racefiles.MUSIC_DIR, exist_ok=True)
+        name = os.path.basename(path)
+        dest = os.path.join(racefiles.MUSIC_DIR, name)
+        try:
+            if os.path.abspath(path) != os.path.abspath(dest):
+                shutil.copy2(path, dest)
+        except OSError as e:
+            messagebox.showerror("Could not add the track", str(e), parent=self)
+            return
+        self._save_grid(music=name)
+        self.app.toast(f"Music added: {name}")
+        self.refresh(force=True)
+
+    def show_hold_frame(self):
+        video = pipeline.input_path(self.folder, "video")
+        green = racefiles.green_flag_time(self.folder)
+        if not video or green is None:
+            messagebox.showinfo("Check frame", "Needs the replay video and the reviewed events (with the green "
+                                               "flag) first.", parent=self)
+            return
+        t_hold = max(0.0, green - racefiles.grid_intro_settings(self.folder)["hold_lead"])
+        out = os.path.join(self.folder, racefiles.DEBUG_DIR, "grid_hold_frame.jpg")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        try:
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t_hold:.3f}", "-i", video, "-frames:v", "1", out],
+                           check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            os.startfile(out)
+        except (OSError, subprocess.CalledProcessError) as e:
+            messagebox.showerror("Check frame", f"Could not take the frame: {e}", parent=self)
 
     def recent_videos(self, limit=4):
         """Video files in the recordings folder made after the race started, newest first."""

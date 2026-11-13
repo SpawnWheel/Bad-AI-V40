@@ -26,6 +26,15 @@ GAME_LEVELER = ("acompressor=threshold=-26dB:ratio=3:attack=40:release=500:knee=
 DUCK_THRESHOLD = 0.05
 DUCK_RATIO = 2.5
 
+# Starting grid intro (racefiles.grid_intro_window): the game fades in as the replay starts, and the music
+# fades out over MUSIC_FADE_SEC ending MUSIC_TAIL_SEC after it. Music loudness per level (the commentary sits at
+# -16 LUFS), ducked harder than the game under the commentators.
+GAME_FADE_IN_SEC = 1.0
+MUSIC_FADE_SEC = 2.5
+MUSIC_TAIL_SEC = 1.5
+MUSIC_LUFS = {"Quiet": -27, "Normal": -23, "Loud": -19}
+MUSIC_DUCK_RATIO = 4
+
 # The stitched timeline is built on digital silence, so anything above this is commentary
 SILENCE_THRESHOLD_DBFS = -60.0
 
@@ -33,6 +42,7 @@ AUDIO_EXTENSIONS = ('.wav', '.mp3')
 
 # Broadcast graphics (GraphicsOverlay package lives in the app root)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import racefiles  # noqa: E402
 try:
     from GraphicsOverlay import renderer as graphics
 except Exception as e:  # graphics are optional; never block a plain export
@@ -100,22 +110,47 @@ def find_commentary_bounds(audio_path):
     return leading_ms / 1000.0, (len(audio) - trailing_ms) / 1000.0
 
 
-def build_audio_filter(has_game_audio):
+def music_filter(music_input, hold_rel, clip_duration, level):
+    """The grid music: levelled, faded out as the replay starts, ducked under the commentators (keyed by
+    [mkey]), padded with silence to the clip's length so the ducking key is read to the end. -> [music]"""
+    end = max(1.0, hold_rel + MUSIC_TAIL_SEC)
+    fade = min(MUSIC_FADE_SEC, end)
+    lufs = MUSIC_LUFS.get(level, MUSIC_LUFS["Normal"])
+    return (f"[{music_input}:a]aresample=48000,aformat=channel_layouts=stereo,"
+            f"loudnorm=I={lufs}:TP=-3:LRA=11,aresample=48000,atrim=0:{end:.3f},asetpts=PTS-STARTPTS,"
+            f"afade=t=in:st=0:d=0.3,afade=t=out:st={end - fade:.3f}:d={fade:.3f},apad=whole_dur={clip_duration:.3f}[mraw];"
+            f"[mraw][mkey]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={MUSIC_DUCK_RATIO}:attack=20:"
+            f"release=600:makeup=1[music]")
+
+
+def build_audio_filter(has_game_audio, hold_rel=None, music_input=None, clip_duration=0.0, music_level="Normal"):
+    """hold_rel: output time the replay starts playing after the grid intro (the game is silent before it)."""
     commentary = "[1:a]aresample=48000,aformat=channel_layouts=stereo"
+    music = music_input is not None and hold_rel
     if has_game_audio and GAME_AUDIO_VOLUME > 0:
         # The game ducks under the commentators while they talk and comes back up in the gaps.
         # amix follows the game audio's length; adding apad here deadlocks ffmpeg
-        return (
-            f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,{GAME_LEVELER},volume={GAME_AUDIO_VOLUME}[game];"
-            f"{commentary},asplit=2[comm][key];"
+        intro = f",afade=t=in:st={hold_rel:.3f}:d={GAME_FADE_IN_SEC}" if hold_rel else ""
+        f = (
+            f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,{GAME_LEVELER},volume={GAME_AUDIO_VOLUME}{intro}[game];"
+            f"{commentary},asplit={3 if music else 2}[comm][key]{'[mkey]' if music else ''};"
             f"[game][key]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={DUCK_RATIO}:attack=15:release=450:makeup=1[ducked];"
-            "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
         )
+        if music:
+            return (f + music_filter(music_input, hold_rel, clip_duration, music_level) + ";"
+                    "[ducked][comm][music]amix=inputs=3:duration=first:normalize=0,alimiter=limit=0.95[aout]")
+        return f + "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
+    if music:
+        return (f"{commentary},apad=whole_dur={clip_duration:.3f},asplit=2[comm][mkey];"
+                + music_filter(music_input, hold_rel, clip_duration, music_level) + ";"
+                "[comm][music]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]")
     # Pad the commentary with silence so it covers the trailing clip padding
     return f"{commentary},apad[aout]"
 
 
-def build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay=None):
+def build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay=None,
+                  intro=None):
+    """intro: {'hold_rel', 'hold_png', 'music', 'music_level'} for the starting grid, or None."""
     bitrate = info['video_bitrate']
     nvenc = encoder.endswith('_nvenc')
     cmd = ["ffmpeg", "-y", "-hide_banner", "-stats", "-loglevel", "error"]
@@ -127,14 +162,35 @@ def build_command(video_path, audio_path, output_path, info, clip_start, clip_du
         "-ss", f"{clip_start:.3f}", "-i", video_path,
         "-ss", f"{clip_start:.3f}", "-i", audio_path,
     ]
-    filters = build_audio_filter(info['has_audio'])
-    video_map = "0:v:0"
+    fps = float(Fraction(info['frame_rate']))
+    n_inputs = 2
+    video_map, base = "0:v:0", "0:v"
+    video_filters = []
     if overlay:
         # The overlay timeline already starts at clip_start, so it is not seeked
         cmd += ["-f", "concat", "-safe", "0", "-i", overlay]
-        fps = float(Fraction(info['frame_rate']))
-        filters = graphics.overlay_filter(f"{fps:.6g}", info['size']) + ";" + filters
+        overlay_input = n_inputs
+        n_inputs += 1
+    hold_rel = music_input = None
+    if intro:
+        hold_rel = intro['hold_rel']
+        # Before the replay starts, one frame of it is held (the recording there is the sim's menus)
+        cmd += ["-loop", "1", "-framerate", f"{fps:.6g}", "-t", f"{clip_duration:.3f}", "-i", intro['hold_png']]
+        w, h = info['size']
+        video_filters.append(f"[{n_inputs}:v]scale={w}:{h},format=yuv420p,setsar=1[hold];"
+                             f"[0:v][hold]overlay=0:0:enable='lt(t,{hold_rel:.3f})':eof_action=pass[base]")
+        n_inputs += 1
+        base, video_map = "base", "[base]"
+        if intro.get('music'):
+            cmd += ["-i", intro['music']]
+            music_input = n_inputs
+            n_inputs += 1
+    if overlay:
+        video_filters.append(graphics.overlay_filter(f"{fps:.6g}", info['size'], overlay_input=overlay_input,
+                                                     base=base))
         video_map = "[vout]"
+    filters = ";".join(video_filters + [build_audio_filter(
+        info['has_audio'], hold_rel, music_input, clip_duration, (intro or {}).get('music_level', 'Normal'))])
     cmd += [
         "-t", f"{clip_duration:.3f}",
         "-filter_complex", filters,
@@ -175,6 +231,33 @@ def prepare_graphics(project_path, info, clip_start, clip_end):
         return None, None
 
 
+def prepare_grid_intro(project_path, video_path, clip_start, clip_duration):
+    """The starting grid intro for this clip, when the commentary was written with one: grabs the frame held
+    under the grid and finds the music. None without one (or when the clip starts after the replay does)."""
+    if not project_path:
+        return None
+    window = racefiles.grid_intro_window(project_path)
+    if not window:
+        return None
+    hold_rel = window['hold'] - clip_start
+    if hold_rel <= 0 or hold_rel >= clip_duration:
+        return None
+    hold_png = racefiles.grid_hold_frame_path(project_path, window['hold'])
+    os.makedirs(os.path.dirname(hold_png), exist_ok=True)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{window['hold']:.3f}", "-i", video_path,
+                    "-frames:v", "1", hold_png], check=False)
+    if not os.path.exists(hold_png):
+        print("  Could not grab the frame for the starting grid; the video plays as recorded.")
+        return None
+    settings = racefiles.grid_intro_settings(project_path)
+    music = racefiles.grid_music_path(settings)
+    if settings.get('music') and not music:
+        print(f"  Grid music not found in the Music folder: {settings['music']}")
+    print(f"Starting grid: frame at {window['hold']:.1f}s held for the first {hold_rel:.1f}s"
+          + (f", music: {os.path.basename(music)} ({settings['music_level']})" if music else ""))
+    return {'hold_rel': hold_rel, 'hold_png': hold_png, 'music': music, 'music_level': settings['music_level']}
+
+
 def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
     for path in (video_path, audio_path):
         if not os.path.exists(path):
@@ -206,6 +289,7 @@ def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
     print(f"  Clipping video to {clip_start:.2f}s - {clip_end:.2f}s ({clip_duration:.1f}s)")
 
     project_path = os.environ.get("R3E_PROJECT_PATH")
+    intro = prepare_grid_intro(project_path, video_path, clip_start, clip_duration)
     overlay, frames_dir = (None, None)
     if use_graphics and project_path:
         overlay, frames_dir = prepare_graphics(project_path, info, clip_start, clip_end)
@@ -213,7 +297,8 @@ def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
     encoders = ENCODERS.get(info['codec'], ENCODERS['h264'])
     for encoder in encoders:
         print(f"Encoding with {encoder} -> {output_path}")
-        cmd = build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay)
+        cmd = build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay,
+                            intro)
         if subprocess.run(cmd).returncode == 0:
             if frames_dir:
                 shutil.rmtree(frames_dir, ignore_errors=True)

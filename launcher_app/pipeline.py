@@ -175,6 +175,19 @@ def output_time(path):
     return os.path.getmtime(path)
 
 
+def grid_intro_changed(race_folder):
+    """True when the timed events don't match the starting grid setting (switched on or off, or a new length)."""
+    wanted = racefiles.grid_intro_settings(race_folder)
+    found = racefiles.grid_intro_in_events(race_folder)
+    if not wanted["enabled"]:
+        return found is not None
+    if found is None:
+        # Switched on, but the events have no green flag to put the grid before: nothing to redo
+        return racefiles.green_flag_time(race_folder) is not None
+    grid, green = found
+    return green - grid != wanted["seconds"] and grid > 0
+
+
 def step_status(race_folder, step_id):
     """(state, detail): done | outdated | ready | waiting, with a short explanation."""
     step = STEPS[step_id]
@@ -184,6 +197,8 @@ def step_status(race_folder, step_id):
         newer = [k for k in step["needs"] if k != "video" and (output_time(race_file(race_folder, k)) or 0) > made + 1]
         if newer and not missing:
             return "outdated", f"{INPUT_LABELS.get(newer[0], newer[0]).capitalize()} changed since this ran"
+        if step_id == "timing" and not missing and grid_intro_changed(race_folder):
+            return "outdated", "The starting grid setting changed since this ran"
         return "done", ""
     if missing:
         return "waiting", "Needs " + " and ".join(INPUT_LABELS.get(k, k) for k in missing)
