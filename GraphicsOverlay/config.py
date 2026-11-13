@@ -121,7 +121,7 @@ DEFAULT_CONFIG = {
     'render_fps': 15,
     'drivers': {},
     # Sponsors: name and/or logo each, always on another graphic, never on their own. Title: race card,
-    # chequered flag and results. Timing: the timing tower, fastest lap and gap trends. Partner: after the
+    # chequered flag and results. Timing: the timing tower and gap trends. Partner: after the
     # start, gaps on track and the pit stop timer. Only the logo is shown, no caption.
     'sponsors': {k: {'name': '', 'logo': ''} for k in ('title', 'timing', 'partner')},
     # AI commentator name (as in the commentary) -> {'bio': short line shown under their name}

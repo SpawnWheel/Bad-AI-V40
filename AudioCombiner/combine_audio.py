@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import re
@@ -224,6 +225,26 @@ def main(input_folder, output_file):
 
     place_clips(timeline_items)
     build_timeline(timeline_items, output_file)
+    write_clip_timeline(timeline_items, output_file)
+
+
+def clip_timeline_path(output_file):
+    """Where the clip timeline of a commentary track is saved: next to it, '<track>_timeline.json'."""
+    return os.path.splitext(output_file)[0] + "_timeline.json"
+
+
+def write_clip_timeline(timeline_items, output_file):
+    """Saves where every clip landed on the track (seconds), so the graphics can show each team radio line
+    exactly while it plays."""
+    clips = [{"file": item["filename"], "start": round(item["actual_start"] / 1000.0, 3),
+              "duration": round(item["duration"] / 1000.0, 3)} for item in timeline_items]
+    path = clip_timeline_path(output_file)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"clips": clips}, f, indent=1)
+        print(f"Saved clip timeline to {path}")
+    except OSError as e:
+        print(f"Could not save the clip timeline: {e}")
 
 
 def spare_share_ms(timeline_items, i):

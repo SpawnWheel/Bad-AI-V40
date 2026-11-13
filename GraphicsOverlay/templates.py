@@ -1238,40 +1238,45 @@ class Templates:
         return img
 
     def card_fastest_lap(self, g):
+        """Compact F1-style strip: purple FASTEST LAP block with a chevron, then the driver's colour bar, name
+        and lap time. One line, nothing else."""
         th = self.th
         name, d = g['driver'], g.get('data', {})
         purple = rgba(FASTEST_PURPLE)
-        car = self.car(name, 260, 110)
-        sub = []
-        if d.get('lap'):
-            sub.append(f"LAP {d['lap']}")
-        if d.get('gain') and d.get('prev_driver'):
-            prev = 'OWN BEST' if d['prev_driver'] == name else self.meta(d['prev_driver'])['short'].upper()
-            sub.append(f"-{d['gain']}s ON {prev}")
-        f = font(19, 'semibold_cond')
-        lines = wrap(g.get('text') or '  ·  '.join(sub), f, 410, 3)
-        panel_h = 112 + 24 * max(0, len(lines) - 1)
-        badge = self.card_badge(name, panel_h, 76)
-        # Only as wide as the name and the line under it, so the logo sits close to them
-        used = max(self.name_block_w(name, 400, 36, 20), self.lines_w(lines, f), 180)
-        W = 214 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
-        tab = self.sponsor_tab('timing')
-        if tab:
-            # Room for the FASTEST LAP label and the sponsor tab side by side
-            W = max(W, int(text_w(font(18, 'bold_cond'), (g.get('title') or 'FASTEST LAP').upper()) + 28 + 16 + tab.width))
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'FASTEST LAP').upper(), label_bg=purple,
-                                    top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
-                                    stripe=self.driver_color(name), sponsor='timing')
-        # Lap time in the purple block, stopwatch-style
-        lap_time = d.get('lap_time', '')
-        round_rect(img, (16, top + 14, 196, top + panel_h - 14), 6, purple)
-        text_vcenter(img, 106, top + 38, 'LAP TIME', font(15, 'semibold_cond'), (255, 255, 255, 200), 'm')
-        text_vcenter(img, 106, top + 68, lap_time, fit_font(lap_time, 164, 36, 'bold'), (255, 255, 255, 255), 'm')
-        self.name_block(img, 214, top + 10, name, 400, 36, 20)
-        self.text_lines(img, 214, top + 80, lines, f, th.muted, 24)
-        if car:
-            img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
-        self.place_badge(img, badge, top, panel_h)
+        deep = rgba('#5B1A9E')
+        H = 58
+        f_label = font(21, 'bold_cond')
+        label = (g.get('title') or 'FASTEST LAP').upper().split()
+        top_word, low_word = (' '.join(label[:-1]), label[-1]) if len(label) > 1 else (label[0], '')
+        label_w = max(text_w(f_label, top_word), text_w(f_label, low_word))
+        P = int(label_w + 28)       # purple block, up to where its arrow starts
+        C, C2 = 16, 13             # arrow depth, width of the darker chevron behind it
+        x0 = P + C2 + C + 14        # where the driver part starts
+        short = self.meta(name)['short'].upper()
+        f_name = fit_font(short, 300, 32, 'bold')
+        lap_time = d.get('lap_time', '') or ''
+        f_time = font(26, 'semibold_cond')
+        name_w = text_w(f_name, short)
+        time_w = text_w(f_time, lap_time) + 18 if lap_time else 0
+        W = int(x0 + 16 + name_w + time_w + 20)
+
+        img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        round_rect(img, (0, 0, W, H), 0, rgba('#15161C', 0.94))
+        polygon(img, [(P, 0), (P + C2, 0), (P + C2 + C, H / 2), (P + C2, H), (P, H), (P + C, H / 2)], deep)
+        polygon(img, [(0, 0), (P, 0), (P + C, H / 2), (P, H), (0, H)], purple)
+        if low_word:
+            text_vcenter(img, 14, H / 2 - 11, top_word, f_label, (255, 255, 255, 255))
+            text_vcenter(img, 14, H / 2 + 11, low_word, f_label, (255, 255, 255, 255))
+        else:
+            text_vcenter(img, 14, H / 2, top_word, f_label, (255, 255, 255, 255))
+        round_rect(img, (x0, 13, x0 + 6, H - 13), 2, self.driver_color(name))
+        text_vcenter(img, x0 + 16, H / 2, short, f_name, th.text)
+        if lap_time:
+            text_vcenter(img, x0 + 16 + name_w + 18, H / 2, lap_time, f_time, th.muted)
+        # Slightly rounded corners on the whole strip
+        mask = Image.new('L', (W, H), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, W - 1, H - 1), radius=4, fill=255)
+        img.putalpha(ImageChops.multiply(img.getchannel('A'), mask))
         return img
 
     @staticmethod
@@ -1318,11 +1323,16 @@ class Templates:
         f_line = font(23, 'bold_cond')
         line_h = 27
         text_max = W - pad * 2
+        # A reply from someone else on the driver's radio (their engineer) says who is talking above the quote
+        f_who = font(17, 'bold_cond')
+        who_h = 22
         blocks = []
         for seg in segments:
-            lines = wrap(f"“{seg['quote'].upper()}”", f_line, text_max - 20, 3)
-            blocks.append((seg.get('is_driver'), lines))
-        body_h = sum(len(ls) * line_h for _, ls in blocks) + 12 * (len(blocks) - 1) + 30
+            lines = wrap(f"“{seg['quote'].upper()}”", f_line, text_max - 20, 4 if len(segments) == 1 else 3)
+            who = (seg.get('label') or '').upper() if not seg.get('is_driver') else ''
+            blocks.append((seg.get('is_driver'), lines, who))
+        body_h = (sum(len(ls) * line_h + (who_h if who else 0) for _, ls, who in blocks)
+                  + 12 * (len(blocks) - 1) + 30)
         H = head_h + body_h
 
         img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
@@ -1343,7 +1353,10 @@ class Templates:
 
         # Body: driver lines right-aligned in their colour, replies left-aligned in white
         y = head_h + 12
-        for is_driver, lines in blocks:
+        for is_driver, lines, who in blocks:
+            if who:
+                ImageDraw.Draw(img).text((pad, y), who, font=f_who, fill=th.muted, anchor='la')
+                y += who_h
             for ln in lines:
                 if is_driver:
                     ImageDraw.Draw(img).text((right, y), ln, font=f_line, fill=col, anchor='ra')
