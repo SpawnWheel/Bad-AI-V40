@@ -9,6 +9,7 @@ engineer. Those are looked up in this order:
   2. a voice designed for that driver (Drivers/) or that driver's engineer (Engineers/), matched on the names
      saved with it (its .voice.json "aliases" / "for"), so "Payne", "Dom Payne" and "[RCV]Dom.Payne" all find it
   3. a generic voice from the pool (Pool/), picked from the name so a driver gets the same one every race
+Race engineers are all men: an engineer voice saved as female is never picked for an engineer.
 """
 import hashlib
 import json
@@ -24,6 +25,8 @@ ROLE_POOL_DRIVER, ROLE_POOL_ENGINEER = "pool_driver", "pool_engineer"
 ROLE_COMMENTATOR = "commentator"
 FOLDER_FOR_ROLE = {ROLE_DRIVER: DRIVERS_DIR, ROLE_ENGINEER: ENGINEERS_DIR,
                    ROLE_POOL_DRIVER: POOL_DIR, ROLE_POOL_ENGINEER: POOL_DIR, ROLE_COMMENTATOR: ""}
+
+ENGINEER_GENDER = "male"
 
 RADIO_RE = re.compile(r"^radio\b[\s:\-]*(.+)$", re.I)
 ENGINEER_AFTER_RE = re.compile(r"^(.+?)(?:['’]s|s['’])?\s+(?:race\s+)?engineer$", re.I)
@@ -103,6 +106,11 @@ def role_of(rel_path, meta=None):
     return ROLE_COMMENTATOR
 
 
+def engineer_voice_ok(v):
+    """Engineers are all men: a voice saved with another gender is skipped (no gender saved counts as male)."""
+    return (v["meta"].get("gender") or ENGINEER_GENDER).lower() == ENGINEER_GENDER
+
+
 def list_voices(voices_dir):
     """[{'rel', 'path', 'name', 'role', 'meta'}] for every .wav in the voices folder and its subfolders."""
     out = []
@@ -167,7 +175,8 @@ def resolve_all(speakers, voices_dir, mappings):
     for s in pooled:
         role, driver = radio_speaker(s)
         pool_role = ROLE_POOL_DRIVER if role == ROLE_DRIVER else ROLE_POOL_ENGINEER
-        pool = [v for v in voices if v["role"] == pool_role]
+        pool = [v for v in voices if v["role"] == pool_role
+                and (pool_role != ROLE_POOL_ENGINEER or engineer_voice_ok(v))]
         ranked = sorted(pool, key=lambda v: hashlib.md5(f"{role}:{norm(driver)}|{v['rel']}".encode("utf-8")).hexdigest(),
                         reverse=True)
         free = [v for v in ranked if v["path"] not in taken]
@@ -197,11 +206,11 @@ def resolve(speaker, voices_dir, mappings, voices=None):
             return hit["path"], "driver voice"
         pool = [v for v in voices if v["role"] == ROLE_POOL_DRIVER]
     else:
-        own = [v for v in voices if v["role"] == ROLE_ENGINEER]
+        own = [v for v in voices if v["role"] == ROLE_ENGINEER and engineer_voice_ok(v)]
         hit = _best(driver, own, lambda v: list(v["meta"].get("for") or [])) if driver else None
         if hit:
             return hit["path"], "engineer voice"
-        pool = [v for v in voices if v["role"] == ROLE_POOL_ENGINEER]
+        pool = [v for v in voices if v["role"] == ROLE_POOL_ENGINEER and engineer_voice_ok(v)]
     pick = _pool_pick(f"{role}:{norm(driver)}", pool)
     if pick:
         return pick["path"], "generic voice from the pool"

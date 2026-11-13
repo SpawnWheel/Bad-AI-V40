@@ -48,6 +48,8 @@ CIRCUIT_LABELS = ('THE CIRCUIT', 'HISTORY', 'FROM THE ARCHIVE', 'LOCAL KNOWLEDGE
 AUTO_TYPES = {
     'title_card': 'Opening title card',
     'commentators': 'AI commentator names and bios',
+    'commentator_info': 'Commentator info box: a paragraph the AI researches each race on who the commentators '
+                        'are, why they are iconic and their link to the track (a third of the way in)',
     'start_ticker': 'Starting grid ticker at the green flag',
     'standings_ticker': 'Standings ticker on every leaderboard update',
     'start_movers': 'Biggest gainer and loser a minute after the start',
@@ -121,7 +123,7 @@ DEFAULT_CONFIG = {
     'render_fps': 15,
     'drivers': {},
     # Sponsors: name and/or logo each, always on another graphic, never on their own. Title: race card,
-    # chequered flag and results. Timing: the timing tower, fastest lap and gap trends. Partner: after the
+    # chequered flag and results. Timing: the timing tower and gap trends. Partner: after the
     # start, gaps on track and the pit stop timer. Only the logo is shown, no caption.
     'sponsors': {k: {'name': '', 'logo': ''} for k in ('title', 'timing', 'partner')},
     # AI commentator name (as in the commentary) -> {'bio': short line shown under their name}

@@ -104,9 +104,9 @@
     "pit_stops": true,
     "gap_tracker": true,
     "radio": true,
-    "stewards": true,
     "chequered": true,
     "results": true,
+    "stewards": true,
     "sponsors": true
   },
   "popup_types": {
@@ -131,7 +131,7 @@
       "number": "1",
       "country": "GBR",
       "team": "Itchy & Scratchy Racing",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#07f8f8",
       "car_image": "Graphics/Logos/ItchyScratchy.png"
     },
@@ -141,29 +141,29 @@
       "number": "420",
       "country": "NLD",
       "team": "Cheech and Chong",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#48824d",
       "car_image": "Graphics/Logos/cheechchong.png"
     },
     "[RCV]Neworder": {
       "display": "New Order",
       "short": "NEWORDER",
-      "number": "52",
+      "number": "26",
       "country": "GBR",
       "team": "Foxy Stoat Racing",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#F97316",
       "car_image": "Graphics/Logos/stoat.png"
     },
     "Daniel Born": {
       "display": "Daniel Born",
       "short": "BORN",
-      "number": "88",
+      "number": "12",
       "country": "RSA",
-      "team": "Red Bull",
-      "make": "Caterham",
+      "team": "Honeydew Police",
+      "make": "Mini",
       "color": "#1a0cc0",
-      "car_image": "Graphics/Logos/redbull.png"
+      "car_image": "Graphics/Logos/SAPS.png"
     },
     "[RCV]thommo": {
       "display": "Thommo",
@@ -171,39 +171,39 @@
       "number": "58",
       "country": "GBR",
       "team": "Ping",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#ebf9fa",
       "car_image": "Graphics/Logos/ping.png"
     },
     "kf.MTG": {
-      "display": "MTG",
-      "short": "MTG",
+      "display": "kf.MTG",
+      "short": "KF.MTG",
       "number": "00",
       "country": "USA",
       "team": "Silent Assassin",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#000000",
       "car_image": "Graphics/Logos/silentassasin2.png"
     },
     "AlfaQuadSA": {
       "display": "AlfaQuadSA",
       "short": "ALFAQUAD",
-      "number": "12",
+      "number": "17",
       "country": "RSA",
-      "team": "Caterham",
-      "make": "Caterham",
-      "color": "#047857",
-      "car_image": "Graphics/Logos/CaterhamWhite.png"
+      "team": "Spitfire",
+      "make": "Mini",
+      "color": "#544427",
+      "car_image": "Graphics/Logos/spitfire.png"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
       "short": "NORTJE",
-      "number": "121",
+      "number": "64",
       "country": "RSA",
       "team": "Back to the Future",
-      "make": "Caterham",
-      "color": "#e8eb67",
-      "car_image": "Graphics/Logos/BackToFuture.png"
+      "make": "Mini",
+      "color": "#bcac96",
+      "car_image": "Graphics/Logos/commodore2.png"
     },
     "inthebagbud": {
       "display": "InTheBagBud",
@@ -221,7 +221,7 @@
       "number": "77",
       "country": "GBR",
       "team": "McLaren Mini",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#f4b92f",
       "car_image": "Graphics/Logos/McLaren.webp"
     },
@@ -236,13 +236,13 @@
       "car_image": "Graphics/Logos/mini.png"
     },
     "[RCV]muzzer82": {
-      "display": "Muzzer",
+      "display": "Liam Murray",
       "short": "MURRAY",
-      "number": "137",
+      "number": "5",
       "country": "GBR",
       "team": "Rick and Morty",
-      "make": "Caterham",
-      "color": "#215cc0",
+      "make": "Mini",
+      "color": "#0bd7cc",
       "car_image": "Graphics/Logos/rickmorty.png"
     },
     "grizzlycliff1": {
@@ -252,7 +252,7 @@
       "country": "GBR",
       "team": "Team Gulf",
       "make": "MINI",
-      "color": "#04dddd",
+      "color": "#d98609",
       "car_image": "Graphics/Logos/gulf.png"
     },
     "jaavib": {
@@ -271,7 +271,7 @@
       "number": "99",
       "country": "GBR",
       "team": "Mini",
-      "make": "MINI",
+      "make": "Mini",
       "color": "#e10600",
       "car_image": "Graphics/Logos/mini.png"
     },
@@ -286,12 +286,12 @@
       "car_image": "Graphics/Logos/ThistleRacing.png"
     },
     "[RCV]RayFin": {
-      "display": "Rayfin",
-      "short": "RAYFIN",
+      "display": "Ray Finlayson",
+      "short": "FINLAYSON",
       "number": "55",
       "country": "GBR",
       "team": "Canadian Eagle",
-      "make": "Caterham",
+      "make": "Mini",
       "color": "#0bc8d7",
       "car_image": "Graphics/Logos/EagleRacing.png"
     },
@@ -321,8 +321,8 @@
       "number": "14",
       "country": "POL",
       "team": "Mini Poland",
-      "make": "MINI",
-      "color": "",
+      "make": "Mini",
+      "color": "#e10000",
       "car_image": "Graphics/Logos/mini.png"
     },
     "[RCV]kenevo": {
@@ -402,5 +402,5 @@
   },
   "commentator_photo": "Graphics/Logos/Mike-Joy-Larry-McReynolds-Darrell-Waltrip.jpg",
   "commentator_disclaimer": null,
-  "championship_preset": "RCV Caterham - Season 15"
+  "championship_preset": "Mini Season 15"
 }

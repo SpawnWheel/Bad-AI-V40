@@ -546,7 +546,7 @@ class GraphicsSetup:
             row=r, column=0, columnspan=3, sticky='w', pady=(16, 4))
         sponsors = self.cfg.setdefault('sponsors', {})
         for kind, label in (('title', 'Title sponsor (race card, results)'),
-                            ('timing', 'Timing sponsor (tower, fastest lap, last 4 laps)'),
+                            ('timing', 'Timing sponsor (tower, last 4 laps)'),
                             ('partner', 'Official partner (start, gaps, pit stops)')):
             r += 1
             sp = sponsors.setdefault(kind, {'name': '', 'logo': ''})

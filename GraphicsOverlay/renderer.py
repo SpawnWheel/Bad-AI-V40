@@ -5,6 +5,7 @@ PNG with a long duration in an ffmpeg concat list, which ffmpeg composites over
 the race video in the same pass as the final encode.
 """
 import bisect
+import json
 import multiprocessing
 import os
 import re
@@ -49,8 +50,20 @@ LEADER_AFTER = 20.0        # no leader banner for lead changes in the opening se
 LEADER_HOLD = 5.0          # a new leader has to keep P1 this long before the banner is shown
 LEADER_LOCKOUT = 10.0      # and no other lead change gets a banner this soon after one
 RADIO_SPLIT = (' to ', ' over ', ' on ')
+# Team radio lines of the commentary: "[RADIO Dom Payne]" and "[RADIO Dom Payne's engineer]"
+RADIO_TAG_RE = re.compile(r'^RADIO\s+(.+)$', re.I)
+RADIO_ENGINEER_RE = re.compile(r"^(.+?)(?:['’]s|s['’])?\s+(?:race\s+)?engineer$", re.I)
+RADIO_LEAD = 0.25       # a radio card starts sliding in this long before its words
+RADIO_HOLD = 1.2        # ... and stays up this long after them
+RADIO_MIN = 3.5         # a card nobody takes over from is up at least this long, so it can be read
+RADIO_CHAIN_GAP = 2.5   # radio lines closer than this are one exchange (each card hands over to the next)
+VOICE_WPS = 2.9         # words a second, to estimate when lines play without the audio step's clip timeline
+EST_LINE_GAP = 0.4
 # Race control messages about stewards, investigations or penalties (old plans) are not shown
 STEWARDS_WORDS = re.compile(r'stewar|investigat|penalt|reprimand|no further action|black and white', re.I)
+COMM_INFO_AT = 0.33         # the commentator info box goes up this share of the way into the race
+COMM_INFO_EARLIEST = 120.0  # ... but never sooner than this after the green flag
+COMM_INFO_MAX_SHIFT = 120.0 # ... waiting at most this long for team radio to clear the right-hand side
 LANE_GAP = 1.5
 MAX_SHIFT = 12.0
 AUTO_MAX_SHIFT = 30.0
@@ -98,6 +111,10 @@ class OverlayRenderer:
                 items.append({'id': 'auto_comm', 'type': 'commentators', 'time': gf + 10.5, 'duration': dur,
                               'lane': 'side', 'auto': True,
                               'data': {'names': names, 'bios': bios, 'anim_dur': dur - 0.2 - POPUP_OUT}})
+        if gf is not None and auto.get('commentator_info', True):
+            item = self._commentator_info_item(gf, lf)
+            if item:
+                items.append(item)
         tk = cfg['layout']['ticker']
         if tk['enabled']:
             if gf is not None and auto.get('start_ticker') and race.grid:
@@ -176,6 +193,20 @@ class OverlayRenderer:
             items.append({'id': 'auto_results', 'type': 'results', 'time': start, 'duration': 90.0,
                           'lane': 'center', 'auto': True, 'data': {'rows': rows}})
         return items
+
+    def _commentator_info_item(self, gf, lf):
+        """One info box about the commentary team (a short paragraph the graphics step's AI researched for this
+        race), under the map on the right about a third of the way into the race. None without that paragraph."""
+        info = self.plan.get('commentator_info') or {}
+        text = ' '.join(str(info.get('text') or '').split())
+        if not text:
+            return None
+        end = lf if lf is not None else gf + 1200.0
+        t = gf + max(COMM_INFO_EARLIEST, (end - gf) * COMM_INFO_AT)
+        dur = max(10.0, min(16.0, 4.0 + len(text.split()) / 4.0))
+        return {'id': 'auto_comm_info', 'type': 'commentator_info', 'time': t, 'duration': dur, 'lane': 'side',
+                'auto': True, 'max_shift': COMM_INFO_MAX_SHIFT,
+                'title': info.get('title') or '', 'data': {'names': info.get('names') or [], 'text': text}}
 
     def _pit_items(self):
         """Pit stops in their own corner by the timing tower: a compact timer for a top-4 car (up as it
@@ -311,10 +342,112 @@ class OverlayRenderer:
         return items
 
     def _radio_items(self):
+        """Team radio pop-ups: one per voiced radio line of the commentary (so in a back-and-forth each speaker
+        gets their own card, up while their words play; a driver and his engineer share one), else one per (Radio) entry
+        of the logs (older races)."""
+        files = gcfg.project_files(self.project_path)
+        lines = read_commentary(files['commentary_text'])
+        if any(RADIO_TAG_RE.match(spk) for _, spk, _ in lines):
+            return self._radio_line_items(lines, files['final_audio'])
+        return self._radio_call_items(files)
+
+    def _radio_line_items(self, lines, final_audio):
+        from .creator import NameResolver  # creator imports this module
+        resolve = NameResolver(self.cfg, self.race.drivers)
+        clips = self._clip_timeline(final_audio)
+        used = set()
+        # When each line plays: the clip timeline when there is one, else an estimate from the word counts
+        by_time = {}
+        for t, spk, text in lines:
+            by_time.setdefault(t, []).append((spk, text))
+        spoken = []  # (start, end, tag, text)
+        for t in sorted(by_time):
+            at = float(t)
+            for spk, text in by_time[t]:
+                est = max(0.8, len(text.split()) / VOICE_WPS)
+                m = RADIO_TAG_RE.match(spk)
+                clip = self._match_clip(clips, used, t, spk) if m else None
+                if clip:
+                    start, end = clip['start'], clip['start'] + clip['duration']
+                else:
+                    start, end = at, at + est
+                if m:
+                    spoken.append((start, end, m.group(1).strip(), text))
+                at = end + EST_LINE_GAP
+        # A driver and his own engineer share one card (their lines one under the other); a line from anyone
+        # else (another driver answering) gets a card of its own
+        cards = []
+        for start, end, tag, text in spoken:
+            e = RADIO_ENGINEER_RE.match(tag)
+            who = e.group(1) if e else tag
+            driver = resolve(who)
+            owner = driver or who.lower()
+            label = 'ENGINEER' if e else (self.tpl.meta(driver)['short'] if driver else who)
+            seg = {'label': label, 'quote': text, 'is_driver': not e}
+            last = cards[-1] if cards else None
+            if (last and last['owner'] == owner and start - last['end'] < RADIO_CHAIN_GAP
+                    and len(last['segments']) < 4):
+                last['segments'].append(seg)
+                last['end'] = end
+                if not e:
+                    last['who'] = who
+            else:
+                cards.append({'owner': owner, 'driver': driver, 'who': who, 'start': start, 'end': end,
+                              'segments': [seg]})
+        items = []
+        for i, c in enumerate(cards):
+            t0 = max(0.0, c['start'] - RADIO_LEAD)
+            t1 = max(c['end'] + RADIO_HOLD, t0 + RADIO_MIN)
+            # The next card of the exchange takes over: this one is off before the next one comes in
+            if i + 1 < len(cards) and cards[i + 1]['start'] - RADIO_LEAD - t1 < RADIO_CHAIN_GAP:
+                t1 = min(t1, max(c['end'] - 0.3, cards[i + 1]['start'] - RADIO_LEAD - 0.05))
+            items.append({'id': f'auto_radio_{i}', 'type': 'radio', 'time': t0, 'duration': max(1.5, t1 - t0),
+                          'lane': 'radio', 'auto': True, 'driver': c['driver'],
+                          'data': {'speaker': c['who'], 'segments': c['segments']}})
+        # Lines of one exchange are chained: they move together if the lane is busy, never apart
+        chain = 0
+        for prev, it in zip([None] + items, items):
+            if prev is not None and it['time'] - (prev['time'] + prev['duration']) >= RADIO_CHAIN_GAP:
+                chain += 1
+            it['chain'] = f'radio_{chain}'
+        return items
+
+    @staticmethod
+    def _clip_timeline(final_audio):
+        """{timecode second: [clip, ...]} of the team radio clips from the audio step's clip timeline, or {}."""
+        if not final_audio:
+            return {}
+        path = os.path.splitext(final_audio)[0] + '_timeline.json'
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                clips = json.load(f).get('clips', [])
+        except (OSError, ValueError):
+            return {}
+        out = {}
+        for c in clips:
+            m = re.match(r'^(\d{2})(\d{2})(\d{2})_(RADIO_.+?)(?:_\d+)?\.\w+$', c.get('file', ''))
+            if m:
+                h, mi, s = map(int, m.group(1, 2, 3))
+                out.setdefault(h * 3600 + mi * 60 + s, []).append(dict(c, speaker=m.group(4).lower()))
+        for v in out.values():
+            v.sort(key=lambda c: c['start'])
+        return out
+
+    @staticmethod
+    def _match_clip(clips, used, t, speaker_tag):
+        """The clip of a radio line: the first unused clip at its timecode with its speaker, else the first unused."""
+        cands = [c for c in clips.get(int(round(float(t))), []) if id(c) not in used]
+        if not cands:
+            return None
+        safe = re.sub(r"[\\/:*?\"<>|'’]", '', speaker_tag).replace(' ', '_').replace('.', '').lower()
+        clip = next((c for c in cands if c['speaker'] == safe), cands[0])
+        used.add(id(clip))
+        return clip
+
+    def _radio_call_items(self, files):
         from .creator import NameResolver  # creator imports this module
         resolve = NameResolver(self.cfg, self.race.drivers)
         items = []
-        files = gcfg.project_files(self.project_path)
         for i, call in enumerate(read_radio_calls(files['video_timed'])):
             # "Thommo to engineer" / "Engineer to Payne" / "Payne over team radio"
             parts = [call['speaker']]
@@ -383,12 +516,30 @@ class OverlayRenderer:
             if self._place(it, blocking, AUTO_MAX_SHIFT if it.get('auto') else MAX_SHIFT):
                 placed.append(it)
         # Team radio and the top centre slot (leader banner, fastest lap) have their own slots, one at a time;
-        # the commentators list shares the right-hand side with team radio
+        # the commentators list and the commentator info box share the right-hand side with team radio
         for lanes in (('side', 'radio'), ('top',)):
             lane_blocking = []
-            for it in sorted([a for a in auto if a['lane'] in lanes], key=lambda x: (x['lane'] != 'side', x['time'])):
-                if self._place(it, lane_blocking, AUTO_MAX_SHIFT):
-                    placed.append(it)
+            # The cards of one radio exchange hand over to each other, so they are placed (and moved) as one
+            units, chains = [], {}
+            # The commentators list comes first, then team radio (timed to its voices), then the info box
+            order = lambda x: (0 if x['type'] == 'commentators' else 1 if x['lane'] in ('radio', 'top') else 2, x['time'])
+            for it in sorted([a for a in auto if a['lane'] in lanes], key=order):
+                c = it.get('chain')
+                if c in chains:
+                    chains[c].append(it)
+                    continue
+                units.append([it])
+                if c:
+                    chains[c] = units[-1]
+            for unit in units:
+                first = unit[0]
+                span = {'type': first['type'], 'time': first['time'],
+                        'duration': max(m['time'] + m['duration'] for m in unit) - first['time']}
+                if self._place(span, lane_blocking, first.get('max_shift', AUTO_MAX_SHIFT)):
+                    shift = span['time'] - first['time']
+                    for m in unit:
+                        m['time'] += shift
+                        placed.append(m)
         placed.sort(key=lambda x: x['time'])
         return placed
 

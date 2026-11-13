@@ -25,6 +25,39 @@ WRITTEN_SHARE = 0.85
 # The start is shouted and rushed: events in the first seconds after the green flag get more words
 START_WORDS_PER_SEC = 2.8
 START_SECONDS = 25
+# The winner's moment: lines in the seconds after the winner crosses the line (back markers finishing, a pass for
+# a minor place) are folded into the winner's line, so the booth has the whole time to celebrate the win instead of
+# announcing him in one breath and reading out the cars behind. A podium finisher (P2/P3) ends the fold.
+WINNER_HOLD_SEC = 20
+WINNER_RE = re.compile(r'\[FINISH\].*?took P1!')
+PODIUM_FINISH_RE = re.compile(r'to take P[23]\b')
+RADIO_TAIL_RE = re.compile(r'\s*\(Radio\).*$')
+STAMP_RE = re.compile(r'^\d{2}:\d{2}:\d{2}\s*-\s*')
+
+
+def fold_winner_moment(parsed_data):
+    """Folds the lines in the WINNER_HOLD_SEC after the winner's finish line into it (see WINNER_HOLD_SEC)."""
+    win = next((i for i, p in enumerate(parsed_data)
+                if p['timestamp'] is not None and WINNER_RE.search(p['original_text'])), None)
+    if win is None:
+        return parsed_data
+    win_t = parsed_data[win]['timestamp']
+    folded, keep = [], parsed_data[:win + 1]
+    rest = parsed_data[win + 1:]
+    for n, p in enumerate(rest):
+        if p['timestamp'] is None:
+            keep.append(p)
+            continue
+        if (p['timestamp'] - win_t).total_seconds() > WINNER_HOLD_SEC or PODIUM_FINISH_RE.search(p['original_text']):
+            keep.extend(rest[n:])
+            break
+        # Radio from a minor place would talk over the winner: dropped
+        folded.append(RADIO_TAIL_RE.sub('', STAMP_RE.sub('', p['original_text'])).strip())
+    if folded:
+        line = parsed_data[win]
+        keep[win] = dict(line, original_text=f"{line['original_text']} While the winner celebrates: {' '.join(folded)}")
+        print(f"Folded {len(folded)} line(s) after the winner into the winner's moment.")
+    return keep
 
 
 def main():
@@ -64,6 +97,8 @@ def main():
             'timestamp': timestamp,
             'original_text': line.strip()
         })
+
+    parsed_data = fold_winner_moment(parsed_data)
 
     # The green flag: the event that says so, else the first event
     green_flag = next((p['timestamp'] for p in parsed_data
