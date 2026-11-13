@@ -68,24 +68,23 @@ class Templates:
     def _image_path(self, name):
         return gcfg.resolve_path(self.meta(name).get('car_image')) if name else ''
 
-    @staticmethod
-    def _is_car_preview(path):
-        return os.path.normcase(os.path.abspath(path)).startswith(os.path.normcase(gcfg.CAR_PREVIEW_DIR))
-
     def car(self, name, max_w, max_h):
-        """Car preview render (Graphics/CarPreviews), which may stand out of its card; None for logos."""
+        """The driver's car image (from CarPreviews or a sim's livery folder), which may stand out of its card;
+        None without one (or when the car image is really a logo, see config.car_image_is_car)."""
         path = self._image_path(name)
-        if not path or not self._is_car_preview(path):
+        if not path or not gcfg.car_image_is_car(self.meta(name)):
             return None
         return fit_image(load_image(path), max_w, max_h)
 
     def logo_path(self, name):
-        """The driver's team/make logo: the Drivers tab Logo, else a car image that is not a car preview, or ''."""
+        """The driver's team/make logo: the Drivers tab Logo, else a car image that is really a logo, or ''."""
         logo = gcfg.resolve_path(self.meta(name).get('logo')) if name else ''
         if logo and os.path.exists(logo):
             return logo
         path = self._image_path(name)
-        return path if path and not self._is_car_preview(path) and os.path.exists(path) else ''
+        if path and not gcfg.car_image_is_car(self.meta(name)) and os.path.exists(path):
+            return path
+        return ''
 
     def badge(self, name, h):
         """Team/make logo as it is, sized to sit inside a card (never over its edge).

@@ -476,10 +476,20 @@ def default_driver(log_name, files=None):
     }
 
 
-def is_car_preview(path):
-    """True for an image in Graphics/CarPreviews (a car), False for anything else (a logo)."""
-    return bool(path) and os.path.normcase(os.path.abspath(resolve_path(path))).startswith(
-        os.path.normcase(CAR_PREVIEW_DIR))
+def _under(path, folder):
+    return os.path.normcase(os.path.abspath(resolve_path(path))).startswith(os.path.normcase(folder))
+
+
+def car_image_is_car(d):
+    """Whether a driver's car image is a car. It is, from wherever it was picked (Graphics/CarPreviews, or a
+    sim's livery folder: their preview renders are .dds), unless it is in Graphics/Logos. Any other image
+    counts as a car once the driver has a Logo of their own (before the Logo field, logos went here)."""
+    img = d.get('car_image') or ''
+    if not img or _under(img, LOGO_DIR):
+        return False
+    if _under(img, CAR_PREVIEW_DIR) or img.lower().endswith('.dds'):
+        return True
+    return bool(d.get('logo'))
 
 
 def move_logos_out_of_car_image(drivers):
@@ -488,7 +498,7 @@ def move_logos_out_of_car_image(drivers):
     moved = 0
     for d in drivers.values():
         img = d.get('car_image') or ''
-        if img and not is_car_preview(img) and not d.get('logo'):
+        if img and not car_image_is_car(d) and not d.get('logo'):
             d['logo'], d['car_image'] = img, ''
             moved += 1
     return moved
