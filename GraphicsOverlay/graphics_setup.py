@@ -77,7 +77,7 @@ REGION_FIELDS = {
 
 DRIVER_COLS = [('log', 'Log name', 150), ('display', 'Display name', 140), ('short', 'Short', 90),
                ('number', '#', 40), ('country', 'Ctry', 50), ('team', 'Team / livery', 160), ('make', 'Make', 90),
-               ('color', 'Colour', 70), ('car_image', 'Car image', 170)]
+               ('color', 'Colour', 70), ('car_image', 'Car image', 170), ('logo', 'Logo', 150)]
 
 
 def styled_button(parent, text, cmd, primary=False):
@@ -711,7 +711,7 @@ class GraphicsSetup:
         for name in self.race.drivers:
             d = self.cfg['drivers'][name]
             self.tree.insert('', 'end', iid=name, values=[name] + [
-                os.path.basename(d.get(k, '')) if k == 'car_image' else d.get(k, '') for k, _, _ in DRIVER_COLS[1:]])
+                os.path.basename(d.get(k, '')) if k in ('car_image', 'logo') else d.get(k, '') for k, _, _ in DRIVER_COLS[1:]])
         if sel and self.tree.exists(sel[0]):
             self.tree.selection_set(sel[0])
 
@@ -771,6 +771,7 @@ class GraphicsSetup:
                 return
             d['logo'] = '' if path == '(none)' else path
             logo_var.set(path)
+            self.update_tree_row(name)
             self.show_car_thumb(d['logo'] or d.get('car_image'))
             self.schedule_preview()
         lcb.bind("<<ComboboxSelected>>", lambda e: set_logo(logo_var.get()))
@@ -807,7 +808,7 @@ class GraphicsSetup:
     def update_tree_row(self, name):
         d = self.cfg['drivers'][name]
         self.tree.item(name, values=[name] + [
-            os.path.basename(d.get(k, '')) if k == 'car_image' else d.get(k, '') for k, _, _ in DRIVER_COLS[1:]])
+            os.path.basename(d.get(k, '')) if k in ('car_image', 'logo') else d.get(k, '') for k, _, _ in DRIVER_COLS[1:]])
 
     def rematch_images(self):
         files = gcfg.list_images(gcfg.CAR_PREVIEW_DIR)

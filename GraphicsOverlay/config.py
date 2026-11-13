@@ -476,9 +476,28 @@ def default_driver(log_name, files=None):
     }
 
 
+def is_car_preview(path):
+    """True for an image in Graphics/CarPreviews (a car), False for anything else (a logo)."""
+    return bool(path) and os.path.normcase(os.path.abspath(resolve_path(path))).startswith(
+        os.path.normcase(CAR_PREVIEW_DIR))
+
+
+def move_logos_out_of_car_image(drivers):
+    """Before the Logo field existed, team logos were set as the car image. Moves such a logo into the empty
+    Logo field, so the car image only ever holds a car. Returns how many moved."""
+    moved = 0
+    for d in drivers.values():
+        img = d.get('car_image') or ''
+        if img and not is_car_preview(img) and not d.get('logo'):
+            d['logo'], d['car_image'] = img, ''
+            moved += 1
+    return moved
+
+
 def ensure_drivers(cfg, roster, entries=None):
     """Adds every log name to cfg['drivers']. entries (RaceRoom's recorded entry list) fills in a
     blank team, car number and make."""
+    move_logos_out_of_car_image(cfg['drivers'])
     files = list_images(CAR_PREVIEW_DIR)
     for name in roster:
         if name not in cfg['drivers']:
