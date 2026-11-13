@@ -40,7 +40,6 @@ class TestBrainLLMUsage(unittest.TestCase):
         self.assertEqual(cfg.response_mime_type, "application/json")
         self.assertEqual(cfg.response_json_schema, RESPONSE_SCHEMA)
         self.assertEqual(str(cfg.thinking_config.thinking_level).upper().split(".")[-1], "LOW")
-        self.assertEqual(cfg.temperature, 1.0)
 
     def test_text_format_fallback_when_json_invalid(self):
         b = _brain()
@@ -104,7 +103,7 @@ class TestBrainLLMUsage(unittest.TestCase):
         self.assertIn("SETUP REFERENCE MATERIAL", b.system_prompt)
 
     def test_fast_model_for_routine_events_and_fallback_on_quota(self):
-        b = _brain(fast_model="gemini-3.5-flash-lite", fast_thinking_level="MINIMAL",
+        b = _brain(fast_model="gemini-3.5-flash-lite", fast_thinking_level="LOW",
                    fallback_model="gemini-3.5-flash")
         ok = _resp({"intent": "alert", "emotion": "brisk", "delivery": "quick", "response": "Five minutes left."})
         b.client.models.generate_content.return_value = ok
@@ -114,7 +113,7 @@ class TestBrainLLMUsage(unittest.TestCase):
 
         # Non-routine event on main model; 429 -> fallback model
         def side(model, contents, config):
-            if model == "gemini-3.8-flash":
+            if model == "gemini-4-hydrogen":
                 raise Exception("429 RESOURCE_EXHAUSTED")
             return ok
         b.client.models.generate_content.side_effect = side

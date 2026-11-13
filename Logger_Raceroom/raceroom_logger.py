@@ -225,9 +225,9 @@ class RaceroomEventLogger:
     # ------------------------------------------------------------------ landmarks
 
     def load_landmarks(self):
-        """RaceRoom corner landmarks keyed by layout id. Corner Names/ entries win over the older 1_Logger copy."""
+        """RaceRoom corner landmarks keyed by layout id. raceroomTrackLandmarksData.json wins over the older trackLandmarksData.json."""
         landmarks = {}
-        for path in (os.path.join(APP_DIR, "1_Logger", "trackLandmarksData.json"),
+        for path in (os.path.join(APP_DIR, "Corner Names", "trackLandmarksData.json"),
                      os.path.join(APP_DIR, "Corner Names", "raceroomTrackLandmarksData.json")):
             try:
                 with open(path, "r", encoding="utf-8") as f:

@@ -2,21 +2,17 @@ gemini:
   # Paste your Google Gemini API key below, or leave empty and set GEMINI_API_KEY environment variable.
   # Get a free API key at: https://aistudio.google.com/app/apikey
   api_key: ""
-  thinking_model: gemini-3.8-flash
+  thinking_model: gemini-4-hydrogen
   thinking_level: LOW
   thinking_budget: 4000        # legacy; ignored while thinking_level is set
   max_output_tokens: 8192
-  # Creativity of the engineer's wording. Gemini 3.x is tuned for 1.0 -- lower values make him
-  # repeat himself. Strategy numbers are pre-computed, so this doesn't affect their accuracy.
-  temperature: 1.0
-  # report_temperature: 0.8   # optional: separate value for SitReps / debriefs
   structured_output: true       # JSON replies (reliable parsing, intent, notebook). false = old text format
   request_timeout_sec: 20       # give up on a hung LLM call instead of holding the radio
   scoped_system_prompt: true    # send only the current session's rules (setup guide only in practice)
   # Optional cheaper/faster model for routine proactive calls (time/lap warnings, leader pitted,
   # pit-exit traffic). Leave "" to use thinking_model for everything.
   fast_model: ""                # e.g. gemini-3.5-flash-lite
-  fast_thinking_level: MINIMAL  # thinking for fast_model / fallback_model (3.8 Flash itself only supports LOW+)
+  fast_thinking_level: LOW      # thinking for fast_model / fallback_model (LOW / MEDIUM / HIGH / XHIGH)
   # Optional model to retry on if the main one is rate-limited / overloaded. "" = none.
   fallback_model: ""            # e.g. gemini-3.5-flash
 

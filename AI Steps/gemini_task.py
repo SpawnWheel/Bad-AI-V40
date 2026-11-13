@@ -117,26 +117,26 @@ def run_ai_step():
 
     # 6. Call the Model using the google-genai SDK
     client = genai.Client(api_key=api_key)
-    model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.8-flash')
+    model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-4-hydrogen')
     
     # Resolve Max Output Tokens (default 65536 to prevent truncation on long races)
     max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
     try:
-        max_output_tokens = int(max_tokens_env) if max_tokens_env else 180000
+        max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
     except ValueError:
-        max_output_tokens = 180000
+        max_output_tokens = 65536
 
-    # Resolve Thinking Config for Gemini 3 models
+    # Resolve Thinking Config (Gemini 3 and later take a thinking level)
     thinking_config = None
-    is_gemini_3 = any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
-    thinking_level = os.environ.get("GEMINI_THINKING_LEVEL", "HIGH").upper()
-    if is_gemini_3 and thinking_level != "NONE":
+    supports_level = not model_name.lower().startswith(("gemini-1", "gemini-2"))
+    thinking_level = os.environ.get("GEMINI_THINKING_LEVEL", "MEDIUM").upper()
+    if supports_level and thinking_level != "NONE":
         thinking_config = types.ThinkingConfig(
             include_thoughts=True, 
             thinking_level=thinking_level
         )
 
-    print(f"Using model: {model_name} (Thinking: {thinking_level if (is_gemini_3 and thinking_level != 'NONE') else 'OFF'}, Max Output Tokens: {max_output_tokens:,})")
+    print(f"Using model: {model_name} (Thinking: {thinking_level if (supports_level and thinking_level != 'NONE') else 'OFF'}, Max Output Tokens: {max_output_tokens:,})")
     print(f"Using prompt: {os.path.basename(prompt_file)}")
     print("Generating...\n")
 

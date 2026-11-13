@@ -509,31 +509,23 @@ class CameraController:
         if os.path.exists(alt_path):
              with open(alt_path, "r") as f: return f.read().strip()
              
-        config_path = os.path.join(base_dir, "..", "1_Logger", "commentator_config.json")
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r") as f:
-                    cfg = json.load(f)
-                    key = cfg.get("gemini", {}).get("api_key")
-                    if key: return key
-            except: pass
         return None
 
     def _call_gemini_api(self, api_key, full_prompt, original_data_path):
         try:
             client = genai.Client(api_key=api_key)
-            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-3.8-flash')
+            model_name = os.environ.get('GEMINI_MODEL_NAME', 'gemini-4-hydrogen')
             max_tokens_env = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS")
             try:
                 max_output_tokens = int(max_tokens_env) if max_tokens_env else 65536
             except ValueError:
                 max_output_tokens = 65536
             
-            is_gemini_3 = any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
+            supports_level = not model_name.lower().startswith(("gemini-1", "gemini-2"))
             thinking_config = types.ThinkingConfig(
                 include_thoughts=False,
                 thinking_level="HIGH"
-            ) if is_gemini_3 else None
+            ) if supports_level else None
 
             config = types.GenerateContentConfig(
                 max_output_tokens=max_output_tokens,

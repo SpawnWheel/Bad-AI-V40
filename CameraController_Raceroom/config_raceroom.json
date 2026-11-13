@@ -12,8 +12,8 @@
             "onboard": "home",
             "driving": "insert"
         },
-        "gemini_model": "gemini-3.8-flash",
-        "gemini_thinking_level": "MEDIUM",
+        "gemini_model": "gemini-4-hydrogen",
+        "gemini_thinking_level": "HIGH",
         "api_key": ""
     },
     "cameras": {

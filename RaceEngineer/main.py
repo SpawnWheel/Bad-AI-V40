@@ -1,7 +1,7 @@
 """
 AI Race Engineer - Main Application Entry Point
 Connects to Automobilista 2 or RaceRoom shared memory (auto-detected), monitors race telemetry,
-and provides live radio engineering powered by Gemini 3.8 Flash and Gemini 3.8 Flash TTS,
+and provides live radio engineering powered by Gemini Hydrogen and Gemini 3.8 Flash TTS,
 with a fully config-driven engineer persona (accent, personality, voice) and situational emotions.
 """
 
@@ -73,7 +73,7 @@ class RaceEngineerApp:
         # 2. Subsystems
         self.brain = RaceEngineerBrain(
             api_key=self.api_key,
-            model_name=gemini_cfg.get("thinking_model", "gemini-3.8-flash"),
+            model_name=gemini_cfg.get("thinking_model", "gemini-4-hydrogen"),
             personality=self.personality,
             accent=self.accent,
             delivery=self.delivery,
@@ -82,10 +82,6 @@ class RaceEngineerApp:
             thinking_budget=int(gemini_cfg["thinking_budget"]) if "thinking_budget" in gemini_cfg else None,
             max_output_tokens=int(gemini_cfg.get("max_output_tokens", 8192)),
             persona=self.persona,
-            temperature=float(gemini_cfg.get("temperature", 1.0)),
-            report_temperature=(
-                float(gemini_cfg["report_temperature"]) if "report_temperature" in gemini_cfg else None
-            ),
             fast_model=gemini_cfg.get("fast_model") or None,
             fast_thinking_level=gemini_cfg.get("fast_thinking_level") or None,
             fallback_model=gemini_cfg.get("fallback_model") or None,
@@ -491,7 +487,7 @@ class RaceEngineerApp:
         self._running = True
 
         print("=" * 65)
-        print(">>>  AI RACE ENGINEER - AUTOMOBILISTA 2 / RACEROOM (GEMINI 3.8 FLASH)")
+        print(">>>  AI RACE ENGINEER - AUTOMOBILISTA 2 / RACEROOM (GEMINI HYDROGEN)")
         print(f">>>  ENGINEER: {self.persona.display_name} | {self.gender.capitalize()} {self.accent} | EMOTION: {self.emotion_mode.capitalize()} ({self.persona.expressiveness})")
         print(f">>>  VOICE: {self.tts.primary_model} | mode: {self.persona.voice.mode} | streaming: {'ON' if self.streaming_enabled else 'OFF'}")
         if self.speak_only_when_spoken_to:

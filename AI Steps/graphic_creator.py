@@ -75,7 +75,7 @@ def main():
         f.write(full_prompt)
 
     api_key = os.environ.get("GEMINI_API_KEY")
-    model = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.8-flash")
+    model = os.environ.get("GEMINI_MODEL_NAME", "gemini-4-hydrogen")
     thinking = os.environ.get("GEMINI_THINKING_LEVEL", "MEDIUM")
     raw_entries, source, driver_info = None, 'ai', {}
 

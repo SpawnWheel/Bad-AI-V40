@@ -14,9 +14,9 @@ from google.genai import types
 
 import racefiles
 
-DEFAULT_MODEL = "gemini-3.8-flash"
+DEFAULT_MODEL = "gemini-4-hydrogen"
 DEFAULT_THINKING = "HIGH"
-THINKING_LEVELS = ["HIGH", "MEDIUM", "LOW", "MINIMAL", "NONE"]
+THINKING_LEVELS = ["XHIGH", "HIGH", "MEDIUM", "LOW", "NONE"]
 
 
 def output_path(race_key, legacy_name):
@@ -53,7 +53,7 @@ def extract_json(text):
 
 
 def supports_thinking_level(model_name):
-    return any(k in model_name.lower() for k in ["gemini-3", "3.8", "3.7", "3.6", "3.5", "3.1"])
+    return not model_name.lower().startswith(("gemini-1", "gemini-2"))
 
 
 def add_model_settings(parent, settings, on_change):
@@ -62,7 +62,7 @@ def add_model_settings(parent, settings, on_change):
     ttk.Label(row, text="Model:").pack(side=tk.LEFT, padx=2)
     model_var = tk.StringVar(value=settings.get("gemini_model", DEFAULT_MODEL))
     ttk.Combobox(row, textvariable=model_var, width=18,
-                 values=["gemini-3.8-flash", "gemini-3.8-pro", "gemini-3.6-flash"]).pack(side=tk.LEFT, padx=2)
+                 values=["gemini-4-hydrogen", "gemini-3.8-flash", "gemini-3.8-pro"]).pack(side=tk.LEFT, padx=2)
     ttk.Label(row, text="Thinking:").pack(side=tk.LEFT, padx=(6, 2))
     level_var = tk.StringVar(value=settings.get("gemini_thinking_level", DEFAULT_THINKING))
     ttk.Combobox(row, textvariable=level_var, values=THINKING_LEVELS, state="readonly", width=8).pack(side=tk.LEFT, padx=2)
