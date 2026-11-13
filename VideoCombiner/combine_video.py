@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -26,14 +27,14 @@ GAME_LEVELER = ("acompressor=threshold=-26dB:ratio=3:attack=40:release=500:knee=
 DUCK_THRESHOLD = 0.05
 DUCK_RATIO = 2.5
 
-# Starting grid intro (racefiles.grid_intro_window): the game fades in as the replay starts, and the music
-# fades out over MUSIC_FADE_SEC ending MUSIC_TAIL_SEC after it. Music loudness per level (the commentary sits at
-# -16 LUFS), ducked harder than the game under the commentators.
+# Starting grid intro (racefiles.grid_intro_window): the game fades in as the replay starts. The music starts with
+# the grid (when the full video opens), sits under the commentators as an even bed (they talk over the whole grid,
+# so ducking only made it sound faded) and fades out over MUSIC_FADE_SEC as the replay starts moving.
 GAME_FADE_IN_SEC = 1.0
+MUSIC_FADE_IN_SEC = 0.4
 MUSIC_FADE_SEC = 2.5
-MUSIC_TAIL_SEC = 1.5
-MUSIC_LUFS = {"Quiet": -27, "Normal": -23, "Loud": -19}
-MUSIC_DUCK_RATIO = 4
+MUSIC_TAIL_SEC = 2.0      # ... ending this long after the replay starts
+MUSIC_LUFS = {"Quiet": -27, "Normal": -23, "Loud": -19}  # the commentary track sits at -16 LUFS
 
 # The stitched timeline is built on digital silence, so anything above this is commentary
 SILENCE_THRESHOLD_DBFS = -60.0
@@ -110,39 +111,49 @@ def find_commentary_bounds(audio_path):
     return leading_ms / 1000.0, (len(audio) - trailing_ms) / 1000.0
 
 
-def music_filter(music_input, hold_rel, clip_duration, level):
-    """The grid music: levelled, faded out as the replay starts, ducked under the commentators (keyed by
-    [mkey]), padded with silence to the clip's length so the ducking key is read to the end. -> [music]"""
-    end = max(1.0, hold_rel + MUSIC_TAIL_SEC)
-    fade = min(MUSIC_FADE_SEC, end)
-    lufs = MUSIC_LUFS.get(level, MUSIC_LUFS["Normal"])
-    return (f"[{music_input}:a]aresample=48000,aformat=channel_layouts=stereo,"
-            f"loudnorm=I={lufs}:TP=-3:LRA=11,aresample=48000,atrim=0:{end:.3f},asetpts=PTS-STARTPTS,"
-            f"afade=t=in:st=0:d=0.3,afade=t=out:st={end - fade:.3f}:d={fade:.3f},apad=whole_dur={clip_duration:.3f}[mraw];"
-            f"[mraw][mkey]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={MUSIC_DUCK_RATIO}:attack=20:"
-            f"release=600:makeup=1[music]")
+def measure_lufs(path, start, duration):
+    """Integrated loudness of `duration` seconds of an audio file from `start`, or None."""
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}",
+                          "-i", path, "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr
+    found = re.findall(r"I:\s*(-?[\d.]+) LUFS", out)
+    try:
+        return float(found[-1]) if found else None
+    except ValueError:
+        return None
 
 
-def build_audio_filter(has_game_audio, hold_rel=None, music_input=None, clip_duration=0.0, music_level="Normal"):
-    """hold_rel: output time the replay starts playing after the grid intro (the game is silent before it)."""
+def music_filter(music):
+    """The grid music -> [music]: the part that plays (it starts at output time music['start'], before the clip
+    when that is negative), set to its level with a fixed gain, faded in and out, padded to the clip's length."""
+    start, seek = max(0.0, music['start']), max(0.0, -music['start'])
+    length = music['end'] - start
+    fade = min(MUSIC_FADE_SEC, length / 2)
+    fade_in = MUSIC_FADE_IN_SEC if seek == 0 else 0.15
+    return (f"[{music['input']}:a]atrim=start={seek:.3f}:duration={length:.3f},asetpts=PTS-STARTPTS,"
+            f"aresample=48000,aformat=channel_layouts=stereo,volume={music['gain_db']:.2f}dB,"
+            f"afade=t=in:st=0:d={fade_in},afade=t=out:st={length - fade:.3f}:d={fade:.3f},"
+            f"adelay={int(start * 1000)}:all=1,apad=whole_dur={music['clip_duration']:.3f}[music]")
+
+
+def build_audio_filter(has_game_audio, hold_rel=None, music=None):
+    """hold_rel: output time the replay starts playing after the grid intro (the game is silent before it).
+    music: the grid music (see grid_music), or None."""
     commentary = "[1:a]aresample=48000,aformat=channel_layouts=stereo"
-    music = music_input is not None and hold_rel
     if has_game_audio and GAME_AUDIO_VOLUME > 0:
         # The game ducks under the commentators while they talk and comes back up in the gaps.
         # amix follows the game audio's length; adding apad here deadlocks ffmpeg
         intro = f",afade=t=in:st={hold_rel:.3f}:d={GAME_FADE_IN_SEC}" if hold_rel else ""
         f = (
             f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,{GAME_LEVELER},volume={GAME_AUDIO_VOLUME}{intro}[game];"
-            f"{commentary},asplit={3 if music else 2}[comm][key]{'[mkey]' if music else ''};"
+            f"{commentary},asplit=2[comm][key];"
             f"[game][key]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={DUCK_RATIO}:attack=15:release=450:makeup=1[ducked];"
         )
         if music:
-            return (f + music_filter(music_input, hold_rel, clip_duration, music_level) + ";"
+            return (f + music_filter(music) + ";"
                     "[ducked][comm][music]amix=inputs=3:duration=first:normalize=0,alimiter=limit=0.95[aout]")
         return f + "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
     if music:
-        return (f"{commentary},apad=whole_dur={clip_duration:.3f},asplit=2[comm][mkey];"
-                + music_filter(music_input, hold_rel, clip_duration, music_level) + ";"
+        return (f"{commentary},apad=whole_dur={music['clip_duration']:.3f}[comm];" + music_filter(music) + ";"
                 "[comm][music]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]")
     # Pad the commentary with silence so it covers the trailing clip padding
     return f"{commentary},apad[aout]"
@@ -150,7 +161,7 @@ def build_audio_filter(has_game_audio, hold_rel=None, music_input=None, clip_dur
 
 def build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay=None,
                   intro=None):
-    """intro: {'hold_rel', 'hold_png', 'music', 'music_level'} for the starting grid, or None."""
+    """intro: {'hold_rel', 'hold_png', 'music' (see grid_music)} for the starting grid, or None."""
     bitrate = info['video_bitrate']
     nvenc = encoder.endswith('_nvenc')
     cmd = ["ffmpeg", "-y", "-hide_banner", "-stats", "-loglevel", "error"]
@@ -171,7 +182,7 @@ def build_command(video_path, audio_path, output_path, info, clip_start, clip_du
         cmd += ["-f", "concat", "-safe", "0", "-i", overlay]
         overlay_input = n_inputs
         n_inputs += 1
-    hold_rel = music_input = None
+    hold_rel = music = None
     if intro:
         hold_rel = intro['hold_rel']
         # Before the replay starts, one frame of it is held (the recording there is the sim's menus)
@@ -182,15 +193,14 @@ def build_command(video_path, audio_path, output_path, info, clip_start, clip_du
         n_inputs += 1
         base, video_map = "base", "[base]"
         if intro.get('music'):
-            cmd += ["-i", intro['music']]
-            music_input = n_inputs
+            cmd += ["-i", intro['music']['path']]
+            music = dict(intro['music'], input=n_inputs, clip_duration=clip_duration)
             n_inputs += 1
     if overlay:
         video_filters.append(graphics.overlay_filter(f"{fps:.6g}", info['size'], overlay_input=overlay_input,
                                                      base=base))
         video_map = "[vout]"
-    filters = ";".join(video_filters + [build_audio_filter(
-        info['has_audio'], hold_rel, music_input, clip_duration, (intro or {}).get('music_level', 'Normal'))])
+    filters = ";".join(video_filters + [build_audio_filter(info['has_audio'], hold_rel, music)])
     cmd += [
         "-t", f"{clip_duration:.3f}",
         "-filter_complex", filters,
@@ -250,12 +260,30 @@ def prepare_grid_intro(project_path, video_path, clip_start, clip_duration):
         print("  Could not grab the frame for the starting grid; the video plays as recorded.")
         return None
     settings = racefiles.grid_intro_settings(project_path)
-    music = racefiles.grid_music_path(settings)
-    if settings.get('music') and not music:
+    print(f"Starting grid: frame at {window['hold']:.1f}s held for the first {hold_rel:.1f}s")
+    return {'hold_rel': hold_rel, 'hold_png': hold_png, 'music': grid_music(settings, window, clip_start, hold_rel)}
+
+
+def grid_music(settings, window, clip_start, hold_rel):
+    """The grid music for this clip: {'path', 'start' (output time; negative when the clip starts after it),
+    'end', 'gain_db'}, or None. It starts with the grid, where the full video opens (PAD_BEFORE_SEC before the
+    grid's commentary), so a test clip that starts earlier or later hears it at the same moment."""
+    path = racefiles.grid_music_path(settings)
+    if settings.get('music') and not path:
         print(f"  Grid music not found in the Music folder: {settings['music']}")
-    print(f"Starting grid: frame at {window['hold']:.1f}s held for the first {hold_rel:.1f}s"
-          + (f", music: {os.path.basename(music)} ({settings['music_level']})" if music else ""))
-    return {'hold_rel': hold_rel, 'hold_png': hold_png, 'music': music, 'music_level': settings['music_level']}
+    if not path:
+        return None
+    start = window['start'] - PAD_BEFORE_SEC - clip_start
+    end = hold_rel + MUSIC_TAIL_SEC
+    if end - max(0.0, start) < 1.0:
+        return None
+    # A fixed gain from the loudness of the part that plays (loudnorm rode the level and shifted the timing)
+    target = MUSIC_LUFS.get(settings.get('music_level'), MUSIC_LUFS["Normal"])
+    lufs = measure_lufs(path, 0.0, end - start)  # all of what the full video plays, so every clip gets one level
+    gain = max(-30.0, min(20.0, target - lufs)) if lufs is not None else target + 14
+    print(f"  Music: {os.path.basename(path)} ({settings.get('music_level')}) from "
+          f"{window['start'] - PAD_BEFORE_SEC:.1f}s in the video, {gain:+.1f} dB")
+    return {'path': path, 'start': start, 'end': end, 'gain_db': gain}
 
 
 def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
