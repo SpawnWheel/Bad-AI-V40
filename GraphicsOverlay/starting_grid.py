@@ -281,16 +281,12 @@ class StartingGrid:
         display = (m.get('display') or name).upper()
         # Qualifying: pole's lap time (in the second accent), everyone else their gap; nothing without a time
         lap = self.quali.get(name)
-        lap_img = None
-        if lap is not None:
-            is_pole = abs(lap - self.pole) < 1e-6
-            label = format_lap_time(lap) if is_pole else f"+{lap - self.pole:.3f}"
-            f_lap = font(min(30, int(h * 0.27)), 'bold_cond')
-            lap_img = Image.new('RGBA', (int(text_w(f_lap, label)) + 6, int(h * 0.4)), (0, 0, 0, 0))
-            text_vcenter(lap_img, 0, lap_img.height / 2, label, f_lap, th.accent2 if is_pole else th.text)
+        lap_img = self.lap_tag(lap, h) if lap is not None else None
         # The same right edge on every card (clear of the widest car), so the times line up down the grid
         lap_right = w - s - 18 - int(h * 2.9 * 0.70)
-        meta_right = min(right, lap_right - lap_img.width - 18) if lap_img is not None else right
+        if lap_img is not None:
+            right = min(right, lap_right - lap_img.width - 16)
+        meta_right = right
         if h >= 80:
             f = fit_font(display, right - x, min(46, int(h * 0.36)), 'bold')
             sh = Image.new('RGBA', content.size, (0, 0, 0, 0))
@@ -298,15 +294,14 @@ class StartingGrid:
             content.alpha_composite(sh.filter(ImageFilter.GaussianBlur(3)))
             ImageDraw.Draw(content).text((x, int(h * 0.13)), display, font=f, fill=th.text)
             tpl.meta_row(content, x, int(h * 0.73), name, meta_right - x, show_flag=False)
-            if lap_img is not None:
-                content.alpha_composite(lap_img, (int(lap_right - lap_img.width), int(h * 0.73 - lap_img.height / 2)))
         else:
             f = fit_font(display, (right - x) * 0.55, int(h * 0.42), 'bold')
             text_vcenter(content, x, h / 2, display, f, th.text)
             nw = text_w(f, display) + 16
             tpl.meta_row(content, int(x + nw), h / 2, name, int(meta_right - x - nw), show_flag=False)
-            if lap_img is not None:
-                content.alpha_composite(lap_img, (int(lap_right - lap_img.width), int(h / 2 - lap_img.height / 2)))
+        if lap_img is not None:
+            # Centred on the card's height, between the name and the car
+            content.alpha_composite(lap_img, (int(lap_right - lap_img.width), int((h - lap_img.height) / 2)))
 
         # The car, grounded with a soft shadow, standing out of the top of the bar (pt above it)
         pt = int(h * 0.3)
@@ -320,6 +315,40 @@ class StartingGrid:
             car_layer.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(6)))
             car_layer.alpha_composite(car.crop((0, max(0, -cy), car.width, car.height)), (int(cx), int(max(0, cy))))
         return {'bar': bar, 'content': content, 'car': car_layer, 'mask': mask, 'pt': pt, 'skew': s}
+
+    def lap_tag(self, lap, h):
+        """A qualifying time on a slanted timing tag, the digits leaning forward like motorsport timing graphics:
+        pole's lap time in black on the second accent, everyone else's gap in white on dark glass."""
+        th = self.th
+        is_pole = abs(lap - self.pole) < 1e-6
+        label = format_lap_time(lap) if is_pole else f"+{lap - self.pole:.3f}"
+        f = font(min(42, int(h * 0.38)), 'bold')
+        tw = int(text_w(f, label))
+        th_ = int(f.size * 1.25)
+        # The digits, sheared forward (the top leans right)
+        lean = 0.2
+        text = Image.new('RGBA', (tw + 8, th_), (0, 0, 0, 0))
+        fg = (12, 14, 20, 255) if is_pole else th.text
+        text_vcenter(text, 4, th_ / 2 + 1, label, f, fg)
+        shift = int(lean * th_)
+        text = text.transform((text.width + shift, th_), Image.AFFINE, (1, lean, -shift, 0, 1, 0), Image.BICUBIC)
+        # The tag: a parallelogram at the cards' slant, with a bright edge leading it
+        tag_h = int(h * 0.5)
+        slant = int(tag_h * SKEW)
+        pad = 14
+        tag_w = text.width + pad * 2 + slant
+        tag = Image.new('RGBA', (tag_w + 2, tag_h), (0, 0, 0, 0))
+        m = Image.new('L', (tag.width * 4, tag_h * 4), 0)
+        ImageDraw.Draw(m).polygon([(slant * 4, 0), (tag_w * 4, 0), ((tag_w - slant) * 4, tag_h * 4), (0, tag_h * 4)],
+                                  fill=255)
+        m = m.resize(tag.size, Image.LANCZOS)
+        fill = Image.new('RGBA', tag.size, th.accent2[:3] + (255,) if is_pole else (6, 8, 13, 225))
+        fill.putalpha(ImageChops.multiply(fill.getchannel('A'), m))
+        tag.alpha_composite(fill)
+        edge = th.text[:3] + (230,) if is_pole else th.accent2[:3] + (255,)
+        ImageDraw.Draw(tag).polygon([(slant, 0), (slant + 5, 0), (5, tag_h), (0, tag_h)], fill=edge)
+        tag.alpha_composite(text, (int(slant / 2 + pad), int((tag_h - th_) / 2)))
+        return tag
 
     @staticmethod
     def flag(country):
