@@ -528,11 +528,11 @@ class Templates:
         return self.finish(img)
 
     # ------------------------------------------------------------------ starting grid (full screen)
-    def starting_grid(self, size):
+    def starting_grid(self, size, quali=None):
         """The full-screen starting grid scene (starting_grid.StartingGrid), made once."""
         if getattr(self, '_starting_grid', None) is None:
             from .starting_grid import StartingGrid
-            self._starting_grid = StartingGrid(self, size)
+            self._starting_grid = StartingGrid(self, size, quali)
         return self._starting_grid
 
     def grid_car(self, name, max_w, max_h):

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import time
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 RACES_DIR = os.environ.get("BADAI_RACES_DIR") or os.path.join(APP_DIR, "Races")
@@ -40,6 +41,7 @@ FILES = {
     "graphics_config": "11_graphics_setup.json",
     "graphics_plan": "11_graphics_plan.json",
     "final_video": "12_final_video.mp4",
+    "qualifying": "00_qualifying.json",
 }
 
 RACE_NOTES_TEMPLATE = (
@@ -210,6 +212,193 @@ def grid_intro_in_events(folder):
     return (grid, green) if grid is not None and green is not None else None
 
 
+# ---------------------------------------------------------------- qualifying times
+# Every driver's best lap from the qualifying session before the race, shown on the starting grid and given to the
+# grid commentary. The recorders save them as qualifying runs (QualifyingWatch); a race recorded afterwards on the
+# same track takes them into its folder. Results can also be pasted in (parse_pasted_qualifying). Without any,
+# the grid simply shows no times.
+
+QUALI_PENDING = os.path.join(RACES_DIR, "_qualifying_pending.json")
+QUALI_MAX_AGE_SEC = 6 * 3600   # a race this long after the qualifying session still takes its times
+LAP_TIME_RANGE = (10.0, 3600.0)
+
+
+def qualifying_rows(best):
+    """[{'name', 'time', 'pos'}] from {name: best lap seconds}, fastest first."""
+    rows = sorted(((n, t) for n, t in best.items() if t), key=lambda r: r[1])
+    return [{"name": n, "time": round(t, 3), "pos": i + 1} for i, (n, t) in enumerate(rows)]
+
+
+class QualifyingWatch:
+    """Each driver's best lap during one qualifying session, saved (every few seconds while it changes) to
+    QUALI_PENDING, so the race that follows takes them even if the recorder restarts in between."""
+
+    SAVE_EVERY = 3.0
+
+    def __init__(self, sim, track):
+        self.sim, self.track = sim, track
+        self.best = {}
+        self.dirty = False
+        self.saved_at = 0.0
+
+    def update(self, laps):
+        """laps: (driver name, best lap seconds so far); a time of 0 or less means no lap yet."""
+        for name, t in laps:
+            if name and t and LAP_TIME_RANGE[0] < t < LAP_TIME_RANGE[1] and t < self.best.get(name, 1e9) - 1e-4:
+                self.best[name] = t
+                self.dirty = True
+        if self.dirty and time.time() - self.saved_at >= self.SAVE_EVERY:
+            self.save()
+
+    def save(self):
+        if not self.best:
+            return
+        data = {"source": "recorded", "sim": self.sim, "track": self.track,
+                "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                "drivers": qualifying_rows(self.best)}
+        try:
+            os.makedirs(RACES_DIR, exist_ok=True)
+            with open(QUALI_PENDING, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            self.dirty, self.saved_at = False, time.time()
+        except OSError as e:
+            print(f"Qualifying times not saved: {e}", flush=True)
+
+    def close(self):
+        if self.dirty:
+            self.save()
+        if self.best:
+            print(f"Qualifying: {len(self.best)} drivers set a time; the next race at {self.track} will use them.",
+                  flush=True)
+
+
+def attach_pending_qualifying(folder, sim, track):
+    """Copies the latest qualifying times into a race that just started recording, when they are from the same
+    sim and track and recent. They stay pending, so a restarted race takes them too. True when attached."""
+    try:
+        with open(QUALI_PENDING, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        age = (datetime.datetime.now() - datetime.datetime.fromisoformat(data["updated_at"])).total_seconds()
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if data.get("sim") != sim or data.get("track") != track or not 0 <= age <= QUALI_MAX_AGE_SEC:
+        return False
+    try:
+        with open(race_file(folder, "qualifying"), "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except OSError:
+        return False
+    print(f"Qualifying times from {data['updated_at'][11:16]} attached ({len(data.get('drivers', []))} drivers).",
+          flush=True)
+    return True
+
+
+def read_qualifying(folder):
+    """The race's qualifying data ({'source', 'drivers': [{'name', 'time', 'pos'}]}), or None without any."""
+    try:
+        with open(race_file(folder, "qualifying"), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if data.get("drivers") else None
+    except (OSError, ValueError):
+        return None
+
+
+def qualifying_times(folder):
+    """{driver log name: best lap seconds} for the race, or {}."""
+    data = read_qualifying(folder) or {}
+    return {d["name"]: float(d["time"]) for d in data.get("drivers", []) if d.get("name") and d.get("time")}
+
+
+def save_qualifying(folder, rows, source):
+    path = race_file(folder, "qualifying")
+    if not rows:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"source": source, "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                   "drivers": rows}, f, indent=2, ensure_ascii=False)
+
+
+def format_lap_time(seconds):
+    m, s = divmod(seconds, 60)
+    return f"{int(m)}:{s:06.3f}" if m else f"{s:.3f}"
+
+
+def grid_names(folder):
+    """Driver names in grid order from the race log's starting grid line (the names the whole pipeline uses)."""
+    try:
+        with open(race_file(folder, "race_log"), "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if "Starting Grid Order:" in line:
+                    body = line.split("Starting Grid Order:", 1)[1]
+                    names = []
+                    for part in body.split("|"):
+                        m = re.match(r"\s*(?:\[[^\]]*\]\s+)?P\d+:\s*(.+?)(?:\s\[[^\]]*\])?\s*$", part)
+                        if m:
+                            names.append(m.group(1).strip())
+                    return names
+    except OSError:
+        pass
+    return []
+
+
+PASTE_TIME_RE = re.compile(r"(?<![\d:.])(\+\s*)?(?:(\d{1,2}):)?(\d{1,2})[.,](\d{3})(?!\d)")
+
+
+def _norm_words(text):
+    """Lower case words without team tags or punctuation: '[RCV]Dom.Payne' -> 'dom payne'."""
+    text = re.sub(r"\[[^\]]*\]", " ", text or "")
+    text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def parse_pasted_qualifying(text, aliases):
+    """Reads pasted qualifying results (a results screen, a league site or a spreadsheet: one driver a line,
+    with a lap time like 1:42.315 or a gap like +0.214). aliases: {log name: [names they may be written as]}.
+    Returns (rows as qualifying_rows gives them, lines with a time but no driver matched)."""
+    keys = []
+    for name, names in aliases.items():
+        for alias in set([name] + [a for a in names if a]):
+            words = _norm_words(alias)
+            compact = words.replace(" ", "")
+            if len(compact) >= 3:
+                keys.append((name, words, compact))
+    found, unmatched = {}, []
+    for line in (text or "").splitlines():
+        times = PASTE_TIME_RE.findall(line)
+        if not times:
+            continue
+        words = _norm_words(PASTE_TIME_RE.sub(" ", line))
+        compact, padded = words.replace(" ", ""), f" {words} "
+        best = None
+        for name, kw, kc in keys:
+            # Long names may be written without spaces or dots; short ones have to stand as words
+            hit = (len(kc) >= 5 and kc in compact) or f" {kw} " in padded
+            if hit and (best is None or len(kc) > best[1]):
+                best = (name, len(kc))
+        if not best:
+            unmatched.append(line.strip())
+            continue
+        lap = gap = None
+        for plus, mins, secs, ms in times:
+            t = int(mins or 0) * 60 + int(secs) + int(ms) / 1000
+            if plus or t < LAP_TIME_RANGE[0]:
+                gap = t if gap is None else gap
+            elif lap is None:
+                lap = t
+        found.setdefault(best[0], (lap, gap))
+    laps = [lap for lap, _ in found.values() if lap]
+    pole = min(laps) if laps else None
+    best_times = {}
+    for name, (lap, gap) in found.items():
+        if lap:
+            best_times[name] = lap
+        elif gap is not None and pole is not None:
+            best_times[name] = pole + gap
+    return qualifying_rows(best_times), unmatched
+
+
 def grid_hold_frame_path(folder, hold):
     """Where the frame held under the grid is saved (named by its time, so a new replay start grabs a new one)."""
     return os.path.join(folder, DEBUG_DIR, f"grid_hold_frame_{hold:.2f}s.png")
@@ -322,6 +511,7 @@ class RaceRecording:
         self.last_at = 0
         update_race(self.folder, sim=sim, track=track, started_at=self.started.isoformat(timespec="seconds"),
                     status="recording")
+        attach_pending_qualifying(self.folder, sim, track)
         emit_status(state="recording", sim=sim, track=track, folder=self.folder)
 
     def write(self, line, seconds):

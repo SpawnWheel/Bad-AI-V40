@@ -293,6 +293,7 @@ class AMS2EventLogger:
         self.shm = None
         self.data = None
         self.recording = None # The race being logged (practice and qualifying are not recorded)
+        self.quali = None # Best laps while in qualifying, for the starting grid of the race that follows
         self.track_header = [] # (category, message) describing the loaded track, repeated at the top of each race log
         self.recorder = None # Live timing for the timing tower graphic (the log only has 4-minute standings)
         self.stop_event = threading.Event()
@@ -434,11 +435,35 @@ class AMS2EventLogger:
             print(f"Could not connect to AMS2: {e}")
             return False
 
+    def track_name(self):
+        return f"{self.decode(self.data.mTrackLocation)} - {self.decode(self.data.mTrackVariation)}".strip(" -") or "AMS2"
+
+    def begin_quali(self):
+        """A qualifying session started: keep every driver's best lap (racefiles.QualifyingWatch)."""
+        self.end_quali()
+        self.quali = racefiles.QualifyingWatch("AMS2", self.track_name())
+
+    def end_quali(self):
+        if self.quali:
+            self.quali.close()
+            self.quali = None
+
+    def note_quali_laps(self):
+        d = self.data
+        laps = []
+        for i in range(min(d.mNumParticipants, STORED_PARTICIPANTS_MAX)):
+            p = d.mParticipantInfo[i]
+            if not p.mIsActive:
+                continue
+            name = self.decode(p.mName)
+            if name and not self.is_safety_car(name, self.decode(d.mCarNames[i]), self.decode(d.mCarClassNames[i])):
+                laps.append((name, d.mFastestLapTimes[i]))
+        self.quali.update(laps)
+
     def begin_race(self):
         """A race session started: record it into its own race folder."""
         self.end_race()
-        track = f"{self.decode(self.data.mTrackLocation)} - {self.decode(self.data.mTrackVariation)}".strip(" -")
-        self.recording = racefiles.RaceRecording("AMS2", track or "AMS2")
+        self.recording = racefiles.RaceRecording("AMS2", self.track_name())
         for category, message in self.track_header:
             self.recording.write(f"{datetime.timedelta(seconds=0)} - [{category}] {message}", 0)
         try:
@@ -640,10 +665,13 @@ class AMS2EventLogger:
             self.reset_session_clock()
             sim_now = self.get_session_time()
             session_name = SESSION_STATES.get(self.data.mSessionState, "Unknown")
+            self.end_quali()
             if self.data.mSessionState == 5:
                 self.begin_race()
             else:
                 self.end_race()
+                if self.data.mSessionState == 3:
+                    self.begin_quali()
                 racefiles.emit_status(state="waiting", session=session_name)
             self.log("SESSION", "Race restarted." if restarted else f"Session Changed: We are now in {session_name}.",
                      sim_time=sim_now)
@@ -676,6 +704,9 @@ class AMS2EventLogger:
             self.fastest_lap = None
             self.fastest_lap_announced = False
             self.opening_lap_best.clear()
+
+        if self.quali and self.data.mSessionState == 3:
+            self.note_quali_laps()
 
         # Phase Updates
         if self.data.mPitMode != self.last_pit_mode:
@@ -1382,6 +1413,7 @@ class AMS2EventLogger:
         except KeyboardInterrupt:
             self.log("SYSTEM", "Logging stopped by user.")
         finally:
+            self.end_quali()
             self.end_race()
 
 if __name__ == "__main__":

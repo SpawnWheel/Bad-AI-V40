@@ -95,6 +95,7 @@ class OverlayRenderer:
         self._strips = {}
         # Starting grid intro (video times of the grid event, green flag and replay start), or None
         self.intro = gcfg.racefiles.grid_intro_window(project_path) if project_path else None
+        self.quali = gcfg.racefiles.qualifying_times(project_path) if project_path else {}
         # The held replay frame behind the grid (the export grabs it; grabbed here for previews)
         self.grid_backdrop = None
         if self.intro:
@@ -722,7 +723,7 @@ class OverlayRenderer:
                 frame.alpha_composite(band)
                 continue
             if it['lane'] == 'full':
-                scene = self.tpl.starting_grid(self.size)
+                scene = self.tpl.starting_grid(self.size, self.quali)
                 frame.alpha_composite(scene.frame(t - it['time'], it['duration'], self.grid_backdrop, GRID_ANIM_AT))
                 continue
             built = self._card(it, t)

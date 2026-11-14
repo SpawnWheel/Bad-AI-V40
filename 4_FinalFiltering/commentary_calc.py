@@ -92,7 +92,10 @@ def driver_details(project_path):
     return out
 
 
-def grid_text(grid_list, details):
+def grid_text(grid_list, details, quali=None):
+    """The grid for the commentators, with each driver's details and qualifying lap (pole's time, then gaps)."""
+    quali = quali or {}
+    pole = min(quali.values()) if quali else None
     entries = []
     for part in grid_list.split('|'):
         m = GRID_ENTRY_RE.match(part.strip())
@@ -100,7 +103,12 @@ def grid_text(grid_list, details):
             continue
         pos, name = m.group(1), m.group(2).strip()
         extra = details.get(name)
-        entries.append(f"P{pos}: {name} ({extra})" if extra else f"P{pos}: {name}")
+        entry = f"P{pos}: {name} ({extra})" if extra else f"P{pos}: {name}"
+        if name in quali:
+            lap = quali[name]
+            entry += (f", qualified {racefiles.format_lap_time(lap)}" if abs(lap - pole) < 1e-6
+                      else f", qualified {racefiles.format_lap_time(lap)} (+{lap - pole:.3f})")
+        entries.append(entry)
     return ' | '.join(entries)
 
 
@@ -132,7 +140,10 @@ def add_grid_intro(parsed_data, project_path):
     found = GRID_LIST_RE.search(line)
     grid = ''
     if found:
-        grid = grid_text(found.group(1), driver_details(project_path))
+        quali = racefiles.qualifying_times(project_path)
+        if quali:
+            print(f"Starting grid: qualifying times for {len(quali)} drivers.")
+        grid = grid_text(found.group(1), driver_details(project_path), quali)
         parsed_data[gi] = dict(parsed_data[gi], original_text=(line[:found.start()] + line[found.end():]).rstrip())
     text = (f"{start:%H:%M:%S} - {racefiles.GRID_TAG} Before the start: the starting grid fills the screen while "
             "the cars wait on the grid. Welcome the viewers to the race, set the scene and talk through the front of "

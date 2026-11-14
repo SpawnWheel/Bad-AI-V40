@@ -188,6 +188,7 @@ class RaceScreen(tk.Frame):
             self._notes_editors(pad)
         if stage["id"] == "commentary":
             self._grid_intro_card(pad).pack(fill="x", pady=5)
+            self._qualifying_card(pad).pack(fill="x", pady=5)
         for sid in stage["steps"]:
             self._step_card(pad, sid).pack(fill="x", pady=5)
             if sid == "camera":
@@ -384,6 +385,90 @@ class RaceScreen(tk.Frame):
                    "Changing the music or the replay start only needs a new export.",
                 size=8, colour=t.DIM, wraplength=640).pack(anchor="w", pady=(4, 0))
         return c
+
+    # ------------------------------------------------------------------ qualifying times
+
+    def _qualifying_card(self, parent):
+        c = t.card(parent, padx=18, pady=14)
+        head = tk.Frame(c, bg=t.CARD)
+        head.pack(fill="x")
+        t.label(head, "Qualifying times", size=11, weight="bold").pack(side="left")
+        t.label(head, "  ·  optional", size=9, colour=t.DIM).pack(side="left")
+        data = racefiles.read_qualifying(self.folder)
+        if data:
+            rows = data["drivers"]
+            pole = rows[0]["time"]
+            src = "Saved by the recorder from qualifying" if data.get("source") == "recorded" else "Pasted in"
+
+            def shown(r):
+                return racefiles.format_lap_time(r["time"]) if r["pos"] == 1 else f"+{r['time'] - pole:.3f}"
+            listing = "   ".join(f"{r['pos']}. {r['name']} {shown(r)}" for r in rows)
+            t.label(c, f"{src}: {len(rows)} drivers.", size=9, colour=t.SUCCESS).pack(anchor="w", pady=(6, 2))
+            t.label(c, listing, size=9, colour=t.MUTED, wraplength=700, justify="left").pack(anchor="w")
+        else:
+            t.label(c, "None yet, so the starting grid shows no times. Race with the recorder on during qualifying "
+                       "and the race after it picks them up, or paste the results below.",
+                    size=9, colour=t.MUTED, wraplength=640).pack(anchor="w", pady=(6, 0))
+        t.label(c, "Paste the qualifying results (from the results screen, the league site or a spreadsheet): one "
+                   "driver a line with their lap time, like 1:42.315, or gap, like +0.214. Pasted times replace "
+                   "the recorded ones.", size=8, colour=t.DIM, wraplength=640).pack(anchor="w", pady=(10, 4))
+        box = tk.Text(c, height=5, bg=t.INPUT, fg=t.TEXT, relief="flat", bd=0, font=(t.FONT, 10), wrap="none",
+                      padx=10, pady=8, insertbackground=t.TEXT, highlightthickness=1, highlightbackground=t.BORDER,
+                      highlightcolor=t.ACCENT)
+        box.pack(fill="x")
+        row = tk.Frame(c, bg=t.CARD)
+        row.pack(fill="x", pady=(8, 0))
+        result = t.label(row, getattr(self, "_quali_note", ""), size=9, colour=t.DIM, wraplength=480, justify="left")
+        self._quali_note = ""
+        t.button(row, "Read pasted results", lambda: self.read_pasted_qualifying(box, result),
+                 kind="secondary", size=9).pack(side="left")
+        if data:
+            t.button(row, "Clear times", self.clear_qualifying, kind="ghost", size=9).pack(side="left", padx=(8, 0))
+        result.pack(side="left", padx=(12, 0))
+        return c
+
+    def _driver_aliases(self):
+        """{log name: names the results may use for them} from the race log and the Drivers tab."""
+        names = racefiles.grid_names(self.folder)
+        drivers = {}
+        try:
+            import sys
+            if racefiles.APP_DIR not in sys.path:
+                sys.path.insert(0, racefiles.APP_DIR)
+            from GraphicsOverlay import config as gcfg
+            drivers = gcfg.load_config(self.folder).get("drivers") or {}
+        except Exception:
+            pass
+        return {n: [(drivers.get(n) or {}).get("display"), (drivers.get(n) or {}).get("short")] for n in names}
+
+    def read_pasted_qualifying(self, box, result):
+        text = box.get("1.0", "end").strip()
+        if not text:
+            result.config(text="Paste the results into the box first.", fg=t.WARNING)
+            return
+        aliases = self._driver_aliases()
+        if not aliases:
+            result.config(text="The race log has no starting grid to match the names to.", fg=t.WARNING)
+            return
+        rows, unmatched = racefiles.parse_pasted_qualifying(text, aliases)
+        if not rows:
+            result.config(text="No driver from this race with a lap time was found in the pasted text.", fg=t.WARNING)
+            return
+        racefiles.save_qualifying(self.folder, rows, "pasted")
+        missing = [n for n in aliases if n not in {r["name"] for r in rows}]
+        note = f"Read {len(rows)} of {len(aliases)} drivers."
+        if missing:
+            note += " No time for: " + ", ".join(missing[:6]) + ("…" if len(missing) > 6 else "") + "."
+        if unmatched:
+            note += f" {len(unmatched)} line(s) with a time matched no driver."
+        self._quali_note = note
+        self.app.toast(note)
+        self.refresh(force=True)
+
+    def clear_qualifying(self):
+        racefiles.save_qualifying(self.folder, [], "pasted")
+        self.app.toast("Qualifying times cleared: the grid shows no times.")
+        self.refresh(force=True)
 
     def add_music(self):
         path = filedialog.askopenfilename(parent=self, title="Choose a music track for the starting grid",

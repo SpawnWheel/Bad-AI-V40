@@ -7,7 +7,7 @@ import sys
 import threading
 
 from r3e_shared import (
-    R3ESharedMemory, decode, VERSION_MAJOR, SESSION_NAMES, SESSION_RACE,
+    R3ESharedMemory, decode, VERSION_MAJOR, SESSION_NAMES, SESSION_RACE, SESSION_QUALIFY,
     PHASE_GARAGE, PHASE_GRIDWALK, PHASE_FORMATION, PHASE_COUNTDOWN, PHASE_GREEN, PHASE_CHECKERED,
     FINISH_FINISHED, FINISH_DNF, FINISH_DNS, FINISH_DQ,
     LENGTH_LAPS, LENGTH_TIME_AND_LAP, PENALTY_REASONS,
@@ -169,6 +169,7 @@ class RaceroomEventLogger:
         self.lookup = R3ELookup()
         self.clock = SimClock()
         self.recording = None # The race being logged (practice and qualifying are not recorded)
+        self.quali = None # Best laps while in qualifying, for the starting grid of the race that follows
         self.track_header = [] # (category, message) describing the loaded track, repeated at the top of each race log
         self.recorder = None # Live timing for the leaderboard graphic (replays share no driver data)
         self.stop_event = threading.Event()
@@ -266,6 +267,16 @@ class RaceroomEventLogger:
             self.recorder = LeaderboardRecorder(self.recording.log_path, self.lookup, decode)
         except Exception as e:
             print(f"Live timing for the leaderboard graphic is off ({e}); the race log is unaffected.")
+
+    def begin_quali(self, track_display):
+        """A qualifying session started: keep every driver's best lap (racefiles.QualifyingWatch)."""
+        self.end_quali()
+        self.quali = racefiles.QualifyingWatch("RaceRoom", track_display)
+
+    def end_quali(self):
+        if self.quali:
+            self.quali.close()
+            self.quali = None
 
     def end_race(self):
         if self.recorder:
@@ -377,10 +388,13 @@ class RaceroomEventLogger:
                 sim_now = 0.0
             self.last_session_key = session_key
             session_name = SESSION_NAMES.get(header.session_type, "Unknown")
+            self.end_quali()
             if header.session_type == SESSION_RACE:
                 self.begin_race(f"{track_name} - {layout_name}".strip(" -") or "RaceRoom")
             else:
                 self.end_race()
+                if header.session_type == SESSION_QUALIFY:
+                    self.begin_quali(f"{track_name} - {layout_name}".strip(" -") or "RaceRoom")
                 racefiles.emit_status(state="waiting", session=session_name)
             self.log("SESSION", f"Session Changed: We are now in {session_name}.")
             self.last_phase = None
@@ -392,6 +406,10 @@ class RaceroomEventLogger:
             self.reset_driver_state()
 
         is_race = header.session_type == SESSION_RACE
+        if self.quali and header.session_type == SESSION_QUALIFY:
+            # The best lap is the last of the best-lap sector times (they add up), -1 without a lap
+            self.quali.update((decode(d.driver_info.name), d.sector_time_best_self[2])
+                              for d in raw_drivers if d.place > 0)
 
         # Replay rewound: most cars' lap counts went backwards, so forget per-driver history
         went_back = sum(1 for d in drivers if d["laps"] < self.last_laps_completed.get(d["name"], d["laps"]))
@@ -855,6 +873,7 @@ class RaceroomEventLogger:
         except KeyboardInterrupt:
             self.log("SYSTEM", "Logging stopped by user.")
         finally:
+            self.end_quali()
             self.end_race()
             self.shm.close()
 

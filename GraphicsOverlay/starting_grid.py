@@ -12,6 +12,7 @@ import os
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from . import config as gcfg
+from racefiles import format_lap_time
 from .drawing import (cover_image, ease_in, ellipsize, fit_font, fit_image, font, load_image, rgba, text_vcenter,
                       text_w, wave_cloth)
 
@@ -81,8 +82,11 @@ def wipe(img, p, skew=0):
 
 
 class StartingGrid:
-    def __init__(self, tpl, size):
+    def __init__(self, tpl, size, quali=None):
+        """quali: {driver: qualifying lap seconds} (racefiles.qualifying_times); without any, no times show."""
         self.tpl = tpl
+        self.quali = quali or {}
+        self.pole = min(self.quali.values()) if self.quali else None
         self.th = tpl.th
         self.W, self.H = size
         self.grid = list(tpl.race.grid) or list(tpl.race.drivers)
@@ -275,18 +279,34 @@ class StartingGrid:
             content.alpha_composite(logo, (int(x + (lw_max - logo.width) / 2), int((h - logo.height) / 2)))
             x += lw_max + 20
         display = (m.get('display') or name).upper()
+        # Qualifying: pole's lap time (in the second accent), everyone else their gap; nothing without a time
+        lap = self.quali.get(name)
+        lap_img = None
+        if lap is not None:
+            is_pole = abs(lap - self.pole) < 1e-6
+            label = format_lap_time(lap) if is_pole else f"+{lap - self.pole:.3f}"
+            f_lap = font(min(30, int(h * 0.27)), 'bold_cond')
+            lap_img = Image.new('RGBA', (int(text_w(f_lap, label)) + 6, int(h * 0.4)), (0, 0, 0, 0))
+            text_vcenter(lap_img, 0, lap_img.height / 2, label, f_lap, th.accent2 if is_pole else th.text)
+        # The same right edge on every card (clear of the widest car), so the times line up down the grid
+        lap_right = w - s - 18 - int(h * 2.9 * 0.70)
+        meta_right = min(right, lap_right - lap_img.width - 18) if lap_img is not None else right
         if h >= 80:
             f = fit_font(display, right - x, min(46, int(h * 0.36)), 'bold')
             sh = Image.new('RGBA', content.size, (0, 0, 0, 0))
             ImageDraw.Draw(sh).text((x + 2, int(h * 0.13) + 3), display, font=f, fill=(0, 0, 0, 160))
             content.alpha_composite(sh.filter(ImageFilter.GaussianBlur(3)))
             ImageDraw.Draw(content).text((x, int(h * 0.13)), display, font=f, fill=th.text)
-            tpl.meta_row(content, x, int(h * 0.73), name, right - x, show_flag=False)
+            tpl.meta_row(content, x, int(h * 0.73), name, meta_right - x, show_flag=False)
+            if lap_img is not None:
+                content.alpha_composite(lap_img, (int(lap_right - lap_img.width), int(h * 0.73 - lap_img.height / 2)))
         else:
             f = fit_font(display, (right - x) * 0.55, int(h * 0.42), 'bold')
             text_vcenter(content, x, h / 2, display, f, th.text)
             nw = text_w(f, display) + 16
-            tpl.meta_row(content, int(x + nw), h / 2, name, int(right - x - nw), show_flag=False)
+            tpl.meta_row(content, int(x + nw), h / 2, name, int(meta_right - x - nw), show_flag=False)
+            if lap_img is not None:
+                content.alpha_composite(lap_img, (int(lap_right - lap_img.width), int(h / 2 - lap_img.height / 2)))
 
         # The car, grounded with a soft shadow, standing out of the top of the bar (pt above it)
         pt = int(h * 0.3)

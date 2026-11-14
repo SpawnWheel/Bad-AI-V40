@@ -199,6 +199,9 @@ def step_status(race_folder, step_id):
             return "outdated", f"{INPUT_LABELS.get(newer[0], newer[0]).capitalize()} changed since this ran"
         if step_id == "timing" and not missing and grid_intro_changed(race_folder):
             return "outdated", "The starting grid setting changed since this ran"
+        if (step_id == "timing" and not missing and racefiles.grid_intro_settings(race_folder)["enabled"]
+                and (output_time(race_file(race_folder, "qualifying")) or 0) > made + 1):
+            return "outdated", "The qualifying times changed since this ran"
         return "done", ""
     if missing:
         return "waiting", "Needs " + " and ".join(INPUT_LABELS.get(k, k) for k in missing)

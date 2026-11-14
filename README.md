@@ -76,7 +76,7 @@ The app has three screens, shown along the top:
 
 What gets recorded:
 
-- **Only race sessions.** Practice and qualifying are skipped. Recording starts by itself when a race session begins.
+- **Only race sessions.** Practice and qualifying aren't recorded as races; recording starts by itself when a race session begins. During qualifying the recorder only keeps every driver's best lap, and the next race on the same track (within 6 hours) takes them for its starting grid.
 - **Only races that ran at least 5 minutes** from the green flag. Restarts, quick tests and races you quit early are thrown away.
 - Every race gets its own folder, named after the date, time, track and car, e.g. `Races\2026-10-27 12.16 Circuit Zolder - Grand Prix - Super Touring`.
 
@@ -126,6 +126,7 @@ On **Write the commentary**, tick **Starting grid before the start** and the vid
 - The grid shows each car's position, name, number, flag, team, logo and car, over the blurred race frame. The car comes from `Graphics\CarPreviews`: the Drivers tab car image when it is a car preview, else the file named after the driver, preferring one named after this race's car (`Thommo_Mini.dds` in a Mini race). The logo comes from the Drivers tab **Logo** (or a logo set as the car image).
 - Nothing after the start moves: the intro uses the time before the green flag that was cut away before. Switching it on or off, or changing the length, marks **Work out how long each line can be** out of date, so run the commentary, voices and export again. Changing the music or the replay start only needs a new export.
 - The recording has to start at least that long before the green flag; if it doesn't, the intro is shortened to fit.
+- **Qualifying times:** pole's lap time and everyone else's gap show on the grid, and the commentators get them too. They come from the recorder (race with it on during qualifying) or from the **Qualifying times** box under the starting grid settings: paste the results from the results screen, the league site or a spreadsheet, one driver a line with a lap time (`1:42.315`) or gap (`+0.214`), and press **Read pasted results**. Pasted times replace recorded ones. A driver without a time (or a race without any) simply shows none. AMS2 replays carry no qualifying, so paste the results for races logged from a replay.
 
 How the step badges work:
 
@@ -143,6 +144,7 @@ Each race is one folder in `Races\`, and every file has the same name in every r
 | File | Made by |
 | --- | --- |
 | `race.json` | The app: sim, track, date, length, drivers, chosen video |
+| `00_qualifying.json` | Qualifying times: the recorder, or pasted on the commentary step |
 | `race_notes.txt`, `camera_notes.txt` | You (Race notes step) |
 | `01_race_log.txt` | The race recorder |
 | `01_race_log_timing.jsonl` | The race recorder (live timing for the graphics) |
