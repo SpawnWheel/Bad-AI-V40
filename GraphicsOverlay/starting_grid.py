@@ -317,8 +317,8 @@ class StartingGrid:
         return {'bar': bar, 'content': content, 'car': car_layer, 'mask': mask, 'pt': pt, 'skew': s}
 
     def lap_tag(self, lap, h):
-        """A qualifying time on a slanted timing tag, the digits leaning forward like motorsport timing graphics:
-        pole's lap time in black on the second accent, everyone else's gap in white on dark glass."""
+        """A qualifying time, the digits leaning forward like motorsport timing graphics: pole's lap time in black
+        on a slanted tag in the second accent, everyone else's gap in white on its own (no box)."""
         th = self.th
         is_pole = abs(lap - self.pole) < 1e-6
         label = format_lap_time(lap) if is_pole else f"+{lap - self.pole:.3f}"
@@ -332,7 +332,16 @@ class StartingGrid:
         text_vcenter(text, 4, th_ / 2 + 1, label, f, fg)
         shift = int(lean * th_)
         text = text.transform((text.width + shift, th_), Image.AFFINE, (1, lean, -shift, 0, 1, 0), Image.BICUBIC)
-        # The tag: a parallelogram at the cards' slant, with a bright edge leading it
+        if not is_pole:
+            # Gaps: the digits on their own, a soft shadow keeping them clear of the flag behind
+            out = Image.new('RGBA', (text.width + 12, text.height + 12), (0, 0, 0, 0))
+            shadow = Image.new('RGBA', text.size, (0, 0, 0, 255))
+            shadow.putalpha(text.getchannel('A').point(lambda v: int(v * 0.85)))
+            out.alpha_composite(shadow, (8, 8))
+            out = out.filter(ImageFilter.GaussianBlur(4))
+            out.alpha_composite(text, (6, 6))
+            return out
+        # Pole: on a tag at the cards' slant, with a bright edge leading it
         tag_h = int(h * 0.5)
         slant = int(tag_h * SKEW)
         pad = 14
@@ -342,11 +351,10 @@ class StartingGrid:
         ImageDraw.Draw(m).polygon([(slant * 4, 0), (tag_w * 4, 0), ((tag_w - slant) * 4, tag_h * 4), (0, tag_h * 4)],
                                   fill=255)
         m = m.resize(tag.size, Image.LANCZOS)
-        fill = Image.new('RGBA', tag.size, th.accent2[:3] + (255,) if is_pole else (6, 8, 13, 225))
+        fill = Image.new('RGBA', tag.size, th.accent2[:3] + (255,))
         fill.putalpha(ImageChops.multiply(fill.getchannel('A'), m))
         tag.alpha_composite(fill)
-        edge = th.text[:3] + (230,) if is_pole else th.accent2[:3] + (255,)
-        ImageDraw.Draw(tag).polygon([(slant, 0), (slant + 5, 0), (5, tag_h), (0, tag_h)], fill=edge)
+        ImageDraw.Draw(tag).polygon([(slant, 0), (slant + 5, 0), (5, tag_h), (0, tag_h)], fill=th.text[:3] + (230,))
         tag.alpha_composite(text, (int(slant / 2 + pad), int((tag_h - th_) / 2)))
         return tag
 
