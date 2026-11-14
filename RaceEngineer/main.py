@@ -148,6 +148,7 @@ class RaceEngineerApp:
             request_timeout_sec=float(tts_cfg.get("request_timeout_sec", 20)),
             stream_first_audio_timeout_sec=float((self.config.get("streaming", {}) or {}).get("first_audio_timeout_sec", 6)),
             stream_stall_timeout_sec=float((self.config.get("streaming", {}) or {}).get("stall_timeout_sec", 4)),
+            api_version=str(tts_cfg.get("api_version", "v1beta") or ""),
         )
         # Daily voice quota (requests/day, shared by every session of the day)
         self.tts_budget = DailyRequestBudget(daily_limit=int(tts_cfg.get("daily_request_budget", 200)))

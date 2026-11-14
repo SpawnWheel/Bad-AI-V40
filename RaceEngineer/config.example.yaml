@@ -21,6 +21,8 @@ tts:
   fallback_models: [gemini-3.8-flash-lite-tts] # used for the rest of the session if the main model hits quota
   legacy_fallback_model: gemini-3.1-flash-tts-preview  # last resort; set to "" to disable
   radio_context: true                          # tell the voice actor he's on pit-to-car team radio
+  api_version: v1beta          # API version the 3.8 voice models are served on (google-genai 3.3 defaults
+  #                              to another one and the models come back "not found"); "" = SDK default
   # Daily voice quota: every TTS request is counted in data/tts_usage.json (resets at midnight Pacific,
   # like Google's quota). Practice, quali and every race of the day share it.
   daily_request_budget: 200

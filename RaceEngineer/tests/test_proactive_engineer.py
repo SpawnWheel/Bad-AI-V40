@@ -59,6 +59,32 @@ class TestDailyBudget(unittest.TestCase):
         self.assertEqual(tts.budget.used, 2)
 
 
+class TestTtsApiVersion(unittest.TestCase):
+    def test_voice_requests_are_pinned_to_v1beta(self):
+        from voice.tts import GeminiTTS
+        tts = GeminiTTS(api_key=None)
+        tts.client = mock.MagicMock()
+        tts._create_interaction({"model": "gemini-3.8-flash-tts"})
+        self.assertEqual(tts.client.interactions.create.call_args.kwargs["api_version"], "v1beta")
+
+    def test_older_sdk_without_the_argument_still_works(self):
+        from voice.tts import GeminiTTS
+        calls = []
+
+        def create(**kw):
+            if "api_version" in kw:
+                raise TypeError("create() got an unexpected keyword argument 'api_version'")
+            calls.append(kw)
+            return "ok"
+
+        tts = GeminiTTS(api_key=None)
+        tts.client = SimpleNamespace(interactions=SimpleNamespace(create=create))
+        self.assertEqual(tts._create_interaction({"model": "m"}), "ok")
+        self.assertEqual(tts._create_interaction({"model": "m"}), "ok")   # remembered: no second TypeError
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(tts._api_version_supported)
+
+
 class TestRaceRadar(unittest.TestCase):
     def run_laps(self, radar, gaps, position=5, names=("Ahead Driver", "Behind Driver")):
         for i, (a, b) in enumerate(gaps, start=10):

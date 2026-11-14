@@ -103,6 +103,7 @@ class GeminiTTS:
         request_timeout_sec: float = 20.0,
         stream_first_audio_timeout_sec: float = 6.0,
         stream_stall_timeout_sec: float = 4.0,
+        api_version: str = "v1beta",
     ):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.persona = persona
@@ -146,6 +147,9 @@ class GeminiTTS:
         self.client: Optional[genai.Client] = None
         # Optional voice.budget.DailyRequestBudget: every TTS request is counted against the daily quota
         self.budget = None
+        # API version the voice models live on (see _with_api_version); "" = the SDK's default
+        self.api_version = api_version
+        self._api_version_supported = True
 
         if self.api_key:
             try:
@@ -233,7 +237,7 @@ class GeminiTTS:
                 api_key=self.api_key,
                 http_options=types.HttpOptions(timeout=180_000),  # 180 s
             )
-            created = design_client.voices.create(store=True, voice=voice_req)
+            created = self._with_api_version(design_client.voices.create, store=True, voice=voice_req)
             voice_id = getattr(created, "id", None)
             if not voice_id:
                 logger.error("Voice design returned no id; falling back to prebuilt voice.")
@@ -502,15 +506,31 @@ class GeminiTTS:
             except Exception as e:
                 logger.debug(f"TTS budget record failed: {e}")
 
+    def _with_api_version(self, call, **kwargs):
+        """
+        Pins the API version the 3.8 voice models are served on. google-genai 3.3 routes voice requests
+        to another version by default, where Google answers "Model 'gemini-3.8-flash-tts' not found".
+        Older SDKs don't take the argument: then it's dropped.
+        """
+        if self.api_version and self._api_version_supported:
+            try:
+                return call(api_version=self.api_version, **kwargs)
+            except TypeError as e:
+                if "api_version" not in str(e):
+                    raise
+                self._api_version_supported = False
+                logger.debug("This google-genai version has no api_version argument; using its default.")
+        return call(**kwargs)
+
     def _create_interaction(self, kwargs: dict):
         self._count_request()
         try:
-            return self.client.interactions.create(**kwargs)
+            return self._with_api_version(self.client.interactions.create, **kwargs)
         except Exception as e:
             if self._interactions_store_supported and "store" in str(e).lower():
                 self._interactions_store_supported = False
                 kwargs.pop("store", None)
-                return self.client.interactions.create(**kwargs)
+                return self._with_api_version(self.client.interactions.create, **kwargs)
             raise
 
     def _synthesize_interactions(self, model_id: str, transcript: str, style: str, voice: str) -> Optional[np.ndarray]:

@@ -79,6 +79,21 @@ def _interaction_audio(interaction):
     return None
 
 
+# The 3.8 voice models are served on v1beta. google-genai 3.3 routes these calls to another API version
+# by default, where Google answers "Model 'gemini-3.8-flash-tts' not found".
+API_VERSION = "v1beta"
+
+
+def _call(fn, **kwargs):
+    """Calls fn pinned to API_VERSION; older SDKs without the argument use their default."""
+    try:
+        return fn(api_version=API_VERSION, **kwargs)
+    except TypeError as e:
+        if "api_version" not in str(e):
+            raise
+        return fn(**kwargs)
+
+
 def design_voice(description, gender, accent, language_code, display_name):
     """Creates and stores a Gemini voice from the description. Returns (voice id, its own sample audio or None)."""
     voice = {"type": "prompted", "model": TTS_MODEL, "display_name": display_name[:60], "gender": gender,
@@ -86,7 +101,7 @@ def design_voice(description, gender, accent, language_code, display_name):
     if accent:
         voice["accent"] = accent
     client = _client(180_000)  # keep a reference: a dropped client closes its connection mid-request
-    created = client.voices.create(store=True, voice=voice)
+    created = _call(client.voices.create, store=True, voice=voice)
     voice_id = getattr(created, "id", None)
     if not voice_id:
         raise RuntimeError("Gemini returned no voice id.")
@@ -106,12 +121,12 @@ def speak(voice_id, text, language_code, style="Natural, conversational delivery
         store=False,
     )
     try:
-        interaction = client.interactions.create(**kwargs)
+        interaction = _call(client.interactions.create, **kwargs)
     except Exception as e:
         if "store" not in str(e).lower():
             raise
         kwargs.pop("store")
-        interaction = client.interactions.create(**kwargs)
+        interaction = _call(client.interactions.create, **kwargs)
     audio = _decode(_interaction_audio(interaction))
     if audio is None or not len(audio):
         raise RuntimeError("Gemini returned no audio.")
