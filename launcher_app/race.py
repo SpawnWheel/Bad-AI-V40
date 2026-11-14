@@ -398,7 +398,8 @@ class RaceScreen(tk.Frame):
         if data:
             rows = data["drivers"]
             pole = rows[0]["time"]
-            src = "Saved by the recorder from qualifying" if data.get("source") == "recorded" else "Pasted in"
+            src = {"recorded": "Saved by the recorder from qualifying",
+                   "screenshot": "Read from a screenshot by the AI"}.get(data.get("source"), "Pasted in")
 
             def shown(r):
                 return racefiles.format_lap_time(r["time"]) if r["pos"] == 1 else f"+{r['time'] - pole:.3f}"
@@ -410,7 +411,8 @@ class RaceScreen(tk.Frame):
                        "and the race after it picks them up, or paste the results below.",
                     size=9, colour=t.MUTED, wraplength=640).pack(anchor="w", pady=(6, 0))
         t.label(c, "Paste the qualifying results (from the results screen, the league site or a spreadsheet): one "
-                   "driver a line with their lap time, like 1:42.315, or gap, like +0.214. Pasted times replace "
+                   "driver a line with their lap time, like 1:42.315, or gap, like +0.214. Or paste a screenshot "
+                   "of them (Ctrl+V), or pick one with Read screenshot, and the AI reads it. Pasted times replace "
                    "the recorded ones.", size=8, colour=t.DIM, wraplength=640).pack(anchor="w", pady=(10, 4))
         box = tk.Text(c, height=5, bg=t.INPUT, fg=t.TEXT, relief="flat", bd=0, font=(t.FONT, 10), wrap="none",
                       padx=10, pady=8, insertbackground=t.TEXT, highlightthickness=1, highlightbackground=t.BORDER,
@@ -422,6 +424,9 @@ class RaceScreen(tk.Frame):
         self._quali_note = ""
         t.button(row, "Read pasted results", lambda: self.read_pasted_qualifying(box, result),
                  kind="secondary", size=9).pack(side="left")
+        t.button(row, "Read screenshot…", lambda: self.pick_qualifying_screenshot(result),
+                 kind="secondary", size=9).pack(side="left", padx=(8, 0))
+        box.bind("<<Paste>>", lambda e: self.paste_qualifying_screenshot(result))
         if data:
             t.button(row, "Clear times", self.clear_qualifying, kind="ghost", size=9).pack(side="left", padx=(8, 0))
         result.pack(side="left", padx=(12, 0))
@@ -464,6 +469,81 @@ class RaceScreen(tk.Frame):
         self._quali_note = note
         self.app.toast(note)
         self.refresh(force=True)
+
+    def pick_qualifying_screenshot(self, result):
+        path = filedialog.askopenfilename(parent=self, title="Choose a screenshot of the qualifying results",
+                                          filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            from PIL import Image
+            image = Image.open(path)
+            image.load()
+        except Exception as e:
+            result.config(text=f"Could not open the image: {e}", fg=t.WARNING)
+            return
+        self.read_qualifying_screenshot(image, result)
+
+    def paste_qualifying_screenshot(self, result):
+        """Ctrl+V in the results box: a screenshot on the clipboard goes to the AI; text pastes as usual."""
+        try:
+            from PIL import Image, ImageGrab
+            clip = ImageGrab.grabclipboard()
+        except Exception:
+            return None
+        if isinstance(clip, list):  # files copied in Explorer
+            clip = next((p for p in clip if str(p).lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp"))), None)
+            if clip:
+                try:
+                    clip = Image.open(clip)
+                    clip.load()
+                except Exception:
+                    clip = None
+        if clip is None or not hasattr(clip, "size"):
+            return None
+        self.read_qualifying_screenshot(clip, result)
+        return "break"
+
+    def read_qualifying_screenshot(self, image, result):
+        """Sends a screenshot of the results to Gemini in the background and saves what it reads."""
+        api_key = self.app.settings.get("gemini_api_key")
+        if not api_key:
+            result.config(text="Set the Gemini API key in Settings first.", fg=t.WARNING)
+            return
+        aliases = self._driver_aliases()
+        if not aliases:
+            result.config(text="The race log has no starting grid to match the names to.", fg=t.WARNING)
+            return
+        model = self.app.settings.get("gemini_model") or "gemini-4-hydrogen"
+        result.config(text="Reading the screenshot with the AI…", fg=t.INFO)
+        import threading
+        from . import qualifying_ai
+
+        def work():
+            try:
+                rows, unmatched, _ = qualifying_ai.read_screenshot(image, aliases, api_key, model)
+                self.after(0, lambda: self._screenshot_read(rows, unmatched, aliases, result))
+            except Exception as e:
+                msg = f"The AI couldn't read the screenshot: {e}"
+                self.after(0, lambda: result.winfo_exists() and result.config(text=msg, fg=t.WARNING))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _screenshot_read(self, rows, unmatched, aliases, result):
+        if not rows:
+            if result.winfo_exists():
+                result.config(text="The AI found no lap times for this race's drivers in the screenshot.", fg=t.WARNING)
+            return
+        racefiles.save_qualifying(self.folder, rows, "screenshot")
+        missing = [n for n in aliases if n not in {r["name"] for r in rows}]
+        note = f"Read {len(rows)} of {len(aliases)} drivers from the screenshot. Check them below."
+        if missing:
+            note += " No time for: " + ", ".join(missing[:6]) + ("…" if len(missing) > 6 else "") + "."
+        if unmatched:
+            note += f" {len(unmatched)} driver(s) in it aren't in this race."
+        self._quali_note = note
+        self.app.toast(note)
+        if self.winfo_exists():
+            self.refresh(force=True)
 
     def clear_qualifying(self):
         racefiles.save_qualifying(self.folder, [], "pasted")
