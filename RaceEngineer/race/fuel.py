@@ -85,6 +85,10 @@ class FuelTracker:
 
     def on_lap_started(self, lap_number: int, current_fuel_liters: float, was_pit_lap: bool = False):
         """Called when crossing the start/finish line to begin a new lap."""
+        if self._lap_start_fuel is not None and lap_number <= self._last_recorded_lap:
+            # Same lap reported again (lap counter glitch): keep the lap's starting fuel, or the burn of
+            # this lap would be measured from a point a second or two after the line - i.e. short.
+            return
         if self._lap_start_fuel is not None and lap_number > self._last_recorded_lap:
             completed_lap = self._last_recorded_lap
             consumed = self._lap_start_fuel - current_fuel_liters
@@ -97,6 +101,12 @@ class FuelTracker:
         self._lap_start_fuel = current_fuel_liters
         self._last_recorded_lap = lap_number
         self._lap_dirty = False
+
+    def rebase(self, lap_number: int, current_fuel_liters: float):
+        """The sim's lap counter really went back (not a glitch): continue from here, this lap not measured."""
+        self._last_recorded_lap = lap_number
+        self._lap_start_fuel = current_fuel_liters
+        self._lap_dirty = True
 
     def get_avg_consumption(self) -> float:
         """Running 3-lap average; falls back to the seeded burn, then to 3.5 L/lap."""

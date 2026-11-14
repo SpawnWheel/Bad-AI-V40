@@ -22,6 +22,7 @@ from .race_distance import compute_race_distance, RaceDistance
 from .car_track_stats import car_track_stats
 from .tires import TireTracker, TireStatus
 from .gaps import GapTracker, GapAnalysis
+from .radar import RaceRadar
 from .standings import timing_board
 from .incidents import incident_tracker, IncidentTracker
 from .pit_stop_tracker import pit_stop_tracker, PitStopTracker
@@ -94,6 +95,7 @@ class RaceStateManager:
         self._own_stop_loss = 0.0                 # predicted cost of our planned stop (timed-race distance)
         self.tire_tracker = TireTracker()
         self.gap_tracker = GapTracker()
+        self.radar = RaceRadar()          # measured gap trends to the cars ahead / behind
         self.incident_tracker = IncidentTracker(
             speed_threshold_kmh=incident_speed_threshold_kmh,
             duration_sec=incident_duration_sec,
@@ -132,6 +134,8 @@ class RaceStateManager:
         self.rain_was_active = False
         self._last_rain_density = 0.0
         self._session_needs_reset = True
+        self._lap_backstep_since: Optional[float] = None   # when the sim's lap number went backwards
+        self._lap_backsteps = 0
 
         # Tactical alert tracking flags
         self._10min_warning_done = False
@@ -142,6 +146,7 @@ class RaceStateManager:
         self._2laps_warning_done = False
         self._final_lap_done = False
         self._leader_finished_done = False
+        self._final_lap_spoken = False      # a final-lap call went out (white flag, lap count or the 1-minute clock)
         self._chequered_flag_done = False
         self._box_next_lap_done = False
         self._fuel_warning_done = False
@@ -226,6 +231,8 @@ class RaceStateManager:
         self.in_pit = False
         self.rain_was_active = False
         self._last_rain_density = 0.0
+        self._lap_backstep_since = None
+        self._lap_backsteps = 0
 
         # Reset tactical alert tracking flags
         self._10min_warning_done = False
@@ -236,6 +243,7 @@ class RaceStateManager:
         self._2laps_warning_done = False
         self._final_lap_done = False
         self._leader_finished_done = False
+        self._final_lap_spoken = False      # a final-lap call went out (white flag, lap count or the 1-minute clock)
         self._chequered_flag_done = False
         self._box_next_lap_done = False
         self._fuel_warning_done = False
@@ -267,6 +275,7 @@ class RaceStateManager:
         self.track_model.reset_live()
         self.tire_tracker.reset()
         self.gap_tracker.reset()
+        self.radar.reset()
         self.incident_tracker.reset()
         self.pit_stop_tracker.reset_tracking()
         self._leader_pit_state.clear()
@@ -536,7 +545,9 @@ class RaceStateManager:
                         },
                         cooldown_seconds=3.0
                     )
-            self.current_lap = snapshot.current_lap
+                    if session_group == "RACE" and snapshot.race_state == RaceState.RACESTATE_RACING:
+                        self._lap_end_pit_wall_check(snapshot, completed, was_pit or in_pits_now)
+            self._follow_lap_counter(snapshot)
 
         # 3. Position Change
         # Only in RACE (in Practice and Quali, positions change continuously on the timing screen and create chatter)
@@ -588,6 +599,7 @@ class RaceStateManager:
                     )
             elif snapshot.flag_colour == FlagColour.FLAG_WHITE_FINAL_LAP and not self._final_lap_done:
                 self._final_lap_done = True
+                self._final_lap_spoken = True
                 self._emit_event(
                     EventType.FINAL_LAP,
                     EventPriority.HIGH,
@@ -710,7 +722,8 @@ class RaceStateManager:
                         {"liters": snapshot.fuel_liters, "laps": fuel_status.laps_remaining_fuel, "urgent": True},
                         cooldown_seconds=120.0
                     )
-                else:
+                elif fuel_status.laps_remaining_race >= 1.0:
+                    # (with under a lap to the flag a "fuel is fine" call is just noise)
                     self._emit_event(
                         EventType.FUEL_CRITICAL,
                         EventPriority.HIGH,
@@ -824,16 +837,23 @@ class RaceStateManager:
                         cooldown_seconds=600.0
                     )
 
-                # 1 Minute warning
+                # 1 Minute warning: it landed a lap after the 2-minute call and a lap before the final-lap call,
+                # repeating both. Now it is only spoken when it IS the final-lap call.
                 if not self._1min_warning_done and t_rem <= 60.0 and prev_t > 60.0:
                     self._1min_warning_done = True
-                    self._emit_event(
-                        EventType.TIME_WARNING_1MIN,
-                        EventPriority.HIGH,
-                        f"One minute remaining on the clock. {self._laps_to_go_phrase(snapshot)}",
-                        {"time_remaining_sec": t_rem},
-                        cooldown_seconds=600.0
-                    )
+                    rd_1 = self.get_race_distance(snapshot)
+                    if (rd_1 is not None and rd_1.mode != "NONE" and rd_1.laps_incl_current <= 1 and not rd_1.borderline
+                            and not self._final_lap_done and not self._final_lap_spoken):
+                        self._final_lap_spoken = True
+                        self._emit_event(
+                            EventType.FINAL_LAP,
+                            EventPriority.HIGH,
+                            "Final lap! One minute on the clock and this is the last lap to the chequered flag. Everything on the table.",
+                            {"lap": snapshot.current_lap, "time_remaining_sec": t_rem},
+                            cooldown_seconds=600.0
+                        )
+                        # It's an estimate: if the real final lap turns out to be the next one, let that call through too
+                        self._event_cooldowns.pop(EventType.FINAL_LAP, None)
 
             # B. Lap-based Race Countdown
             elif snapshot.total_laps > 0:
@@ -888,6 +908,7 @@ class RaceStateManager:
 
         if is_final_lap:
             self._final_lap_done = True
+            self._final_lap_spoken = True
             self._emit_event(
                 EventType.FINAL_LAP,
                 EventPriority.HIGH,
@@ -927,7 +948,9 @@ class RaceStateManager:
                     if snapshot.position == 2 and 0.0 < snapshot.split_time_ahead <= 15.0:
                         time_to_line_sec = min(time_to_line_sec, snapshot.split_time_ahead)
 
-                    if time_to_line_sec > 15.0:
+                    if self._final_lap_spoken:
+                        logger.info(f"Leader {leader.name} took the chequered flag; final-lap call already made, staying quiet.")
+                    elif time_to_line_sec > 15.0:
                         surname = leader.name.split()[-1] if leader.name else "Leader"
                         self._emit_event(
                             EventType.LEADER_FINISHED,
@@ -1024,7 +1047,7 @@ class RaceStateManager:
                         EventType.LEADER_PITTED,
                         EventPriority.MEDIUM,
                         f"The race leader P1 ({surname}) has pitted!",
-                        {"driver": leader.name, "position": 1},
+                        {"driver": leader.name, "position": 1, "player_position": snapshot.position},
                         cooldown_seconds=900.0  # 15 minute cooldown
                     )
                 self._leader_pit_state[l_key] = l_in_pit
@@ -1049,6 +1072,9 @@ class RaceStateManager:
                 # If competitor enters or sits in pit stall, clear alerted flag for new stop
                 if curr_p_mode in (1, 2):
                     self._competitor_pit_exit_alerted.discard(p_key)
+                    # A car fighting us (two places either side) just dived into the pits
+                    if prev_p_mode == 0 and p.position != 1 and abs(p.position - snapshot.position) <= 2:
+                        self._emit_rival_pitted(snapshot, p)
 
                 # Check if competitor is driving out of pits or just emerging onto track
                 is_exiting = (curr_p_mode == 3) or (prev_p_mode == 3 and curr_p_mode == 0)
@@ -1093,6 +1119,103 @@ class RaceStateManager:
                         )
 
                 self._competitor_pit_modes[p_key] = curr_p_mode
+
+    # Longer than this, a lower lap number is real (the counter was reset), not a glitch
+    LAP_BACKSTEP_ACCEPT_SEC = 8.0
+
+    def _follow_lap_counter(self, snapshot: TelemetrySnapshot):
+        """
+        Lap numbers only go up. AMS2 sometimes reports the previous lap number again for a second or two
+        right after the line (seen after pit stops). Following it back down made the next tick count the
+        same lap as finished again: lap times were booked twice, and the fuel tracker restarted its
+        "fuel at the start of the lap" reading a second into the lap, so every lap's burn was measured
+        short (2.0 L/lap instead of 2.35 at Sebring) and fuel looked safer than it was. A lower reading
+        is only accepted once it has held for LAP_BACKSTEP_ACCEPT_SEC.
+        """
+        lap = snapshot.current_lap
+        if lap >= self.current_lap or self.current_lap <= 0:
+            self.current_lap = lap
+            self._lap_backstep_since = None
+            return
+        now = time.time()
+        if self._lap_backstep_since is None:
+            self._lap_backstep_since = now
+            self._lap_backsteps += 1
+            if self._lap_backsteps <= 3:
+                logger.info(f"[LAP] Ignoring a backwards lap reading {self.current_lap} -> {lap} "
+                            f"(P{snapshot.position}, {snapshot.player_name or '?'}, {snapshot.current_lap_distance:.0f} m).")
+        elif now - self._lap_backstep_since >= self.LAP_BACKSTEP_ACCEPT_SEC:
+            logger.info(f"[LAP] Lap counter went back to {lap} and stayed there - following it.")
+            self.current_lap = lap
+            self.fuel_tracker.rebase(lap, snapshot.fuel_liters)
+            self._lap_backstep_since = None
+
+    # ------------------------------------------------------------------ lap-end pit-wall update & rival stops
+    def _lap_end_pit_wall_check(self, snapshot: TelemetrySnapshot, completed: int, dirty: bool):
+        """
+        At the line: sample the gaps to the cars around us, then offer the app a lap-end radio update
+        with the reasons (if any) that make one worth it. The app decides whether to actually speak
+        (voice budget, spacing, cap per race); with no reason it may still give a routine update after
+        a long quiet spell.
+        """
+        pace = self.representative_pace(snapshot)
+        self.radar.sample(completed, snapshot, pace, dirty=dirty)
+        if dirty or snapshot.pit_mode.value > 0 or completed < 2 or self._final_lap_done or self._final_lap_spoken:
+            return
+        rd = self.get_race_distance(snapshot)
+        laps_to_go = rd.laps_incl_current if (rd is not None and rd.mode != "NONE") else None
+        if laps_to_go is not None and laps_to_go <= 1:
+            return  # final lap: the final-lap call covers it
+        try:
+            fuel = self._analyze_fuel(snapshot)
+        except Exception as e:
+            logger.debug(f"pit-wall check fuel analysis failed: {e}")
+            fuel = None
+        # What the pit wall wants from the driver now: push / hold / manage / save fuel, with a target lap
+        try:
+            self.radar.update_pace_plan(
+                self.lap_times, laps_to_go,
+                fuel_avg_burn=fuel.avg_per_lap if fuel else 0.0,
+                fuel_target_burn=fuel.target_consumption if fuel else None,
+                needs_pit_stop=bool(fuel and fuel.needs_pit_stop),
+            )
+        except Exception as e:
+            logger.debug(f"pace plan failed: {e}")
+        # The box calls own the radio on the lap before and the lap of a planned stop
+        if fuel is not None and fuel.needs_pit_stop and fuel.pit_window_lap and \
+                snapshot.current_lap in (fuel.pit_window_lap - 1, fuel.pit_window_lap):
+            return
+        reasons = self.radar.candidates(completed, laps_to_go)
+        texts = [r.text for r in reasons]
+        msg = (f"Lap {completed} done, P{snapshot.position}"
+               + (f", {laps_to_go} laps to go including this one" if laps_to_go else "") + ". "
+               + ("Worth telling the driver: " + "; ".join(texts) + "." if texts
+                  else "Nothing specific has changed - routine update after a quiet spell."))
+        urgent = any(r.urgent for r in reasons)
+        self._emit_event(
+            EventType.PIT_WALL_UPDATE,
+            EventPriority.HIGH if urgent else EventPriority.MEDIUM,
+            msg,
+            {"lap": completed, "keys": [r.key for r in reasons], "reasons": texts,
+             "urgent": urgent, "laps_to_go": laps_to_go},
+            cooldown_seconds=3.0,
+        )
+
+    def _emit_rival_pitted(self, snapshot: TelemetrySnapshot, p):
+        rel = p.position - snapshot.position
+        where = {-1: "the car directly ahead", -2: "two places ahead", 1: "the car directly behind", 2: "two places behind"}.get(rel, "")
+        gap = ""
+        if rel == -1 and snapshot.split_time_ahead > 0:
+            gap = f", {snapshot.split_time_ahead:.1f}s up the road"
+        elif rel == 1 and snapshot.split_time_behind > 0:
+            gap = f", {snapshot.split_time_behind:.1f}s behind"
+        self._emit_event(
+            EventType.RIVAL_PITTED,
+            EventPriority.MEDIUM,
+            f"P{p.position} {p.name} ({where}{gap}) has just gone into the pits.",
+            {"driver": p.name, "position": p.position, "relative": rel},
+            cooldown_seconds=45.0,
+        )
 
     # ------------------------------------------------------------------ race distance, fuel & pit calls
     @staticmethod
@@ -1352,6 +1475,10 @@ class RaceStateManager:
         grp = get_session_group(snap.session_state)
         if grp == "RACE":
             ex["race_distance"] = self.get_race_distance(snap)
+            try:
+                ex["radar"] = self.radar.brief(snap)
+            except Exception as e:
+                logger.debug(f"radar brief failed: {e}")
         if grp == "PRACTICE":
             ex["corner_map"] = self.track_model.corner_map_summary()
         L = snap.track_length_m if snap.track_length_m > 100 else 0.0

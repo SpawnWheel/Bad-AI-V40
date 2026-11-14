@@ -24,9 +24,43 @@ from engineer import RaceEngineerBrain, MessageScheduler, build_telemetry_contex
 from engineer.persona import load_persona
 from voice import GeminiTTS, AudioPlayer, PushToTalkManager, TTS_SAMPLE_RATE
 from voice.stream import RadioTransmission, ReplyStreamSink
+from voice.budget import DailyRequestBudget
 
 
 LAUNCHER_SETTINGS_FILE = "config.launcher.json"
+
+# Calls that matter for the race or safety: always spoken (even in silent mode, even on a tight voice budget)
+ESSENTIAL_ALERTS = {
+    EventType.PRACTICE_BRIEFING,
+    EventType.BOX_NEXT_LAP,
+    EventType.BOX_THIS_LAP,
+    EventType.BOX_REMINDER,
+    EventType.PIT_EXIT_PROXIMITY,
+    EventType.FUEL_EMERGENCY,
+    EventType.TIME_WARNING_5MIN,
+    EventType.LAPS_WARNING_5LAPS,
+    EventType.FINAL_LAP,
+    EventType.LEADER_FINISHED,
+    EventType.FLAG_BLACK,
+    EventType.FLAG_CHEQUERED,
+    EventType.COLLISION_DAMAGE,
+    EventType.TIRE_PUNCTURE_RISK,
+    EventType.WEATHER_RAIN_STARTED,
+    EventType.WEATHER_RAIN_INTENSIFIED,
+}
+
+# Nice-to-have calls: spoken in silent mode too, but only while the daily voice budget has room
+OPTIONAL_ALERTS = {
+    EventType.QUALI_LAP_COMPLETED,      # (a new PB is treated as essential)
+    EventType.LEADER_PITTED,            # (only when we're fighting for the lead)
+    EventType.RIVAL_PITTED,
+    EventType.PIT_WALL_UPDATE,
+    EventType.FUEL_CRITICAL,
+    EventType.TIME_WARNING_10MIN,
+    EventType.TIME_WARNING_2MIN,
+    EventType.LAPS_WARNING_2LAPS,
+    EventType.WEATHER_RAIN_STOPPED,
+}
 
 
 def _deep_merge(base: dict, overrides: dict) -> dict:
@@ -67,6 +101,15 @@ class RaceEngineerApp:
         self.speak_only_when_spoken_to = eng_cfg.get("speak_only_when_spoken_to", True)
         self.allow_tactical_alerts = eng_cfg.get("allow_tactical_alerts_when_silent", True)
 
+        # Proactive lap-end updates (cars closing / being caught, pace instructions, fuel saving)
+        self.proactive_updates = bool(eng_cfg.get("proactive_updates", True))
+        self.proactive_max_per_race = int(eng_cfg.get("proactive_max_per_race", 10))
+        self.proactive_min_laps_between = int(eng_cfg.get("proactive_min_laps_between", 2))
+        self.proactive_quiet_update_sec = float(eng_cfg.get("proactive_quiet_update_sec", 420))
+        self._proactive_calls = 0
+        self._last_proactive_lap = -99
+        self._last_radio_time = 0.0
+
         incidents_cfg = self.config.get("incidents", {})
         strategy_cfg = self.config.get("strategy", {})
 
@@ -106,6 +149,10 @@ class RaceEngineerApp:
             stream_first_audio_timeout_sec=float((self.config.get("streaming", {}) or {}).get("first_audio_timeout_sec", 6)),
             stream_stall_timeout_sec=float((self.config.get("streaming", {}) or {}).get("stall_timeout_sec", 4)),
         )
+        # Daily voice quota (requests/day, shared by every session of the day)
+        self.tts_budget = DailyRequestBudget(daily_limit=int(tts_cfg.get("daily_request_budget", 200)))
+        self.tts_budget_reserve = int(tts_cfg.get("reserve_for_driver", 40))
+        self.tts.budget = self.tts_budget
 
         # Streaming: speak while Gemini is still writing / synthesising (config: streaming.*)
         stream_cfg = self.config.get("streaming", {}) or {}
@@ -113,6 +160,8 @@ class RaceEngineerApp:
         self.stream_split_first_sentence = bool(stream_cfg.get("split_first_sentence", True))
         self.stream_min_first_words = int(stream_cfg.get("min_first_sentence_words", 5))
         self.stream_prebuffer_sec = float(stream_cfg.get("prebuffer_ms", 150)) / 1000.0
+        # Speaking the first sentence early costs a second voice request per reply: only while the budget is healthy
+        self.stream_split_until = float(stream_cfg.get("split_first_sentence_until_pct", 50)) / 100.0
 
         self.player = AudioPlayer(
             volume=eng_cfg.get("volume", 1.2),
@@ -276,39 +325,13 @@ class RaceEngineerApp:
             # Purge any queued tactical messages upon chequered flag
             self.scheduler.clear()
 
-        # Tactical alerts bypass silence mode if allowed
-        tactical_alerts = {
-            EventType.PRACTICE_BRIEFING,
-            EventType.QUALI_LAP_COMPLETED,
-            EventType.BOX_NEXT_LAP,
-            EventType.BOX_THIS_LAP,
-            EventType.BOX_REMINDER,
-            EventType.LEADER_PITTED,
-            EventType.LEADER_FINISHED,
-            EventType.PIT_EXIT_PROXIMITY,
-            EventType.FUEL_EMERGENCY,
-            EventType.FUEL_CRITICAL,
-            EventType.TIME_WARNING_10MIN,
-            EventType.TIME_WARNING_5MIN,
-            EventType.TIME_WARNING_2MIN,
-            EventType.TIME_WARNING_1MIN,
-            EventType.LAPS_WARNING_5LAPS,
-            EventType.LAPS_WARNING_2LAPS,
-            EventType.FINAL_LAP,
-            EventType.FLAG_BLACK,
-            EventType.FLAG_CHEQUERED,
-            EventType.COLLISION_DAMAGE,
-            EventType.TIRE_PUNCTURE_RISK,
-            EventType.WEATHER_RAIN_STARTED,
-            EventType.WEATHER_RAIN_INTENSIFIED,
-            EventType.WEATHER_RAIN_STOPPED,
-        }
-
         # If configured to only speak when spoken to, suppress unprompted proactive speech
-        # UNLESS allow_tactical_alerts is true and this is a tactical alert
+        # UNLESS allow_tactical_alerts is true and this is a tactical alert (essential or optional)
         if self.speak_only_when_spoken_to:
-            if not (self.allow_tactical_alerts and event.event_type in tactical_alerts):
+            if not (self.allow_tactical_alerts and event.event_type in (ESSENTIAL_ALERTS | OPTIONAL_ALERTS)):
                 return
+        if not self._should_speak(event):
+            return
 
         context_str = self._get_current_context_string()
 
@@ -342,6 +365,53 @@ class RaceEngineerApp:
 
         threading.Thread(target=process_event, name="EventAI-Worker", daemon=True).start()
 
+    def _should_speak(self, event: RaceEvent) -> bool:
+        """Is this call worth one of today's voice requests? Decided before the LLM is asked."""
+        et = event.event_type
+        d = event.details or {}
+        if et == EventType.QUALI_LAP_COMPLETED and d.get("is_pb"):
+            return True
+        if et == EventType.LEADER_PITTED and int(d.get("player_position", 1) or 1) > 3:
+            logger.info("Leader pitted - not our fight, staying quiet.")
+            return False
+        if et not in OPTIONAL_ALERTS:
+            return True
+        if self.tts_budget.remaining <= self.tts_budget_reserve:
+            logger.info(f"[TTS BUDGET] skipping optional call [{et}] - {self.tts_budget.summary()}, "
+                        f"keeping {self.tts_budget_reserve} for your questions and essential calls.")
+            return False
+        if et == EventType.PIT_WALL_UPDATE:
+            return self._gate_pit_wall_update(event)
+        return True
+
+    def _gate_pit_wall_update(self, event: RaceEvent) -> bool:
+        if not self.proactive_updates:
+            return False
+        d = event.details or {}
+        lap = int(d.get("lap", 0) or 0)
+        keys = list(d.get("keys") or [])
+        if self._proactive_calls >= self.proactive_max_per_race:
+            return False
+        since_radio = time.time() - self._last_radio_time
+        if keys:
+            min_gap = 1 if d.get("urgent") else self.proactive_min_laps_between
+            if lap - self._last_proactive_lap < min_gap or since_radio < 20.0:
+                return False
+        else:
+            # Routine update: only after a long quiet spell on the radio
+            if self.proactive_quiet_update_sec <= 0 or since_radio < self.proactive_quiet_update_sec:
+                return False
+            if lap - self._last_proactive_lap < max(3, self.proactive_min_laps_between):
+                return False
+        self._proactive_calls += 1
+        self._last_proactive_lap = lap
+        try:
+            self.state_manager.radar.mark_announced(keys, lap)
+        except Exception as e:
+            logger.debug(f"radar mark failed: {e}")
+        logger.info(f"Lap-end pit-wall update #{self._proactive_calls} ({', '.join(keys) or 'quiet-spell update'}).")
+        return True
+
     def _handle_session_reset(self, session_group: str):
         """Called by RaceStateManager whenever a new session starts or an existing session restarts."""
         logger.info(f"Session reset triggered for [{session_group}]. Flushing message queue and resetting brain history.")
@@ -353,6 +423,10 @@ class RaceEngineerApp:
         self.brain.reset_session()
         self.brain.set_session_group(session_group)
         self.tts.reset_session()
+        self._proactive_calls = 0
+        self._last_proactive_lap = -99
+        self._last_radio_time = time.time()
+        logger.info(f"[TTS BUDGET] {self.tts_budget.summary()}.")
         self.collector.reset_tyre_cache()
 
         # Dynamic telemetry polling rate based on session type:
@@ -375,6 +449,7 @@ class RaceEngineerApp:
         """Speaks a finished line. Streaming mode starts playback on the first audio chunk."""
         if not text:
             return
+        self._last_radio_time = time.time()
         logger.speech(f"[{(emotion or '').upper()}] {text}")
         if self.streaming_enabled:
             tx = self._new_transmission(label, t_start)
@@ -401,10 +476,12 @@ class RaceEngineerApp:
             self._speak(text, self._resolve_emotion(detected_emotion), delivery, label=label, t_start=t_start)
             return
 
+        self._last_radio_time = time.time()
         tx = self._new_transmission(label, t_start)
+        split = self.stream_split_first_sentence and self.tts_budget.fraction_used < self.stream_split_until
         sink = ReplyStreamSink(
             tx, emotion_resolver=self._resolve_emotion,
-            split_first_sentence=self.stream_split_first_sentence,
+            split_first_sentence=split,
             min_first_sentence_words=self.stream_min_first_words,
         )
         try:
@@ -490,6 +567,7 @@ class RaceEngineerApp:
         print(">>>  AI RACE ENGINEER - AUTOMOBILISTA 2 / RACEROOM (GEMINI HYDROGEN)")
         print(f">>>  ENGINEER: {self.persona.display_name} | {self.gender.capitalize()} {self.accent} | EMOTION: {self.emotion_mode.capitalize()} ({self.persona.expressiveness})")
         print(f">>>  VOICE: {self.tts.primary_model} | mode: {self.persona.voice.mode} | streaming: {'ON' if self.streaming_enabled else 'OFF'}")
+        print(f">>>  VOICE BUDGET: {self.tts_budget.summary()} | lap-end updates: {'ON' if self.proactive_updates else 'OFF'}")
         if self.speak_only_when_spoken_to:
             print(">>>  MODE: SPEAK ONLY WHEN SPOKEN TO (Silent until requested)")
         else:
@@ -558,6 +636,7 @@ class RaceEngineerApp:
         logger.info("Shutting down AI Race Engineer...")
         if self.brain.usage_totals.get("calls"):
             logger.info(f"LLM usage this session: {self.brain._usage_summary()}")
+        logger.info(f"[TTS BUDGET] {self.tts_budget.summary()}.")
         self._running = False
         self.player.interrupt()
         self.ptt.stop()

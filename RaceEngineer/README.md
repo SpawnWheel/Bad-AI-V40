@@ -52,6 +52,29 @@ An intelligent, lightweight race engineer for **Automobilista 2** and **RaceRoom
 - **Real pit-loss model:** drive-through loss (measured against the reference lap) + service time (litres ÷ learned refuel rate). Projections for rivals currently in the pits.
 - Notes no longer leak between different events; tyre pressures are read in the right unit (`telemetry.tyre_pressure_unit`), sector numbers are 1-3.
 
+### Proactive pit wall on a voice budget (14 Nov 2026)
+
+- **Daily voice budget:** every TTS request is counted in `data/tts_usage.json` (resets at midnight Pacific, like Google's
+  quota). Below `tts.reserve_for_driver` requests left, nice-to-have calls stop so your questions and the essential calls
+  (box, damage, rain, final lap) still get through. The early-first-sentence trick costs a second request per reply, so
+  it switches off once `streaming.split_first_sentence_until_pct` of the day is used. The console shows `[TTS BUDGET]`.
+- **Cars around you, measured:** the gap to the car ahead and behind is sampled each lap at the line, so the engineer
+  knows "Martin, 1.9 back, taking four tenths a lap, on you in three laps" instead of guessing — and can't mix up ahead/behind.
+- **Pace plan (delta coaching):** PUSH to defend / PUSH to catch (with a target lap and how far off the last lap was),
+  HOLD THIS PACE, MANAGE when the gaps are safe, or SAVE FUEL when a small saving skips the pit stop.
+- **Lap-end updates (also in silent mode):** a car closing from behind, a car ahead you're catching, breaking away, the
+  pace instruction changing, a rival within two places pitting, or a short update after 7 quiet minutes. Spaced at least
+  2 laps apart, max 10 per race (`engineer.proactive_*`).
+- **Fewer wasted calls:** no "leader pitted" unless you're in the top 3, no separate 1-minute call (it only speaks when it
+  is the final lap), no "leader finished" after the final-lap call, no "fuel light, you're fine" with under a lap to go.
+- SitReps lead with position, laps to go and the fight around you, then only what changed.
+- **Fuel accuracy fix:** AMS2 sometimes reports the previous lap number again for a second or two after the line (seen
+  after pit stops). That booked laps twice and restarted each lap's fuel reading late, so burn looked ~10% lower than it
+  was (2.0 instead of 2.35 L/lap at Sebring). Lap numbers now only go forward, the fuel tracker keeps the lap's real
+  starting reading, and saved burns from earlier races ignore the short-measured laps.
+- **Timed-race extra lap:** fuel is planned for one more lap whenever the leader could plausibly reach the line before
+  the clock runs out. The window allows ~1.2% leader pace drift over the time left (wider early, a few metres at the end).
+
 ---
 
 ## Getting Started

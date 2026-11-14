@@ -144,6 +144,8 @@ class GeminiTTS:
         self._quota_exceeded_for_session = False
         self._current_model = self.primary_model
         self.client: Optional[genai.Client] = None
+        # Optional voice.budget.DailyRequestBudget: every TTS request is counted against the daily quota
+        self.budget = None
 
         if self.api_key:
             try:
@@ -493,7 +495,15 @@ class GeminiTTS:
             kwargs["store"] = False
         return kwargs
 
+    def _count_request(self):
+        if self.budget is not None:
+            try:
+                self.budget.record()
+            except Exception as e:
+                logger.debug(f"TTS budget record failed: {e}")
+
     def _create_interaction(self, kwargs: dict):
+        self._count_request()
         try:
             return self.client.interactions.create(**kwargs)
         except Exception as e:
@@ -518,6 +528,7 @@ class GeminiTTS:
                 )
             ),
         )
+        self._count_request()
         response = self.client.models.generate_content(model=model_id, contents=prompt, config=config)
         if response.candidates and response.candidates[0].content.parts:
             for part in response.candidates[0].content.parts:

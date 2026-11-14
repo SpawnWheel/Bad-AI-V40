@@ -21,6 +21,11 @@ tts:
   fallback_models: [gemini-3.8-flash-lite-tts] # used for the rest of the session if the main model hits quota
   legacy_fallback_model: gemini-3.1-flash-tts-preview  # last resort; set to "" to disable
   radio_context: true                          # tell the voice actor he's on pit-to-car team radio
+  # Daily voice quota: every TTS request is counted in data/tts_usage.json (resets at midnight Pacific,
+  # like Google's quota). Practice, quali and every race of the day share it.
+  daily_request_budget: 200
+  reserve_for_driver: 40       # when fewer requests than this are left, nice-to-have calls stop so your
+  #                              questions and the essential calls (box, damage, rain, final lap) still get through
 
 streaming:
   # Speak while Gemini is still working: the reply text streams from the thinking model, the voice
@@ -32,6 +37,8 @@ streaming:
   # slightly slower on long SitReps).
   split_first_sentence: true
   min_first_sentence_words: 5  # never split off a tiny fragment like "Copy." on its own
+  split_first_sentence_until_pct: 50  # the early first sentence costs a 2nd voice request per reply;
+  #                                     once this % of the daily budget is used, replies go as one request
   prebuffer_ms: 150            # MINIMUM audio buffered before he starts talking. The player adds more
   #                              automatically when the voice streams slower than real time, so it never stutters.
   first_audio_timeout_sec: 6   # if the voice stream sends nothing this long, fall back (never go silent)
@@ -87,6 +94,13 @@ engineer:
   radio_effect: true
   quiet_zone_braking: true
   notebook_size: 8             # how many "engineer's notebook" facts he keeps (driver feedback, agreed plans)
+  # Lap-end pit-wall updates (also in silent mode, as tactical alerts): a car closing from behind, a car
+  # ahead you're catching, the pace instruction (push / hold / manage / save fuel) changing, or a short
+  # update after a long quiet spell. Skipped automatically when the daily voice budget runs low.
+  proactive_updates: true
+  proactive_max_per_race: 10
+  proactive_min_laps_between: 2
+  proactive_quiet_update_sec: 420   # routine update after this long with nothing said (0 = never)
 
 telemetry:
   sim: auto                    # auto | ams2 | raceroom - auto connects to whichever sim is running

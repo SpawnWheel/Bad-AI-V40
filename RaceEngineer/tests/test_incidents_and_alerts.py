@@ -476,20 +476,23 @@ class TestIncidentsAndTacticalAlerts(unittest.TestCase):
         state_mgr.on_telemetry(snap3)
         self.assertIn(EventType.TIME_WARNING_2MIN, [e.event_type for e in fired_events])
 
-        # 1 minute warning (<= 60s)
+        # 1 minute: no separate "one minute" call any more - it only speaks when the estimate says this IS
+        # the final lap (here: 55 s left at ~91 s/lap, no extra lap), and then it is the final-lap call.
         snap4 = self.make_snapshot(total_laps=0, event_time_remaining_sec=55.0, current_lap=7)
         state_mgr.on_telemetry(snap4)
-        self.assertIn(EventType.TIME_WARNING_1MIN, [e.event_type for e in fired_events])
+        types = [e.event_type for e in fired_events]
+        self.assertNotIn(EventType.TIME_WARNING_1MIN, types)
+        self.assertEqual(types.count(EventType.FINAL_LAP), 1)
 
-        # Clock expires during lap 8 (time drops to -1.0). Final lap should NOT fire yet.
+        # Clock expires during lap 8 (time drops to -1.0): the estimate was wrong, no new call yet.
         snap5 = self.make_snapshot(total_laps=0, event_time_remaining_sec=-1.0, current_lap=8)
         state_mgr.on_telemetry(snap5)
-        self.assertNotIn(EventType.FINAL_LAP, [e.event_type for e in fired_events])
+        self.assertEqual([e.event_type for e in fired_events].count(EventType.FINAL_LAP), 1)
 
-        # Driver crosses line into Lap 9 -> Starts Final Lap
+        # Driver crosses line into Lap 9 -> the real final lap still gets its call
         snap5b = self.make_snapshot(total_laps=0, event_time_remaining_sec=-1.0, current_lap=9)
         state_mgr.on_telemetry(snap5b)
-        self.assertIn(EventType.FINAL_LAP, [e.event_type for e in fired_events])
+        self.assertEqual([e.event_type for e in fired_events].count(EventType.FINAL_LAP), 2)
 
         # Chequered flag when race finishes
         snap6 = self.make_snapshot(total_laps=0, event_time_remaining_sec=-1.0, current_lap=9, race_state=RaceState.RACESTATE_FINISHED)

@@ -382,6 +382,8 @@ def build_telemetry_context(
             lines.append(f"[TRACK POSITION]: {track_pos}")
         elif snapshot.pit_mode.value > 0:
             lines.append("[TRACK POSITION]: IN THE PIT LANE")
+        if extras.get("radar") and snapshot.race_state != RaceState.RACESTATE_NOT_STARTED:
+            lines.append(extras["radar"])
         lines.append(timing_board_table)
         if incidents_summary and "Track clear" not in incidents_summary:
             lines.append(incidents_summary)

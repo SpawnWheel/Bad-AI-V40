@@ -32,6 +32,7 @@ from google.genai import types
 from .prompts import (
     get_system_prompt,
     PROACTIVE_EVENT_PROMPT,
+    PIT_WALL_UPDATE_PROMPT,
     DRIVER_QUESTION_PROMPT,
     DRIVER_AUDIO_DIRECT_PROMPT,
     RACE_UPDATE_PROMPT,
@@ -90,7 +91,7 @@ JSON_MODE_SUFFIX = """
 
 REPLY AS JSON with the fields above plus:
 - intent: the closest category for this call
-- remember: ONLY if something new is worth keeping for later in the session (driver's feedback on the car, a plan you agreed, a recurring problem, a rival to watch). One short line, else "".
+- remember: ONLY if something new is worth keeping for later in the session (driver's feedback on the car, a plan you agreed, a recurring problem, a rival to watch). One short line, else "". Never note live positions or gaps (who is ahead / behind, by how much) — they go stale within a lap and the live data always has them.
 - response: if the driver is only acknowledging you ("copy", "thanks", "roger") and nothing needs answering, you may leave it "" — real engineers don't reply to a "copy"."""
 
 PRACTICE_JSON_SUFFIX = """
@@ -300,7 +301,8 @@ class RaceEngineerBrain:
         """Per-call extras: engineer's notebook + variety/mood guidance (history is sent as turns)."""
         parts = []
         if self.notebook:
-            parts.append("\n[ENGINEER'S NOTEBOOK — things you noted earlier; use when relevant]:")
+            parts.append("\n[ENGINEER'S NOTEBOOK — things you noted earlier; use when relevant. Positions and gaps in old notes "
+                         "may be out of date: the live data wins]:")
             parts.extend(f"  * {n}" for n in self.notebook)
         try:
             parts.append(self.variety.guidance())
@@ -752,10 +754,12 @@ class RaceEngineerBrain:
         """Proactive radio call for a detected race event. Returns (radio_text, emotion, delivery)."""
         fallback_emotion = self.get_event_emotion(event)
         fallback_delivery = self.delivery
+        is_update = event.event_type == EventType.PIT_WALL_UPDATE
         if not self.client:
-            return event.message, fallback_emotion, fallback_delivery
+            return (None if is_update else event.message), fallback_emotion, fallback_delivery
 
-        prompt = PROACTIVE_EVENT_PROMPT.format(
+        template = PIT_WALL_UPDATE_PROMPT if is_update else PROACTIVE_EVENT_PROMPT
+        prompt = template.format(
             event_description=event.message,
             telemetry_context=context_str,
             radio_history=self._prompt_extras(),
@@ -773,9 +777,16 @@ class RaceEngineerBrain:
                 self._log(f"PROACTIVE EVENT ({event.event_type})", event.message, context_str, final_prompt, reply)
                 self._remember_reply(reply.response, emotion)
                 return reply.response, emotion, delivery
+            if is_update:
+                # Nothing worth saying (or no reply): stay quiet rather than read out the pit wall's notes
+                if reply.ok:
+                    logger.info("[ENGINEER] lap-end update: nothing worth the radio, staying quiet.")
+                return None, fallback_emotion, fallback_delivery
             return event.message, fallback_emotion, fallback_delivery
         except Exception as e:
             logger.error(f"Gemini API error during event advice generation: {e}")
+            if is_update:
+                return None, fallback_emotion, fallback_delivery
             return event.message, fallback_emotion, fallback_delivery
 
     def respond_to_driver_audio(self, wav_bytes: bytes, context_str: str, speaker=None) -> Tuple[Optional[str], str, str]:

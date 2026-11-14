@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 EPS = 1e-4
+PACE_UNCERTAINTY = 0.012   # how far the leader's average lap time may drift from our projection
 LEADER_FINISHED_STATE = 3  # RaceState.RACESTATE_FINISHED (participant race_state)
 
 
@@ -135,7 +136,11 @@ def compute_race_distance(
             leader_x = x
             borderline = abs(x - round(x)) < 0.08
             boundary = math.ceil(x - EPS)
-            borderline_long = (boundary - x) < borderline_long_laps
+            # The projection is only as good as the leader's pace over the time left: a leader 1% quicker
+            # over 20 laps arrives a fifth of a lap earlier. If he could cross the line before the clock
+            # runs out, there is one more lap - plan the fuel for it (the window narrows as the race goes on).
+            pace_uncertainty = PACE_UNCERTAINTY * max(0.0, x - d_l)
+            borderline_long = (boundary - x) < max(borderline_long_laps, pace_uncertainty)
             f_l = float(boundary + extra)
             note = f"clock {t_rem:.0f}s at ~{pace:.1f}s/lap, then finish that lap + {extra} more"
             if l_loss > 0 and not is_leader:

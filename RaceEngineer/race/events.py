@@ -54,7 +54,8 @@ class EventType:
     QUALI_LAP_COMPLETED = "quali_lap_completed"
     LAP_COMPLETED = "lap_completed"
     BATTLE_ENTERED = "battle_entered"
-    RIVAL_PITTED = "rival_pitted"
+    RIVAL_PITTED = "rival_pitted"        # a car within two places of us went into the pits
+    PIT_WALL_UPDATE = "pit_wall_update"  # lap-end update: a car closing / being caught, or a long quiet spell
     LEADER_PITTED = "leader_pitted"
     TIRE_OVERHEAT = "tire_overheat"
     SESSION_CHANGED = "session_changed"
