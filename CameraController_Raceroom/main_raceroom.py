@@ -29,14 +29,26 @@ pydirectinput.FAILSAFE = False
 BAR_Y = 1018
 DRIVER_AHEAD_X = 512 # ">" next to the driver name
 DRIVER_BEHIND_X = 271 # "<"
+# The driver dropdown lists every entrant, retired ones included, alphabetically by surname, one row per
+# 30 px growing upwards from the bar (the bottom row at 977). Picking a row cuts straight to that car, where
+# the arrows show every car in between for a frame. Picking a retired car shows the player's car instead.
+DRIVER_MENU_X = 439
+DRIVER_ITEM_X = 369
+MENU_BOTTOM_Y = 977
+MENU_ROW = 30
+DRIVER_LIST_MAX = 31 # Rows that fit above the bar; a bigger field falls back to the arrows
+DRIVER_ARROW_PROBE = (429, 1008, 449, 1028)
 CAMERA_MENU_X = 736 # The camera dropdown's arrow button
 CAMERA_ITEM_X = 640
 PLAY_BUTTON_X = 960
 # The bar's rewind buttons, compared with a saved picture of them to tell whether the bar is showing
-# (a plain darkness check is fooled by dark cockpit views). Measured: 0-2 when shown, 23+ when hidden.
+# (a plain darkness check is fooled by dark cockpit views). Only the white icon shapes are compared: the bar
+# is see-through, so a bright scene behind it changes the rest. Measured: 0% of pixels differ when shown,
+# 3.1% (every icon pixel missing) when hidden.
 BAR_BUTTONS_BOX = (840, 998, 936, 1038)
 BAR_BUTTONS_IMAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "replay_bar_buttons.png")
-BAR_MATCH_LIMIT = 10
+BAR_ICON_WHITE = 150
+BAR_MATCH_LIMIT = 1.0 # Percent of pixels that may differ
 CAMERA_ARROW_PROBE = (726, 1008, 746, 1028) # Points down when the menu is closed, up when open
 PLAY_ICON_PROBE = (945, 1003, 975, 1033) # White triangle when paused, two bars when playing
 
@@ -177,35 +189,68 @@ def enforce_camera_rules(sequence):
     return fixed, changes
 
 
-def load_race_timing(log_path):
-    """How far round the race every car is, from the logger's <log>_timing.jsonl: [(log time, {name: laps})].
+def name_key(name):
+    """A driver name for comparing: RaceRoom's shared memory (and so the timing log) turns accented letters
+    into "?" marks while the race log keeps them, so only plain letters and digits are compared."""
+    return "".join(c for c in (name or "").casefold() if c.isascii() and c.isalnum())
 
-    The ">" driver arrow goes to the car ahead on the road (lapped cars included), so a switch can be
-    counted out in clicks from where the cars are on track. Retired and disqualified cars are left out,
-    as RaceRoom leaves them out of the arrow cycle.
-    """
+
+def dropdown_sort_key(name):
+    """The replay's driver dropdown is sorted by surname: everything after the first name."""
+    first, _, rest = (name or "").strip().partition(" ")
+    return (name_key(rest), name_key(first))
+
+
+def timing_file(log_path):
+    """The logger's <log>_timing.jsonl for a race log, or None."""
     if not log_path:
-        return []
-    base = os.path.splitext(log_path)[0]
-    path = base + "_timing.jsonl"
-    if not os.path.exists(path): # A combined log: use the newest timing file in the project's Logs folder
-        logs = os.path.join(os.path.dirname(log_path), "Logs")
-        files = [os.path.join(logs, f) for f in os.listdir(logs) if f.endswith("_timing.jsonl")] if os.path.isdir(logs) else []
-        if not files:
-            return []
-        path = max(files, key=os.path.getmtime)
-    snapshots = []
+        return None
+    path = os.path.splitext(log_path)[0] + "_timing.jsonl"
+    if os.path.exists(path):
+        return path
+    logs = os.path.join(os.path.dirname(log_path), "Logs") # A combined log: the newest timing file in Logs
+    files = [os.path.join(logs, f) for f in os.listdir(logs) if f.endswith("_timing.jsonl")] if os.path.isdir(logs) else []
+    return max(files, key=os.path.getmtime) if files else None
+
+
+def load_race_timing(log_path):
+    """The race from the logger's timing file: (snapshots, entrants, retired).
+
+    - snapshots: [(log time, {name: laps round the race})] for the cars still running. The ">" driver
+      arrow goes to the car ahead on the road (lapped cars included), so a switch can be counted out in
+      clicks from where the cars are on track. Retired cars are left out of the arrow cycle.
+    - entrants: every driver's name, as in the replay's driver dropdown.
+    - retired: {name: log time from which the car may be gone}. A retired car disappears from the replay,
+      and asking for it shows the player's car. Snapshots are ~5 s apart, so this is the last snapshot that
+      still had the car running.
+    """
+    path = timing_file(log_path)
+    snapshots, entrants, retired, last_running = [], [], {}, {}
+    if not path:
+        return snapshots, entrants, retired
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
                 record = json.loads(line)
                 if record["type"] == "session":
-                    snapshots = [] # The clock restarts; the race is the last session in the file
+                    # The clock restarts; the race is the last session in the file
+                    snapshots, entrants, retired, last_running = [], [], {}, {}
+                elif record["type"] == "entry":
+                    if record["name"] not in entrants:
+                        entrants.append(record["name"])
                 elif record["type"] == "timing":
                     snapshots.append((record["t"], {r[0]: r[3] + r[4] for r in record["rows"] if r[12] in (0, 1)}))
+                    for r in record["rows"]:
+                        if r[12] in (0, 1):
+                            last_running[r[0]] = record["t"]
+                            retired.pop(r[0], None) # Back in the race (a reset or a reconnect)
+                        elif r[0] not in retired:
+                            retired[r[0]] = last_running.get(r[0], record["t"])
+                        if r[0] not in entrants:
+                            entrants.append(r[0])
     except (OSError, ValueError, KeyError, IndexError, TypeError):
-        return []
-    return snapshots
+        return [], [], {}
+    return snapshots, entrants, retired
 
 
 class RaceroomCameraController:
@@ -238,6 +283,9 @@ class RaceroomCameraController:
         self.camera_memory = {"external": None, "onboard": None} # What Page Down / Home would come back to
         self.driver_ring = [] # The replay's driver list in "driver ahead" arrow order: [{slot, name, car, num}]
         self.race_timing = [] # [(log time, {name: laps round the race})] from the logger's timing file
+        self.entrants = [] # Every driver in the race (the timing file), for the driver dropdown
+        self.retired = {} # {name: log time from which the car may have gone from the replay}
+        self.dropdown_order = [] # The entrants as the replay's driver dropdown lists them
         self.is_paused = False
         self.pause_start_time = None
         self.ignore_space_until = 0.0 # Our own simulated Space presses must not toggle the pause
@@ -592,10 +640,11 @@ class RaceroomCameraController:
         pydirectinput.click(*self._to_screen(rect, x, y))
 
     def _replay_bar_visible(self, rect):
+        icons = lambda img: img.point(lambda v: 255 if v > BAR_ICON_WHITE else 0)
         if self.bar_buttons is None:
-            self.bar_buttons = Image.open(BAR_BUTTONS_IMAGE).convert("L")
-        diff = ImageChops.difference(self._grab(rect, BAR_BUTTONS_BOX), self.bar_buttons)
-        return ImageStat.Stat(diff).mean[0] < BAR_MATCH_LIMIT
+            self.bar_buttons = icons(Image.open(BAR_BUTTONS_IMAGE).convert("L"))
+        diff = ImageChops.difference(icons(self._grab(rect, BAR_BUTTONS_BOX)), self.bar_buttons)
+        return ImageStat.Stat(diff).mean[0] / 255 * 100 < BAR_MATCH_LIMIT
 
     def _set_replay_bar(self, rect, visible):
         """Shows or hides the replay bar with the Hide UI key, polling the screen until it has changed."""
@@ -612,7 +661,11 @@ class RaceroomCameraController:
         return self._replay_bar_visible(rect) == visible
 
     def _camera_menu_open(self, rect):
-        img = self._grab(rect, CAMERA_ARROW_PROBE)
+        return self._menu_open(rect, CAMERA_ARROW_PROBE)
+
+    def _menu_open(self, rect, probe):
+        """Whether a replay bar dropdown is open, from its arrow button (20x20 game pixels)."""
+        img = self._grab(rect, probe)
         top = ImageStat.Stat(img.crop((0, 4, 20, 10))).mean[0]
         bottom = ImageStat.Stat(img.crop((0, 10, 20, 16))).mean[0]
         return bottom > top # Arrow points up
@@ -745,11 +798,81 @@ class RaceroomCameraController:
 
     @staticmethod
     def _order_index(order, driver):
-        wanted = (driver or "").strip().casefold()
-        names = [n.casefold() for n in order]
+        wanted = name_key(driver)
+        names = [name_key(n) for n in order]
         if wanted in names:
             return names.index(wanted)
-        return next((i for i, n in enumerate(names) if wanted and (wanted in n or n in wanted)), None)
+        return next((i for i, n in enumerate(names) if wanted and n and (wanted in n or n in wanted)), None)
+
+    # ------------------------------------------------------------------ driver dropdown
+
+    def _load_race_timing(self):
+        self.race_timing, self.entrants, self.retired = load_race_timing(self.preloaded_input_file)
+        self.dropdown_order = sorted(self.entrants, key=dropdown_sort_key)
+
+    def _retired_driver(self, driver, log_time):
+        """The retired driver's name if the car has already gone from the replay at log time t, else None."""
+        if log_time is None:
+            return None
+        for name, since in self.retired.items():
+            if name_key(name) == name_key(driver) and log_time >= since:
+                return name
+        return None
+
+    def _driver_menu_open(self, rect):
+        return self._menu_open(rect, DRIVER_ARROW_PROBE)
+
+    def _pick_driver(self, rect, driver):
+        """With the replay bar showing, picks the driver from the bar's driver dropdown: one clean cut.
+
+        The row is worked out from the race's entrants in surname order. RaceRoom is then asked which car is
+        in view; if it is another entrant, the list order differed from the guess there, so it is corrected
+        from the row that car really sits on and picked once more. Returns True/False, or None when the
+        dropdown can't be used here (no entrant list or too many cars) and the arrows should be used.
+        """
+        order = self.dropdown_order
+        if not order or len(order) > DRIVER_LIST_MAX:
+            return None
+        target = self._order_index(order, driver)
+        if target is None:
+            self.log_message(f"Warning: {driver} is not in the race's entry list")
+            return False
+        name = order[target]
+        car = self._focused_car()
+        if car is None:
+            return False
+        if name_key(car["name"]) == name_key(name):
+            return True
+        row, rows = target, len(order)
+        for attempt in range(3):
+            if not self._driver_menu_open(rect):
+                self._click(rect, DRIVER_MENU_X, BAR_Y)
+                if not self._wait_for(lambda: self._driver_menu_open(rect), 0.5):
+                    self.log_message("Driver menu did not open")
+                    return False
+            slot = car["slot"]
+            self._click(rect, DRIVER_ITEM_X, MENU_BOTTOM_Y - MENU_ROW * (rows - 1 - row))
+            deadline = time.time() + 0.6
+            car = self._focused_car()
+            while car and car["slot"] == slot and time.time() < deadline:
+                time.sleep(0.02)
+                car = self._focused_car()
+            if car is None:
+                return False
+            if name_key(car["name"]) == name_key(name):
+                if attempt:
+                    self.log_message(f"Now watching {name} (dropdown row corrected)")
+                return True
+            if self._order_index(list(self.retired), name) is not None:
+                # The car retires in this race: RaceRoom showed the player's car because it has gone already
+                self.log_message(f"{name} has already left the replay (retired) - now on {car['name']}")
+                return False
+            landed = self._order_index(order, car["name"])
+            if landed is None or landed == row or car["slot"] == slot:
+                break # Nothing to correct from: the car didn't change, or a car that isn't in the list
+            row = min(max(row + (row - landed), 0), rows - 1) # The guess was off by (landed - row) rows here
+        self.log_message(f"Could not reach {name} from the driver dropdown (now on {car['name']})")
+        return False
 
     def _click_burst(self, rect, ahead, clicks, slot):
         """Clicks a driver arrow several times in a row, then waits once for the car in view to settle."""
@@ -897,6 +1020,8 @@ class RaceroomCameraController:
                 self.log_message("Error: RaceRoom window not found")
                 return False
             time.sleep(0.1)
+            if (driver or position is not None) and not self.entrants:
+                self._load_race_timing() # Go To Driver before any sequence has played
             mouse_home = pydirectinput.position()
             reached = True
             new_camera = camera if camera and camera != self.current_camera else None
@@ -906,7 +1031,9 @@ class RaceroomCameraController:
                 try:
                     self._set_replay_bar(rect, True)
                     if driver or position is not None:
-                        reached = self._step_to_driver(rect, driver, position, log_time)
+                        reached = self._pick_driver(rect, driver)
+                        if reached is None: # No entry list, or more cars than the dropdown shows
+                            reached = self._step_to_driver(rect, driver, position, log_time)
                     if new_camera and not by_hotkey and self._pick_camera(rect, new_camera):
                         self.log_message(f"Camera: {new_camera} (menu)")
                 finally:
@@ -1260,9 +1387,10 @@ class RaceroomCameraController:
         if self.data["settings"].get("camera_method") == "hotkeys":
             self._set_replay_playing(False)
             self._sync_cameras() # While the replay is still paused
-        self.race_timing = load_race_timing(self.preloaded_input_file)
+        self._load_race_timing()
         if self.race_timing:
-            self.log_message(f"Driver order from the timing log ({len(self.race_timing)} snapshots)")
+            self.log_message(f"{len(self.entrants)} drivers from the timing log"
+                             + (f", retired: {', '.join(self.retired)}" if self.retired else ""))
         elif self.sequence_data and any(item.get("driver") for item in self.sequence_data):
             self.status_msg.set("Learning the driver order...")
             self._learn_drivers_standalone() # Also while paused: one lap of the driver arrows
@@ -1318,12 +1446,18 @@ class RaceroomCameraController:
         driver = item.get("driver")
         pos = item.get("position")
         camera = item_camera(item)
-        new_driver = driver != self.current_driver
-        if new_driver:
-            self.log_message(f"Switching to {driver}" + (f" (P{pos})" if pos else ""))
         h, m_, s_ = map(int, item.get("timecode", "0:0:0").split(":"))
+        log_time = h * 3600 + m_ * 60 + s_ # The timecode is where the replay is now
+        new_driver = bool(driver) and driver != self.current_driver
+        gone = self._retired_driver(driver, log_time) if new_driver else None
+        if gone:
+            # The car has left the replay: asking for it would show the player's car, so stay on this one
+            self.log_message(f"{driver} has retired - staying on {self.current_driver or 'the current car'}")
+            new_driver = False
+        elif new_driver:
+            self.log_message(f"Switching to {driver}" + (f" (P{pos})" if pos else ""))
         reached = self._apply_shot(driver if new_driver else None, pos if new_driver else None, camera,
-                                   log_time=h * 3600 + m_ * 60 + s_) # The timecode is where the replay is now
+                                   log_time=log_time)
         if new_driver:
             if reached:
                 self.current_driver = driver

@@ -3,22 +3,23 @@
 Plays back a Gemini camera sequence in a RaceRoom replay: it follows the right driver and switches to the right camera at each timecode, and writes director notes as it goes. It works like the AMS2 Camera Controller, with two extras: camera selection and checked driver switching.
 
 ## Driver switching
-RaceRoom's Driver Ahead/Behind keys (Numpad + / −) do nothing in replays, but the **◀ ▶ arrows next to the driver name** on the replay bar do. For each switch, the controller:
+RaceRoom's Driver Ahead/Behind keys (Numpad + / −) do nothing in replays, so the controller uses the **driver dropdown** (▼ next to the driver name) on the replay bar. For each switch, the controller:
 
 1. shows the replay bar with **H** (Hide UI) if it's hidden,
-2. counts how many clicks the target driver is away, the short way round (◀ or ▶), and clicks them in one quick burst,
-3. checks once which driver is in view, and recounts from there if it landed on someone else,
-4. hides the bar again.
+2. opens the dropdown and clicks the target driver: one clean cut, about 0.3 s,
+3. checks which driver is in view, and corrects the row once if it landed on someone else,
+4. hides the bar again, if **Hide the replay bar again after switching** is ticked.
 
-A switch takes about a second including showing and hiding the bar. RaceRoom takes every click, even in a fast burst.
+The dropdown lists every entrant in surname order (J. Alfonso Fernández, D. Allsopp, T. Arias...), retired cars included, so the order never changes during the race. The controller gets the entrants from the logger's timing file (`*_timing.jsonl` next to the race log).
 
-The ▶ arrow steps to the next car up the road, not the next place in the race: once the leaders lap someone, the lapped car sits between them and the cars behind. Retired cars are skipped. The controller works out where every car is on the lap from the logger's timing file (`Race_*_timing.jsonl` next to the race log), at the replay's current point in the race. Without a timing file, it learns the order instead when you press **Play Sequence**: one lap of ▶ while the replay is still paused, about 2 seconds. **Learn Drivers** does the same by hand.
+**Retired cars:** a car that has retired is gone from the replay, and picking it shows the player's car instead. The timing file says when each car retired, so a shot of a driver who has already retired is skipped. The controller stays on the current car and changes only the camera, and the Activity Log says so.
 
 Things to know:
 - Some replays never fill in RaceRoom's shared field list. The controller doesn't need it: in a replay, the shared memory's player name is always the driver in view.
-- The sequence clock has to match the replay (use the time offset). If it's a little off, the check after the burst catches it and a short correction follows.
-- RaceRoom sometimes leaves one running car out of the arrow cycle for a while. If that car is the target, the controller stays on the driver it reached (next to the target) and tries again at that driver's next shot. It doesn't pause.
-- The arrow positions are measured on a 1920×1080 RaceRoom window and scale with the window size.
+- RaceRoom's shared memory turns accented letters into "?" marks (Fern?ndez), so names are compared on their plain letters only.
+- The sequence clock has to match the replay (use the time offset). Retirements are judged from the sequence clock.
+- The dropdown positions are measured on a 1920×1080 RaceRoom window and scale with the window size.
+- Without a timing file, or with more than 31 cars (more rows than fit above the bar), the controller falls back to the **◀ ▶ arrows**. These step through every car in between, so each car flashes on screen for a frame. When it falls back, it learns the arrow order when you press **Play Sequence**: one lap of ▶ while the replay is still paused. **Learn Drivers** does the same by hand.
 - **Pause for manual pick** (off by default) pauses the replay instead when a switch fails. Pick the driver yourself, then press Space to carry on.
 
 Before a full run, use **Check Focused Car** and **Go To Driver...** in a replay to confirm switching works.
