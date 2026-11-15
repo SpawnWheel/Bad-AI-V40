@@ -29,6 +29,7 @@ FOOTER_H = 30
 CLASS_H = 26
 GAP = 3            # space between rows
 MIN_W = 250
+SEE_THROUGH = 0.5  # the rows' panel without a game leaderboard to cover (RaceRoom)
 MODE_LABELS = {'interval': 'INTERVAL', 'gap': 'LEADER', 'name': ''}  # 'team' in older configs is skipped
 MAKE_DIR = os.path.join(gcfg.GRAPHICS_DIR, 'Manufacturers')
 YELLOW = rgba('#FFD200')
@@ -71,8 +72,14 @@ class TimingTower:
         # cover the in-game board (the Leaderboard region in Graphics Setup marks where it is)
         self.cover = self._hud_rect() if self.race.has_hud else None
         self.opaque = self.cover is not None
-        self.panel = self.th.panel_solid if self.opaque else self.th.panel
-        self.row_bg = self.th.panel_hi[:3] + (255,) if self.opaque else self.th.panel_hi
+        if self.opaque:
+            self.panel = self.th.panel_solid
+            self.row_bg = self.th.panel_hi[:3] + (255,)
+        else:
+            # RaceRoom: one see-through panel behind the rows (F1 style) and only a faint lift on each row, so the
+            # race shows through and the team logos stand out instead of sitting on a dark plate
+            self.panel = self.th.panel_solid[:3] + (int(255 * SEE_THROUGH),)
+            self.row_bg = (255, 255, 255, 12)
         self.x, self.y = self.lay['x'], self.lay['y']
         if self.cover:
             self.x, self.y = min(self.x, self.cover[0]), min(self.y, self.cover[1])
@@ -129,7 +136,7 @@ class TimingTower:
         body_h = n * row_h + bars * (CLASS_H + GAP)
         cols = self._columns(row_h - GAP)
         # Only as wide as the longest short name and the value column need
-        f = font(cols['fs'] - 1, 'bold_cond')
+        f = font(cols['fs'], 'bold_cond')
         names_w = max([text_w(f, (self.tpl.meta(nm).get('short') or nm).upper()) for nm in names] or [80])
         need = cols['name_x'] + names_w + 10 + cols['val_w'] + 4
         w = int(max(MIN_W, min(self.lay.get('w', 400), need)))
@@ -140,9 +147,11 @@ class TimingTower:
 
     def _columns(self, h):
         """Column offsets for a row of height h."""
-        fs = max(12, int(h * 0.62))
+        # As big as the row allows, so the names still read on a small screen
+        fs = max(12, int(h * 0.72))
         pos_w = int(h * 1.25)
-        tile_w = int(h * 1.6)
+        # Wide enough for wordmark logos (VOLVO, HONDA) to read, not just badges
+        tile_w = int(h * 2.1)
         num_w = int(h * 1.35)
         x_tile = 4 + pos_w
         x_num = x_tile + tile_w + 6
@@ -360,10 +369,15 @@ class TimingTower:
         return meta.get('make') or self.timing.entry(name).get('mfr') or ''
 
     def _logo_path(self, name, make):
-        """The driver's team/make logo from the Drivers tab (unless that image is a car preview),
-        else Graphics/Manufacturers/<make>.png."""
+        """The driver's team/make logo from the Drivers tab (unless that image is a car preview), or its compact
+        version beside it when there is one ('volvo_badge.png' next to 'volvo.png': a wordmark is too thin to
+        read in a tower row), else Graphics/Manufacturers/<make>.png."""
         path = self.tpl.logo_path(name)
         if path:
+            stem = os.path.splitext(path)[0]
+            for ext in gcfg.IMAGE_EXTS:
+                if os.path.exists(stem + '_badge' + ext):
+                    return stem + '_badge' + ext
             return path
         mk = norm_key(make)
         for f in self._make_files:
@@ -404,7 +418,8 @@ class TimingTower:
         if change and p_flash is not None:
             tint = th.green if change > 0 else th.red
             a = (1 - ease_in(p_flash)) * 0.55
-            bg = tuple(int(bg[i] * (1 - a) + tint[i] * a) for i in range(3)) + (bg[3],)
+            # (the see-through rows have almost no plate of their own, so the tint brings its own)
+            bg = tuple(int(bg[i] * (1 - a) + tint[i] * a) for i in range(3)) + (max(bg[3], int(255 * a * 1.4)),)
         round_rect(img, (4, y, w - 4, y + h), 3, bg)
         cy = y + h / 2
         cols = self._columns(h)
@@ -450,7 +465,7 @@ class TimingTower:
             label = meta.get('short') or name
         label = label.upper()
         # Full names shrink a little before they are cut short
-        f = fit_font(label, text_right - x, fs - 1, 'bold_cond', max(10, fs - 3))
+        f = fit_font(label, text_right - x, fs, 'bold_cond', max(10, fs - 3))
         text_vcenter(img, x, cy + 1, ellipsize(label, f, text_right - x), f, th.text)
         if val_w:
             vx = w - 4 - val_w
@@ -488,11 +503,16 @@ class TimingTower:
         img.alpha_composite(big.resize((size, size), Image.LANCZOS), (int(x), int(cy - size / 2)))
 
     def _footer(self, img, w, y, flag_state, yellow=None, idx=None):
+        """The flag band under the rows: the yellow flag (with its sectors), FORMATION before the start and
+        FINISH at the end. Under green there is nothing to say, so the tower just closes off. The track is on
+        screen already, so it is never repeated here."""
         th = self.th
-        champ = self.cfg['championship']
-        event = (champ.get('event_name') or gcfg.clean_track_name(self.race.track)).upper()
+        state = flag_state or 'pre-race'
+        if not yellow and state == 'green':
+            round_rect(img, (0, y, w, y + 8), 8, th.panel_solid, corners=(False, False, True, True))
+            return
         if yellow:
-            # Yellow band: YELLOW FLAG (and the sectors when recorded) on the left, the event on the right
+            # Yellow band: YELLOW FLAG and the sectors when recorded
             shape = Image.new('RGBA', (w, FOOTER_H), (0, 0, 0, 0))
             round_rect(shape, (0, 0, w, FOOTER_H), 8, (255, 255, 255, 255), corners=(False, False, True, True))
             band = h_gradient(w, FOOTER_H, YELLOW, YELLOW_DARK)
@@ -502,14 +522,10 @@ class TimingTower:
             sectors = (self.timing.state(idx) or {}).get('yel') or []
             if sectors:
                 label += '  ·  ' + ('SECTOR ' if len(sectors) == 1 else 'SECTORS ') + ' & '.join(map(str, sectors))
-            f = font(16, 'bold_cond')
+            f = fit_font(label, w - 24, 16, 'bold_cond')
             text_vcenter(img, 12, y + 16, label, f, th.dark_text)
-            fe = font(16, 'semibold_cond')
-            lx = 12 + text_w(f, label) + 14
-            text_vcenter(img, w - 12, y + 16, ellipsize(event, fe, w - lx - 12), fe, th.dark_text, 'r')
             return
         round_rect(img, (0, y, w, y + FOOTER_H), 8, th.panel_solid, corners=(False, False, True, True))
-        state = flag_state or 'pre-race'
         col = rgba(FLAG_COLORS.get(state, '#9AA3B2'))
         stripe = col if state not in ('chequered', 'pre-race') else th.accent
         round_rect(img, (0, y, w, y + 3), 0, stripe)
@@ -521,9 +537,6 @@ class TimingTower:
                  'chequered': 'FINISH'}.get(state, state.upper())
         f = font(16, 'bold_cond')
         text_vcenter(img, 42, y + 17, label, f, col if state not in ('chequered', 'pre-race') else th.text)
-        fe = font(16, 'semibold_cond')
-        lx = 42 + text_w(f, label) + 14
-        text_vcenter(img, w - 12, y + 17, ellipsize(event, fe, w - lx - 12), fe, th.muted, 'r')
 
 
 def _diff(a, b):

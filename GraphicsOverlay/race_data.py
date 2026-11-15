@@ -4,8 +4,21 @@ All public times are VIDEO seconds (log time + sync offset), so graphics line up
 with the recorded video and the commentary audio.
 """
 import bisect
+import json
 import os
 import re
+
+
+def race_sim(raw_log_path):
+    """'RaceRoom' or 'AMS2' from race.json in the log's race folder, or '' (older projects have none)."""
+    if not raw_log_path:
+        return ''
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(raw_log_path)), 'race.json'), 'r',
+                  encoding='utf-8') as f:
+            return str(json.load(f).get('sim') or '')
+    except (OSError, ValueError, AttributeError):
+        return ''
 
 RAW_LINE_RE = re.compile(r'^\s*(\d+):(\d{2}):(\d{2})\s*-\s*\[([A-Z][A-Z _]*)\]\s*(.*)$')
 TAG_RE = re.compile(r'\[[^\]]*\]')
@@ -100,6 +113,10 @@ class RaceData:
         self.sim = 'AMS2'              # 'Raceroom' when the RaceRoom logger wrote the log
         self._timing = None
         self._parse(read_raw_lines(raw_log_path))
+        # The race folder records which sim it was recorded in (newer RaceRoom logs no longer say so)
+        recorded_sim = race_sim(raw_log_path)
+        if recorded_sim:
+            self.sim = 'Raceroom' if recorded_sim.lower() == 'raceroom' else 'AMS2'
         if director_notes_path:
             self._parse_director(read_raw_lines(director_notes_path))
 
