@@ -24,6 +24,7 @@ POPUP_IN = 0.45
 POPUP_OUT = 0.35
 TICKER_SLIDE = 0.4
 TICKER_HOLD = 2.0
+TICKER_MIN_UP = 10.0  # a ticker cut shorter than this by the next one is left out
 YELLOW_FLAGS = ('yellow', 'double yellow')  # shown by the timing tower turning yellow, not a pop-up
 # type -> (start after pop-in begins, duration) of the held animation
 # (commentators, chequered and pit timers run for their whole time on screen, see _anim_timing)
@@ -516,7 +517,7 @@ class OverlayRenderer:
             planned.append(g)
         planned = gcfg.thin_overtakes(planned)
 
-        placed = [it for it in auto if it['lane'] == 'ticker']
+        placed = self._hand_over_tickers([it for it in auto if it['lane'] == 'ticker'])
         blocking = []  # popup + centre lane intervals
         for it in sorted([a for a in auto if a['lane'] in ('popup', 'center') and not a.get('shift')],
                          key=lambda x: x['time']):
@@ -560,6 +561,24 @@ class OverlayRenderer:
             placed = [it for it in placed if it['time'] >= hold] + [self.grid_item(self.intro)]
         placed.sort(key=lambda x: x['time'])
         return placed
+
+    @staticmethod
+    def _hand_over_tickers(tickers):
+        """One ticker on screen at a time: a newer one (the first standings while the starting grid is still
+        crawling) takes over, so the one before slides out as it comes in. One that would be cut too short to
+        read is dropped."""
+        tickers = sorted(tickers, key=lambda x: x['time'])
+        out = []
+        for i, it in enumerate(tickers):
+            nxt = tickers[i + 1]['time'] if i + 1 < len(tickers) else None
+            if nxt is not None and it['time'] + it['duration'] > nxt:
+                if nxt - it['time'] < TICKER_MIN_UP:
+                    print(f"  Skipping the {it['title'].lower()} ticker at {it['time']:.0f}s "
+                          "(the next one comes in straight away)")
+                    continue
+                it['duration'] = nxt - it['time']
+            out.append(it)
+        return out
 
     @staticmethod
     def grid_item(intro):
