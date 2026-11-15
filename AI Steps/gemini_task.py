@@ -45,6 +45,47 @@ def previous_broadcasts(prompt_file, project_path):
             + "\n\n".join(parts))
 
 
+# Lines a prompt can start with to switch on extras (taken out before the prompt is sent)
+DIRECTIVES = ("@web_search", "@entry_list")
+TIMING_FILE = "01_race_log_timing.jsonl"
+
+
+def prompt_directives(prompt_text):
+    """(prompt without its directive lines, {directive, ...})."""
+    found, kept = set(), []
+    for line in prompt_text.splitlines():
+        if line.strip().lower() in DIRECTIVES:
+            found.add(line.strip().lower())
+        else:
+            kept.append(line)
+    return "\n".join(kept), found
+
+
+def entry_list(folders):
+    """Every driver's car, number and livery team as the sim recorded them (RaceRoom's timing file), or ''."""
+    import json
+    for folder in folders:
+        path = os.path.join(folder, TIMING_FILE)
+        if not os.path.isfile(path):
+            continue
+        lines = {}
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if '"entry"' not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if rec.get("type") != "entry" or not rec.get("name"):
+                    continue
+                car = " ".join(x for x in (f"#{rec['num']}" if rec.get("num") else "", rec.get("car") or "") if x)
+                lines[rec["name"]] = f"{rec['name']}: " + ", ".join(x for x in (car, rec.get("team") or "") if x)
+        if lines:
+            return "\n\nENTRY LIST (driver: number and car, team on the livery):\n" + "\n".join(lines.values())
+    return ""
+
+
 def run_ai_step():
     # 1. Read API Key
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -75,6 +116,7 @@ def run_ai_step():
     except FileNotFoundError:
         print(f"Error: Prompt file '{prompt_file}' not found.")
         return
+    prompt_text, directives = prompt_directives(prompt_text)
 
     # 4. Read the Data File
     try:
@@ -112,6 +154,16 @@ def run_ai_step():
     # 4c. What aired in the last races, so the writers and the booth don't recycle jokes and storylines
     extra_context += previous_broadcasts(prompt_file, project_path)
 
+    # 4d. The entry list (cars, numbers, livery teams), for prompts that ask for it
+    if "@entry_list" in directives:
+        entries = entry_list(([project_path] if project_path else []) +
+                             [os.path.dirname(os.path.abspath(data_filename))])
+        if entries:
+            extra_context += entries
+            print(f"Added the entry list ({entries.count(chr(10)) - 2} drivers).")
+        else:
+            print("The prompt asks for the entry list, but this race has no timing file with entries.")
+
     # 5. Construct the Input for the Model
     full_prompt = f"{prompt_text}{extra_context}\n\n{data_content}"
 
@@ -141,9 +193,14 @@ def run_ai_step():
     print("Generating...\n")
 
     try:
+        # Google Search for prompts that research before they write (e.g. real teams behind the liveries)
+        tools = [types.Tool(google_search=types.GoogleSearch())] if "@web_search" in directives else None
+        if tools:
+            print("Web search: on")
         config = types.GenerateContentConfig(
             max_output_tokens=max_output_tokens,
-            thinking_config=thinking_config
+            thinking_config=thinking_config,
+            tools=tools
         )
 
         response_stream = client.models.generate_content_stream(

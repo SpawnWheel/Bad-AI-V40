@@ -6,18 +6,18 @@
     1080
   ],
   "championship": {
-    "name": "Mini Challenge",
-    "short_name": "RCV",
-    "season": "Season 15",
-    "round": "Round 4",
-    "event_name": "Sebring ",
-    "logo": "Graphics/Logos/RCVWhite.png",
+    "name": "Super Touring",
+    "short_name": "Raceroom",
+    "season": "Season 1",
+    "round": "Round 1",
+    "event_name": "Donnington Park",
+    "logo": "Graphics/Logos/RaceroomWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Flags/USA.png"
+    "event_flag": "Graphics/Flags/GBR.png"
   },
   "theme": {
     "accent": "#E10600",
-    "accent2": "#FFC400",
+    "accent2": "#b94677",
     "panel": "#0B0E14",
     "panel_alpha": 0.62,
     "text": "#FFFFFF",
@@ -36,12 +36,12 @@
       "footer": true
     },
     "map": {
-      "enabled": true,
+      "enabled": false,
       "x": 1597,
       "y": 113,
       "w": 306,
       "h": 299,
-      "header": true
+      "header": false
     },
     "tower": {
       "enabled": true,
@@ -126,280 +126,305 @@
   "popup_duration": 8.0,
   "render_fps": 15,
   "drivers": {
-    "[RCV]Dom.Payne": {
-      "display": "Dom Payne",
-      "short": "PAYNE",
-      "number": "1",
-      "country": "GBR",
-      "team": "Itchy & Scratchy Racing",
-      "make": "Mini",
-      "color": "#07f8f8",
-      "car_image": "Graphics/CarPreviews/PayneMini.dds",
-      "logo": "Graphics/Logos/ItchyScratchy.png"
-    },
-    "[RCV]ATIBoy69": {
-      "display": "ATI Boy",
-      "short": "ATIBOY",
-      "number": "420",
-      "country": "NLD",
-      "team": "Cheech and Chong",
-      "make": "Mini",
-      "color": "#48824d",
-      "car_image": "Graphics/CarPreviews/ATIBoy_mini.dds",
-      "logo": "Graphics/Logos/cheechchong.png"
-    },
-    "[RCV]Neworder": {
-      "display": "New Order",
-      "short": "NEWORDER",
-      "number": "26",
-      "country": "GBR",
-      "team": "Foxy Stoat Racing",
-      "make": "Mini",
-      "color": "#F97316",
-      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/mini_cooper/rcv_neworder_62/preview.dds",
-      "logo": "Graphics/Logos/stoat.png"
-    },
     "Daniel Born": {
       "display": "Daniel Born",
       "short": "BORN",
-      "number": "12",
+      "number": "3",
       "country": "RSA",
-      "team": "Honeydew Police",
-      "make": "Mini",
+      "team": "BMW Motorsport SA",
+      "make": "BMW",
       "color": "#1a0cc0",
-      "car_image": "Graphics/CarPreviews/DanielBorn_Mini.dds",
-      "logo": "Graphics/Logos/SAPS.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/bmw.png"
     },
-    "[RCV]thommo": {
-      "display": "Thommo",
-      "short": "THOMMO",
-      "number": "58",
-      "country": "GBR",
-      "team": "Ping",
-      "make": "Mini",
-      "color": "#ebf9fa",
-      "car_image": "Graphics/CarPreviews/Thommo_Mini.dds",
-      "logo": "Graphics/Logos/ping.png"
+    "Damien Cardo": {
+      "display": "Damien Cardo",
+      "short": "CARDO",
+      "number": "10",
+      "country": "FRA",
+      "team": "Team Honda Sport",
+      "make": "Honda",
+      "color": "#CC0000",
+      "car_image": "",
+      "logo": "Graphics/Logos/Honda.png"
     },
-    "kf.MTG": {
-      "display": "kf.MTG",
-      "short": "KF.MTG",
-      "number": "00",
-      "country": "USA",
-      "team": "Silent Assassin",
-      "make": "Mini",
-      "color": "#000000",
-      "car_image": "Graphics/CarPreviews/MTG_Mini.dds",
-      "logo": "Graphics/Logos/silentassasin2.png"
+    "Bruno Rizzo": {
+      "display": "Bruno Rizzo",
+      "short": "RIZZO",
+      "number": "14",
+      "country": "ITA",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
     },
-    "AlfaQuadSA": {
-      "display": "AlfaQuadSA",
-      "short": "ALFAQUAD",
+    "Antoine Booboo": {
+      "display": "Antoine Booboo",
+      "short": "BOOBOO",
+      "number": "10",
+      "country": "FRA",
+      "team": "Team Magnus Krokström",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Francisco Patricio": {
+      "display": "Francisco Patricio",
+      "short": "PATRICIO",
       "number": "17",
-      "country": "RSA",
-      "team": "Spitfire",
-      "make": "Mini",
-      "color": "#544427",
-      "car_image": "Graphics/CarPreviews/AlfaQuadSA_Mini.dds",
-      "logo": "Graphics/Logos/spitfire.png"
-    },
-    "clinton.nortje": {
-      "display": "Clinton Nortje",
-      "short": "NORTJE",
-      "number": "64",
-      "country": "RSA",
-      "team": "Back to the Future",
-      "make": "Mini",
-      "color": "#bcac96",
-      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/mini_cooper/dnf_clinton_nortje_68/preview.dds",
-      "logo": "Graphics/Logos/commodore2.png"
-    },
-    "inthebagbud": {
-      "display": "InTheBagBud",
-      "short": "BAGBUD",
-      "number": "27",
-      "country": "GBR",
-      "team": "Beavertown Neck Oil",
-      "make": "Caterham",
-      "color": "#18d7e7",
-      "car_image": "",
-      "logo": "Graphics/Logos/Beavertown.png"
-    },
-    "mattikake": {
-      "display": "Mattikake",
-      "short": "MATTIKAKE",
-      "number": "77",
-      "country": "GBR",
-      "team": "McLaren Mini",
-      "make": "Mini",
-      "color": "#f4b92f",
-      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/mini_cooper/rcv_mattikake_71/preview.dds",
-      "logo": "Graphics/Logos/McLaren.webp"
-    },
-    "Lucas Degen": {
-      "display": "Lucas Degen",
-      "short": "DEGEN",
-      "number": "28",
-      "country": "NLD",
-      "team": "Mini",
-      "make": "MINI",
-      "color": "#008000",
-      "car_image": "",
-      "logo": "Graphics/Logos/mini.png"
-    },
-    "[RCV]muzzer82": {
-      "display": "Liam Murray",
-      "short": "MURRAY",
-      "number": "5",
-      "country": "GBR",
-      "team": "Rick and Morty",
-      "make": "Mini",
-      "color": "#0bd7cc",
-      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/mini_cooper/rcv_liam_murray_54/preview.dds",
-      "logo": "Graphics/Logos/rickmorty.png"
-    },
-    "grizzlycliff1": {
-      "display": "GrizzlyCliff",
-      "short": "GRIZZLYCLIFF",
-      "number": "71",
-      "country": "GBR",
-      "team": "Team Gulf",
-      "make": "MINI",
-      "color": "#d98609",
-      "car_image": "Graphics/CarPreviews/Grizzly_Mini.dds",
-      "logo": "Graphics/Logos/gulf.png"
-    },
-    "jaavib": {
-      "display": "Jaavib",
-      "short": "JAAVIB",
-      "number": "85",
       "country": "ESP",
-      "team": "John Player Special",
-      "make": "Caterham",
-      "color": "#c4a31e",
+      "team": "Arena International",
+      "make": "Renault",
+      "color": "#FFCC00",
       "car_image": "",
-      "logo": "Graphics/Logos/jps.png"
+      "logo": "Graphics/Logos/Renault.png"
     },
-    "Holdany": {
-      "display": "Holdany",
-      "short": "HOLDANY",
-      "number": "99",
-      "country": "GBR",
-      "team": "Mini",
-      "make": "Mini",
-      "color": "#e10600",
+    "Migue Morente": {
+      "display": "Migue Morente",
+      "short": "MORENTE",
+      "number": "11",
+      "country": "ESP",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
       "car_image": "",
-      "logo": "Graphics/Logos/mini.png"
+      "logo": "Graphics/Logos/volvo.png"
     },
-    "Bill(AuchAye)_[SR-50]": {
-      "display": "Bill",
-      "short": "BILL",
-      "number": "5",
-      "country": "SCT",
-      "team": "Thistle Racing",
-      "make": "Caterham",
-      "color": "#d909b5",
-      "car_image": "",
-      "logo": "Graphics/Logos/ThistleRacing.png"
-    },
-    "[RCV]RayFin": {
-      "display": "Ray Finlayson",
-      "short": "FINLAYSON",
+    "David Sawyer": {
+      "display": "David Sawyer",
+      "short": "SAWYER",
       "number": "55",
       "country": "GBR",
-      "team": "Canadian Eagle",
-      "make": "Mini",
-      "color": "#0bc8d7",
-      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/mini_cooper/rcv_rayfin_55/preview.dds",
-      "logo": "Graphics/Logos/EagleRacing.png"
+      "team": "Ford Mondeo Racing",
+      "make": "Ford",
+      "color": "#1D3F8F",
+      "car_image": "",
+      "logo": "Graphics/Logos/ford.png"
     },
-    "Bill(AuchAye)_": {
-      "display": "Bill",
-      "short": "BILL",
-      "number": "",
-      "country": "",
-      "team": "",
-      "make": "",
-      "color": "",
-      "car_image": "Graphics/CarPreviews/Bill.dds"
+    "Dave Allsopp": {
+      "display": "Dave Allsopp",
+      "short": "ALLSOPP",
+      "number": "21",
+      "country": "GBR",
+      "team": "DC Cook Motorsport",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
     },
-    "Googlebear": {
-      "display": "Googlebear",
-      "short": "GOOGLEBEAR",
+    "Juan Alfonso Fernández": {
+      "display": "Juan Alfonso Fernández",
+      "short": "FERNÁNDEZ",
+      "number": "89",
+      "country": "ESP",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Pepe Rodriguez": {
+      "display": "Pepe Rodriguez",
+      "short": "RODRIGUEZ",
       "number": "4",
-      "country": "GBR",
-      "team": "Private",
-      "make": "Caterham",
-      "color": "#16d50d",
+      "country": "ESP",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
       "car_image": "",
-      "logo": "Graphics/Logos/Cloud.png"
+      "logo": "Graphics/Logos/volvo.png"
     },
-    "dmk": {
-      "display": "DMK",
-      "short": "DMK",
-      "number": "14",
+    "Alessandro Comelli": {
+      "display": "Alessandro Comelli",
+      "short": "COMELLI",
+      "number": "50",
+      "country": "ITA",
+      "team": "Team Honda Sport",
+      "make": "Honda",
+      "color": "#CC0000",
+      "car_image": "",
+      "logo": "Graphics/Logos/Honda.png"
+    },
+    "Never Quit69": {
+      "display": "Never Quit69",
+      "short": "QUIT69",
+      "number": "3",
+      "country": "GBR",
+      "team": "Williams Renault Dealer Racing",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Maciek Okrasz": {
+      "display": "Maciek Okrasz",
+      "short": "OKRASZ",
+      "number": "5",
       "country": "POL",
-      "team": "Mini Poland",
-      "make": "Mini",
-      "color": "#e10000",
+      "team": "Nescafé Blend 37 - Williams Renault",
+      "make": "Renault",
+      "color": "#FFCC00",
       "car_image": "",
-      "logo": "Graphics/Logos/mini.png"
+      "logo": "Graphics/Logos/Renault.png"
     },
-    "[RCV]kenevo": {
-      "display": "Kenevo Mini",
-      "short": "KENEVO_MINI",
+    "Yo Yo": {
+      "display": "Yo Yo",
+      "short": "YO",
+      "number": "55",
+      "country": "JPN",
+      "team": "Ford Mondeo Racing",
+      "make": "Ford",
+      "color": "#1D3F8F",
+      "car_image": "",
+      "logo": "Graphics/Logos/ford.png"
+    },
+    "Dominikos Moustakas": {
+      "display": "Dominikos Moustakas",
+      "short": "MOUSTAKAS",
+      "number": "9",
+      "country": "GRE",
+      "team": "Esso Ultron Team Peugeot",
+      "make": "Peugeot",
+      "color": "#9FD62B",
+      "car_image": "",
+      "logo": "Graphics/Logos/Peugeot.png"
+    },
+    "Jona Mingo": {
+      "display": "Jona Mingo",
+      "short": "MINGO",
+      "number": "32",
+      "country": "ESP",
+      "team": "Ford Mondeo Racing",
+      "make": "Ford",
+      "color": "#1D3F8F",
+      "car_image": "",
+      "logo": "Graphics/Logos/ford.png"
+    },
+    "Txus Arias": {
+      "display": "Txus Arias",
+      "short": "ARIAS",
+      "number": "7",
+      "country": "ESP",
+      "team": "Opel-Team Holzer",
+      "make": "Opel",
+      "color": "#F7D417",
+      "car_image": "",
+      "logo": "Graphics/Logos/Opel.png"
+    },
+    "Pierre Nirrengarten": {
+      "display": "Pierre Nirrengarten",
+      "short": "NIRRENGARTEN",
+      "number": "2",
+      "country": "FRA",
+      "team": "CD-Verbist Racing",
+      "make": "Audi",
+      "color": "#BB0A30",
+      "car_image": "",
+      "logo": "Graphics/Logos/audi.png"
+    },
+    "Jens Trautmann": {
+      "display": "Jens Trautmann",
+      "short": "TRAUTMANN",
+      "number": "16",
+      "country": "GER",
+      "team": "BMW Motorsport",
+      "make": "BMW",
+      "color": "#1C69D4",
+      "car_image": "",
+      "logo": "Graphics/Logos/bmw.png"
+    },
+    "Steffen Ostenstad": {
+      "display": "Steffen Ostenstad",
+      "short": "OSTENSTAD",
       "number": "27",
-      "country": "GBR",
-      "team": "Mulch",
-      "make": "MINI",
-      "color": "",
+      "country": "NOR",
+      "team": "BMW Italia",
+      "make": "BMW",
+      "color": "#1C69D4",
       "car_image": "",
-      "logo": "Graphics/Logos/Mulch2.png"
+      "logo": "Graphics/Logos/bmw.png"
     },
-    "[RCV]RayFin [MINI Cooper JCW] DNS: clinton.nortje": {
-      "display": "Clinton Nortje",
-      "short": "NORTJE",
-      "number": "",
-      "country": "",
-      "team": "",
-      "make": "",
-      "color": "",
-      "car_image": "Graphics/CarPreviews/clinton.nortje.dds"
-    },
-    "laurie_[Slip]": {
-      "display": "Laurie",
-      "short": "LAURIE",
-      "number": "13",
-      "country": "GBR",
-      "team": "Stig",
-      "make": "Caterham",
-      "color": "#D32F2F",
+    "Ignacio Marin": {
+      "display": "Ignacio Marin",
+      "short": "MARIN",
+      "number": "89",
+      "country": "ESP",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "#3E7CB1",
       "car_image": "",
-      "logo": "Graphics/Logos/CaterhamWhite.png"
+      "logo": "Graphics/Logos/volvo.png"
     },
-    "laurie_": {
-      "display": "Laurie",
-      "short": "LAURIE_",
-      "number": "",
+    "Jordan Osborne": {
+      "display": "Jordan Osborne",
+      "short": "OSBORNE",
+      "number": "1",
       "country": "GBR",
-      "team": "",
-      "make": "",
-      "color": "",
-      "car_image": ""
+      "team": "Nescafé Blend 37 - Williams Renault",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Javier Reyero": {
+      "display": "Javier Reyero",
+      "short": "REYERO",
+      "number": "11",
+      "country": "ESP",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Szymon Pierzynski": {
+      "display": "Szymon Pierzynski",
+      "short": "PIERZYNSKI",
+      "number": "1",
+      "country": "POL",
+      "team": "Nescafé Blend 37 - Williams Renault",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Ivan Lopez Miralles": {
+      "display": "Ivan Lopez Miralles",
+      "short": "MIRALLES",
+      "number": "10",
+      "country": "ESP",
+      "team": "Team Magnus Krokström",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Bydo Empire": {
+      "display": "Bydo Empire",
+      "short": "EMPIRE",
+      "number": "2",
+      "country": "GER",
+      "team": "Sprite Racing",
+      "make": "Honda",
+      "color": "#CC0000",
+      "car_image": "",
+      "logo": "Graphics/Logos/Honda.png"
     }
   },
   "sponsors": {
     "title": {
       "name": "",
-      "logo": "Graphics/Logos/Goodyear.png"
+      "logo": "Graphics/Logos/shell.webp"
     },
     "timing": {
       "name": "",
-      "logo": "Graphics/Logos/Rolex.png"
+      "logo": "Graphics/Logos/TagHeur.png"
     },
     "partner": {
       "name": "",
-      "logo": "Graphics/Logos/CaterhamWhite.png"
+      "logo": "Graphics/Logos/AutoTrader.png"
     }
   },
   "commentators": {
@@ -420,9 +445,15 @@
     },
     "Larry McReynolds": {
       "bio": "Championship-winning NASCAR crew chief and technical race analyst."
+    },
+    "Martin Haven": {
+      "bio": "British motorsport sports broadcaster. Lead commentator for the FIA World Endurance Championship."
+    },
+    "Anthony Davidson": {
+      "bio": "Former F1 driver, 2014 World Endurance Champion. Commentator for Sky Sports F1 and WEC."
     }
   },
-  "commentator_photo": "Graphics/Logos/Mike-Joy-Larry-McReynolds-Darrell-Waltrip.jpg",
+  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_8bj2278bj2278bj2.jfif",
   "commentator_disclaimer": null,
-  "championship_preset": "Mini Season 15"
+  "championship_preset": "Super Touring Season 1"
 }

@@ -34,6 +34,7 @@ EXIT_STAGGER = 0.022
 PUSH_IN = 0.06        # background zoom over the whole scene
 BLUR = 16
 SKEW = 0.22           # slant of the car slots (share of their height)
+SPONSOR_H = 110       # the title sponsor in the top right, about the championship logo's height
 
 
 def paste(frame, src, x, y):
@@ -194,7 +195,7 @@ class StartingGrid:
             im = Image.new('RGBA', (int(text_w(f_sub, sub)) + 8, 36), (0, 0, 0, 0))
             text_vcenter(im, 0, 18, sub, f_sub, th.text[:3] + (200,))
             parts['sub'] = (im, x + lw + 26, 55)
-        right = W - 96 - (tpl.sponsor_w('title', 50) + 36 if tpl.sponsor('title') else 0)
+        right = W - 96 - (tpl.sponsor_w('title', SPONSOR_H) + 36 if tpl.sponsor('title') else 0)
         title = ((champ.get('event_name') or '').strip() or gcfg.clean_track_name(tpl.race.track)).upper()
         f_title = fit_font(title, right - x, 92, 'bold')
         im = Image.new('RGBA', (int(text_w(f_title, title)) + 24, 118), (0, 0, 0, 0))
@@ -214,11 +215,13 @@ class StartingGrid:
             text_vcenter(im, 60, 18, ellipsize(info, f_info, iw - 60), f_info, th.accent2)
             parts['info'] = (im, x, 196)
         if tpl.sponsor('title'):
-            im = Image.new('RGBA', (W, 120), (0, 0, 0, 0))
-            tpl.sponsor_mark(im, W - 96, 60, 'title', 50)
+            # As tall as the championship logo, level with it on the right
+            im = Image.new('RGBA', (W, SPONSOR_H + 20), (0, 0, 0, 0))
+            tpl.sponsor_mark(im, W - 96, (SPONSOR_H + 20) / 2, 'title', SPONSOR_H)
             bbox = im.getbbox()
             if bbox:
-                parts['sponsor'] = (im.crop(bbox), bbox[0], 20 + bbox[1])
+                top = int(126 - (SPONSOR_H + 20) / 2)
+                parts['sponsor'] = (im.crop(bbox), bbox[0], top + bbox[1])
         self._header = parts
         return parts
 

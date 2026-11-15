@@ -34,16 +34,7 @@ MAKE_DIR = os.path.join(gcfg.GRAPHICS_DIR, 'Manufacturers')
 YELLOW = rgba('#FFD200')
 YELLOW_DARK = rgba('#C99A00')
 # Recognisable chip colours for common makes; anything else gets a stable colour from its name
-MAKE_COLORS = {
-    'audi': '#BB0A30', 'bmw': '#1C69D4', 'porsche': '#F2F2F2', 'ferrari': '#DC0000', 'mercedes': '#00A19C',
-    'mercedesamg': '#00A19C', 'nissan': '#C3002F', 'bentley': '#2A5C45', 'mclaren': '#FF8000',
-    'lamborghini': '#D4A017', 'aston': '#00665E', 'astonmartin': '#00665E', 'chevrolet': '#D1A000',
-    'cadillac': '#C9A227', 'ford': '#1D3F8F', 'toyota': '#EB0A1E', 'honda': '#CC0000', 'hyundai': '#002C5F',
-    'alpine': '#0055B8', 'renault': '#FFCC00', 'peugeot': '#9FD62B', 'volkswagen': '#001E50',
-    'opel': '#F7D417', 'lexus': '#1A1A1A', 'mazda': '#9B1B30', 'ktm': '#FF6600', 'radical': '#1E9E3E',
-    'cupra': '#B17457', 'lotus': '#00573F', 'alfaromeo': '#9B0E1E', 'corvette': '#D1A000', 'ruf': '#C8A951',
-    'tatuus': '#D61F26', 'saleen': '#1E1E1E', 'mclarenautomotive': '#FF8000', 'callaway': '#16365C',
-}
+MAKE_COLORS = gcfg.MAKE_COLORS
 CLASS_COLORS = ['#E10600', '#19C463', '#2D7FF9', '#FFC400', '#A239FF', '#FF7A00']
 
 
@@ -398,11 +389,8 @@ class TimingTower:
         c = self.tpl.meta(name).get('color')
         if c:
             return rgba(c)
-        mk = norm_key(make)
-        for k, v in MAKE_COLORS.items():
-            if mk == k or (mk.startswith(k) and len(k) > 3):
-                return rgba(v)
-        return rgba(stable_color(make or name))
+        brand = gcfg.make_color(make)
+        return rgba(brand) if brand else rgba(stable_color(make or name))
 
     def _row(self, img, y, w, r, mode, value, change, p_flash, fastest=False):
         th = self.th

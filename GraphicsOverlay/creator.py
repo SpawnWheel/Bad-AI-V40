@@ -553,6 +553,34 @@ def merge_driver_info(cfg, info, overwrite=False):
     return changed
 
 
+# ---------------------------------------------------------------- nationality guess
+COUNTRY_GUESS_PROMPT = """These are sim racing drivers in an online race. For each one, guess their nationality from
+their name: the first name, the surname, the spelling and any accents (e.g. "Juan Alfonso Fernández" -> ESP,
+"Jens Trautmann" -> GER, "Szymon Pierzynski" -> POL, "Steffen Ostenstad" -> NOR). Gamer tags and nicknames
+with nothing to go on get "".
+
+Answer with the 3-letter sporting code used on motorsport graphics (GBR, GER, ESP, ITA, FRA, NED, POL, NOR, SWE,
+FIN, DEN, BEL, POR, BRA, ARG, USA, CAN, AUS, NZL, RSA, ...).
+
+Reply with ONLY this JSON: {"countries": {"<name exactly as given>": "<code or empty>"}}
+
+DRIVERS:
+"""
+
+
+def ai_guess_countries(names, ask):
+    """{name: 3-letter code} guessed from the names by the AI ('' when it cannot tell)."""
+    if not names:
+        return {}
+    data = parse_ai_json(ask(COUNTRY_GUESS_PROMPT + '\n'.join(names)))
+    out = {}
+    for name, code in (data.get('countries') or {}).items():
+        code = str(code or '').strip().upper()
+        if name in names and re.fullmatch(r'[A-Z]{3}', code):
+            out[name] = code
+    return out
+
+
 # ---------------------------------------------------------------- commentator info box
 COMMENTATOR_INFO_PROMPT = """You are researching the commentators for a motorsport broadcast graphic. Search the web.
 

@@ -255,6 +255,7 @@ class GraphicsSetup:
 
         styled_button(bar, "Delete", self.delete_championship).pack(side='right', padx=(4, 16))
         styled_button(bar, "Save as new championship…", self.save_championship_as).pack(side='right', padx=4)
+        styled_button(bar, "Start new championship…", self.start_new_championship).pack(side='right', padx=4)
         self.champ_save_btn = styled_button(bar, "Save championship", self.save_championship, primary=True)
         self.champ_save_btn.pack(side='right', padx=4)
         self.champ_switch_var = tk.StringVar()
@@ -362,6 +363,35 @@ class GraphicsSetup:
             return
         self.cfg[gcfg.PRESET_KEY] = name
         self.save_championship()
+
+    def start_new_championship(self):
+        """A clean championship: built-in branding, theme and sponsors, and only this race's drivers with what
+        the race log recorded (no team, car or logo from another league). The layout and commentators stay."""
+        from tkinter import simpledialog
+        if not self.ask_save_championship_changes("starting a new championship"):
+            return
+        name = simpledialog.askstring(
+            "Start new championship",
+            "Name for the new championship. It starts clean: the layout and AI commentators stay, but the "
+            "branding, colours, sponsors and drivers start over (drivers come from this race only):",
+            parent=self.root)
+        name = (name or '').strip()
+        if not name:
+            return
+        existing = next((n for n in gcfg.list_championships() if n.lower() == name.lower()), None)
+        if existing is None and gcfg.championship_exists(name):
+            existing = name
+        if existing:
+            messagebox.showerror("Start new championship",
+                                 f"There is already a championship called \"{existing}\". Switch to it, or pick "
+                                 "another name.", parent=self.root)
+            return
+        self.cfg = gcfg.new_championship(self.cfg, name)
+        gcfg.ensure_drivers(self.cfg, self.race.drivers, self.race.entries())
+        self.champ_saved = None
+        self.rebuild()
+        self.set_status(f"Started \"{name}\" with {len(self.cfg['drivers'])} drivers from this race. Set the "
+                        "branding, then Save championship.")
 
     def delete_championship(self):
         name = self.cfg.get(gcfg.PRESET_KEY)
@@ -681,8 +711,20 @@ class GraphicsSetup:
     def _build_drivers_tab(self):
         f = self.tab_drivers
         tk.Label(f, text=("Link each name from the race log to how it should appear on screen and to its car preview "
-                          "image (Graphics/CarPreviews). Short is used on the ticker and battle cards."),
+                          "image (Graphics/CarPreviews). Short is used on the ticker and battle cards. Ctrl- or "
+                          "Shift-click to pick several drivers and give them all one logo or colour. A driver "
+                          "without a colour gets their make's brand colour."),
                  bg=CARD, fg=DIM, font=(FONT, 9), wraplength=560, justify='left').pack(anchor='w')
+        pick = tk.Frame(f, bg=CARD)
+        pick.pack(fill='x', pady=(6, 0))
+        tk.Label(pick, text="Select every", bg=CARD, fg=MUTED, font=(FONT, 9)).pack(side='left')
+        self.make_pick_var = tk.StringVar()
+        self.make_pick = ttk.Combobox(pick, textvariable=self.make_pick_var, state='readonly', width=24)
+        self.make_pick.pack(side='left', padx=6)
+        self.make_pick.bind("<<ComboboxSelected>>", lambda e: self.select_make(self.make_pick_var.get()))
+        styled_button(pick, "Select all", lambda: self.tree.selection_set(self.tree.get_children())).pack(side='left')
+        styled_button(pick, "Clear selection", lambda: self.tree.selection_remove(self.tree.selection())).pack(
+            side='left', padx=6)
         tree_frame = tk.Frame(f, bg=CARD)
         tree_frame.pack(fill='both', expand=True, pady=6)
         self.tree = ttk.Treeview(tree_frame, columns=[c[0] for c in DRIVER_COLS], show='headings', height=10)
@@ -700,20 +742,142 @@ class GraphicsSetup:
         btns = tk.Frame(f, bg=CARD)
         btns.pack(fill='x', pady=(8, 0))
         styled_button(btns, "Re-match car images", self.rematch_images).pack(side='left')
+        styled_button(btns, "Auto-fill logos & colours", self.auto_fill_logos).pack(side='left', padx=(6, 0))
         styled_button(btns, "AI fill from race notes", self.ai_fill_drivers, primary=True).pack(side='left', padx=6)
-        styled_button(btns, "Show on preview", self.preview_selected_driver).pack(side='left')
-        styled_button(btns, "Preview starting grid", self.preview_starting_grid).pack(side='left', padx=6)
+        styled_button(btns, "AI guess countries", self.ai_guess_countries).pack(side='left')
+        btns2 = tk.Frame(f, bg=CARD)
+        btns2.pack(fill='x', pady=(6, 0))
+        styled_button(btns2, "Show on preview", self.preview_selected_driver).pack(side='left')
+        styled_button(btns2, "Preview starting grid", self.preview_starting_grid).pack(side='left', padx=6)
         self.refresh_driver_tree()
 
     def refresh_driver_tree(self):
         sel = self.tree.selection()
         self.tree.delete(*self.tree.get_children())
         for name in self.race.drivers:
+            self.tree.insert('', 'end', iid=name, values=self.driver_row(name))
+        keep = [n for n in sel if self.tree.exists(n)]
+        if keep:
+            self.tree.selection_set(keep)
+        self.refresh_make_pick()
+
+    def driver_row(self, name):
+        d = self.cfg['drivers'][name]
+        row = [name]
+        for k, _, _ in DRIVER_COLS[1:]:
+            v = d.get(k, '')
+            if k == 'car_image' and not v and d.get('no_car'):
+                v = '(none)'
+            elif k in ('car_image', 'logo'):
+                v = os.path.basename(v)
+            row.append(v)
+        return row
+
+    def _race_entries(self):
+        return self.race.entries() or {}
+
+    def drivers_by_make(self):
+        """{make: [log names]} for this race's drivers, from the Drivers tab make or the recorded entry."""
+        entries = self._race_entries()
+        out = {}
+        for name in self.race.drivers:
+            make = gcfg.driver_make(self.cfg['drivers'][name], entries.get(name))
+            if make:
+                out.setdefault(make, []).append(name)
+        return out
+
+    def refresh_make_pick(self):
+        groups = self.drivers_by_make()
+        self._make_labels = {f"{make} ({len(names)})": names for make, names in
+                             sorted(groups.items(), key=lambda kv: kv[0].lower())}
+        self.make_pick.config(values=list(self._make_labels))
+        self.make_pick_var.set('')
+
+    def select_make(self, label):
+        names = [n for n in self._make_labels.get(label, []) if self.tree.exists(n)]
+        if names:
+            self.tree.selection_set(names)
+            self.tree.see(names[0])
+
+    def auto_fill_logos(self):
+        """Every driver without a logo gets the one in Graphics/Logos named after their team or make, and every
+        driver without a colour gets their make's brand colour."""
+        files = gcfg.logo_files()
+        entries = self._race_entries()
+        filled, coloured, missing = 0, 0, {}
+        for name in self.race.drivers:
             d = self.cfg['drivers'][name]
-            self.tree.insert('', 'end', iid=name, values=[name] + [
-                os.path.basename(d.get(k, '')) if k in ('car_image', 'logo') else d.get(k, '') for k, _, _ in DRIVER_COLS[1:]])
-        if sel and self.tree.exists(sel[0]):
-            self.tree.selection_set(sel[0])
+            entry = entries.get(name)
+            if not d.get('color'):
+                c = gcfg.make_color(gcfg.driver_make(d, entry))
+                if c:
+                    d['color'] = c
+                    coloured += 1
+            if d.get('logo'):
+                continue
+            logo = gcfg.match_logo(d, entry, files)
+            if logo:
+                d['logo'] = logo
+                filled += 1
+            else:
+                key = gcfg.driver_make(d, entry) or d.get('team') or 'no make'
+                missing[key] = missing.get(key, 0) + 1
+        self.refresh_driver_tree()
+        self.show_driver_form()
+        self.schedule_preview()
+        note = (f"Auto-filled {filled} logo{'s' if filled != 1 else ''} from Graphics/Logos and "
+                f"{coloured} brand colour{'s' if coloured != 1 else ''}.")
+        if missing:
+            note += (" No logo file for: " + ", ".join(f"{k} ({v})" for k, v in sorted(missing.items())) +
+                     " - add e.g. honda.png to Graphics/Logos and click again.")
+        self.set_status(note + " Save to keep them.")
+
+    def _gemini(self):
+        api_key = os.environ.get("GEMINI_API_KEY") or self._launcher_setting('gemini_api_key')
+        if not api_key:
+            messagebox.showwarning("No API key", "Set the Gemini API key in the launcher Settings first.")
+            return None
+        model = os.environ.get("GEMINI_MODEL_NAME") or self._launcher_setting('gemini_model') or 'gemini-4-hydrogen'
+        return api_key, model
+
+    def ai_guess_countries(self):
+        """Asks the AI to guess the nationality of every driver with no country, from their name."""
+        names = [n for n in self.race.drivers if not (self.cfg['drivers'][n].get('country') or '').strip()]
+        if not names:
+            self.set_status("Every driver already has a country.")
+            return
+        gem = self._gemini()
+        if not gem:
+            return
+        self.set_status(f"Asking the AI to guess the country of {len(names)} drivers from their names...")
+        # The display name reads better than a log name with a team tag
+        shown = {(self.cfg['drivers'][n].get('display') or n): n for n in names}
+
+        def work():
+            try:
+                ask = creator.make_gemini_asker(gem[0], gem[1], 'LOW', 4096)
+                guesses = creator.ai_guess_countries(list(shown), ask)
+            except Exception as e:
+                msg = f"Country guess failed: {e}"
+                self.root.after(0, lambda: self.set_status(msg))
+                return
+
+            def done():
+                n = 0
+                for label, code in guesses.items():
+                    d = self.cfg['drivers'][shown[label]]
+                    if not (d.get('country') or '').strip():
+                        d['country'] = code
+                        n += 1
+                self.refresh_driver_tree()
+                self.show_driver_form()
+                self.schedule_preview()
+                left = len(names) - n
+                self.set_status(f"AI guessed {n} countries from the names"
+                                + (f" ({left} left blank: nothing to go on)" if left else "")
+                                + ". They are guesses - check them, then Save.")
+            self.root.after(0, done)
+        threading.Thread(target=work, daemon=True).start()
 
     def show_driver_form(self):
         for w in self.driver_form.winfo_children():
@@ -721,6 +885,8 @@ class GraphicsSetup:
         sel = self.tree.selection()
         if not sel:
             return
+        if len(sel) > 1:
+            return self.show_bulk_form(sel)
         name = sel[0]
         d = self.cfg['drivers'][name]
         tk.Label(self.driver_form, text=name, bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
@@ -750,6 +916,11 @@ class GraphicsSetup:
             if path is None:
                 return
             d['car_image'] = '' if path == '(none)' else path
+            # (none) chosen on purpose: the starting grid must not find a car by name either
+            if path == '(none)':
+                d['no_car'] = True
+            else:
+                d.pop('no_car', None)
             img_var.set(path)
             self.update_tree_row(name)
             self.show_car_thumb(d['car_image'])
@@ -779,8 +950,9 @@ class GraphicsSetup:
             row=r, column=3, sticky='w')
 
         self.label(self.driver_form, "Colour", row=r + 1, column=0, sticky='w', pady=2)
-        color_btn = tk.Button(self.driver_form, text=d.get('color') or 'theme accent', relief='flat', width=14,
-                              bg=d.get('color') or INPUT, fg='#ffffff')
+        brand = gcfg.make_color(gcfg.driver_make(d, self._race_entries().get(name)))
+        color_btn = tk.Button(self.driver_form, text=d.get('color') or ('brand colour' if brand else 'theme accent'),
+                              relief='flat', width=14, bg=d.get('color') or brand or INPUT, fg='#ffffff')
         color_btn.grid(row=r + 1, column=1, sticky='w', padx=6)
 
         def pick():
@@ -806,28 +978,83 @@ class GraphicsSetup:
         self.thumb.config(image=self._thumb_photo, text='')
 
     def update_tree_row(self, name):
-        d = self.cfg['drivers'][name]
-        self.tree.item(name, values=[name] + [
-            os.path.basename(d.get(k, '')) if k in ('car_image', 'logo') else d.get(k, '') for k, _, _ in DRIVER_COLS[1:]])
+        self.tree.item(name, values=self.driver_row(name))
+
+    def show_bulk_form(self, names):
+        """One logo or colour for several drivers at once (e.g. every Volvo gets volvo.png)."""
+        names = list(names)
+        f = self.driver_form
+        shown = ', '.join(self.cfg['drivers'][n].get('display') or n for n in names[:6])
+        tk.Label(f, text=f"{len(names)} drivers selected", bg=CARD, fg=FG, font=(FONT, 11, "bold")).grid(
+            row=0, column=0, columnspan=4, sticky='w', pady=(4, 0))
+        tk.Label(f, text=shown + (f" and {len(names) - 6} more" if len(names) > 6 else ''), bg=CARD, fg=DIM,
+                 font=(FONT, 9), wraplength=520, justify='left').grid(row=1, column=0, columnspan=4, sticky='w',
+                                                                      pady=(0, 6))
+        self.label(f, "Logo for all", row=2, column=0, sticky='w', pady=2)
+        logos = ['(none)'] + gcfg.logo_files()
+        current = {self.cfg['drivers'][n].get('logo') or '(none)' for n in names}
+        logo_var = tk.StringVar(value=current.pop() if len(current) == 1 else '')
+        lcb = ttk.Combobox(f, textvariable=logo_var, values=logos, width=34, state='readonly')
+        lcb.grid(row=2, column=1, columnspan=2, sticky='w', padx=6)
+
+        def set_logo(path):
+            if not path:
+                return
+            for n in names:
+                self.cfg['drivers'][n]['logo'] = '' if path == '(none)' else gcfg.relative_path(path)
+                self.update_tree_row(n)
+            logo_var.set(path)
+            self.show_car_thumb('' if path == '(none)' else path)
+            self.schedule_preview()
+            what = 'cleared' if path == '(none)' else os.path.basename(path)
+            self.set_status(f"Logo {what} for {len(names)} drivers. Save to keep it.")
+        lcb.bind("<<ComboboxSelected>>", lambda e: set_logo(logo_var.get()))
+        styled_button(f, "Browse…", lambda: set_logo(self.browse_image(gcfg.LOGO_DIR))).grid(
+            row=2, column=3, sticky='w')
+
+        self.label(f, "Colour for all", row=3, column=0, sticky='w', pady=2)
+        colours = {self.cfg['drivers'][n].get('color') or '' for n in names}
+        one = colours.pop() if len(colours) == 1 else ''
+        crow = tk.Frame(f, bg=CARD)
+        crow.grid(row=3, column=1, columnspan=3, sticky='w', padx=6)
+        color_btn = tk.Button(crow, text=one or 'pick...', relief='flat', width=14, bg=one or INPUT, fg='#ffffff')
+        color_btn.pack(side='left')
+
+        def set_colour(c):
+            for n in names:
+                self.cfg['drivers'][n]['color'] = c
+                self.update_tree_row(n)
+            color_btn.config(text=c or 'brand colour', bg=c or INPUT)
+            self.schedule_preview()
+
+        def pick():
+            c = colorchooser.askcolor(color=one or '#E10600', parent=self.root)[1]
+            if c:
+                set_colour(c)
+        color_btn.config(command=pick)
+        styled_button(crow, "Use brand colour", lambda: set_colour('')).pack(side='left', padx=6)
+        self.thumb = tk.Label(f, bg=CARD)
+        self.thumb.grid(row=4, column=1, columnspan=3, sticky='w', pady=4)
+        self.show_car_thumb(logo_var.get() if logo_var.get() not in ('', '(none)') else '')
 
     def rematch_images(self):
         files = gcfg.list_images(gcfg.CAR_PREVIEW_DIR)
         n = 0
         for name in self.race.drivers:
             m = gcfg.match_car_image(name, files)
-            if m and not self.cfg['drivers'][name].get('car_image'):
+            d = self.cfg['drivers'][name]
+            if m and not d.get('car_image') and not d.get('no_car'):
                 self.cfg['drivers'][name]['car_image'] = f"Graphics/CarPreviews/{m}"
                 n += 1
         self.refresh_driver_tree()
         self.set_status(f"Matched {n} more car images.")
 
     def ai_fill_drivers(self):
-        api_key = os.environ.get("GEMINI_API_KEY") or self._launcher_setting('gemini_api_key')
-        if not api_key:
-            messagebox.showwarning("No API key", "Set the Gemini API key in the launcher Settings first.")
+        gem = self._gemini()
+        if not gem:
             return
+        api_key, model = gem
         notes = gcfg.racefiles.notes_text(self.files['project_notes'])
-        model = os.environ.get("GEMINI_MODEL_NAME") or self._launcher_setting('gemini_model') or 'gemini-4-hydrogen'
         self.set_status("Asking the AI to read the race notes…")
 
         def work():

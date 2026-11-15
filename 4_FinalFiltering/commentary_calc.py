@@ -68,7 +68,24 @@ import racefiles  # noqa: E402
 # The logger's grid list on the green flag line: up to the next event tag ("[OVERTAKE] ..."; a team tag in a
 # name, like "[RCV]Dom", has no space after it)
 GRID_LIST_RE = re.compile(r'\s*\[LEADERBOARD\]\s*Starting Grid Order:\s*(.*?)(?=\s\[[A-Z_]+\]\s|$)')
-GRID_ENTRY_RE = re.compile(r'P(\d+):\s*(.+?)(?:\s\[[^\]]*\])?\s*$')
+GRID_ENTRY_RE = re.compile(r'P(\d+):\s*(.+?)(?:\s\[([^\]]*)\])?\s*$')
+# The last grid entry ends at its car ("P26: Bydo Empire [Honda Accord]"); a team tag ("[RCV]Dom") runs into
+# the name, so it is no car
+LAST_ENTRY_CAR_RE = re.compile(r'^(P\d+:\s*.+?\s\[[^\]]*\])(?=[^\w|]|$)')
+LAST_ENTRY_PLAIN_RE = re.compile(r'^(P\d+:\s*.+?)(?=\.\s+[A-Z])')
+
+
+def split_grid_list(text):
+    """(grid list, what follows it). The event review can merge the next log line into the green flag line
+    without its tag ("...[Honda Accord]. Teams: ... Green Flag! The race begins!"), so the list ends with its
+    last entry, not at the end of the line."""
+    parts = text.split(' | ')
+    for i, part in enumerate(parts):
+        m = LAST_ENTRY_CAR_RE.match(part) or LAST_ENTRY_PLAIN_RE.match(part)
+        if m and part[m.end():].strip():
+            # Text after this entry: the list ends here (what follows may use ' | ' too, like the teams list)
+            return ' | '.join(parts[:i] + [m.group(1)]), ' | '.join([part[m.end():]] + parts[i + 1:])
+    return text, ''
 
 
 def driver_details(project_path):
@@ -77,10 +94,15 @@ def driver_details(project_path):
     try:
         from GraphicsOverlay import config as gcfg
         drivers = gcfg.load_config(project_path).get('drivers') or {}
+        # A roster saved for another championship can put a driver in the wrong car (their Mini livery in a
+        # BMW race): what the race log recorded wins
+        entries = gcfg.recorded_entries(project_path)
     except Exception:
         return {}
     out = {}
     for name, d in drivers.items():
+        if gcfg.reconcile_car(d, entries.get(name)):
+            print(f"Starting grid: {name} raced a {d['make']}, not the car saved in the graphics drivers.")
         bits = []
         if d.get('display') and d['display'] != name:
             bits.append(d['display'])
@@ -97,12 +119,13 @@ def grid_text(grid_list, details, quali=None):
     quali = quali or {}
     pole = min(quali.values()) if quali else None
     entries = []
-    for part in grid_list.split('|'):
-        m = GRID_ENTRY_RE.match(part.strip())
-        if not m:
-            continue
+    parsed = [m for m in (GRID_ENTRY_RE.match(p.strip()) for p in grid_list.split('|')) if m]
+    # Each driver's car, as the logger saw it, when the grid has more than one model
+    multi_car = len({(m.group(3) or '').strip() for m in parsed}) > 1
+    for m in parsed:
         pos, name = m.group(1), m.group(2).strip()
-        extra = details.get(name)
+        car = (m.group(3) or '').strip() if multi_car else ''
+        extra = ', '.join(x for x in (car, details.get(name)) if x)
         entry = f"P{pos}: {name} ({extra})" if extra else f"P{pos}: {name}"
         if name in quali:
             lap = quali[name]
@@ -143,8 +166,12 @@ def add_grid_intro(parsed_data, project_path):
         quali = racefiles.qualifying_times(project_path)
         if quali:
             print(f"Starting grid: qualifying times for {len(quali)} drivers.")
-        grid = grid_text(found.group(1), driver_details(project_path), quali)
-        parsed_data[gi] = dict(parsed_data[gi], original_text=(line[:found.start()] + line[found.end():]).rstrip())
+        grid_list, tail = split_grid_list(found.group(1))
+        grid = grid_text(grid_list, driver_details(project_path), quali)
+        # Whatever followed the list stays on the green flag line (it holds the green flag itself)
+        rest = (tail.strip().lstrip('.').strip() + ' ' + line[found.end():].strip()).strip()
+        parsed_data[gi] = dict(parsed_data[gi], original_text=(line[:found.start()].rstrip() +
+                                                                (' ' + rest if rest else '')))
     text = (f"{start:%H:%M:%S} - {racefiles.GRID_TAG} Before the start: the starting grid fills the screen while "
             "the cars wait on the grid. Welcome the viewers to the race, set the scene and talk through the front of "
             "the grid and the storylines to watch. The race has not started yet, so don't call the start or any "

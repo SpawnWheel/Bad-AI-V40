@@ -347,6 +347,30 @@ def apply_championship(cfg, champ):
     return out
 
 
+# What a new championship keeps from the one before: where things sit on the video and which graphics run (they
+# belong to the sim and the broadcast), and the AI commentators. Branding, colours, sponsors and drivers start over.
+NEW_CHAMPIONSHIP_KEEPS = ('base_resolution', 'layout', 'auto_graphics', 'popup_types', 'popup_density',
+                          'popup_duration', 'render_fps', 'commentators', 'commentator_photo',
+                          'commentator_disclaimer')
+
+
+def new_championship(cfg, name):
+    """A clean config for a new championship: the built-in branding, theme and sponsors and no drivers (add
+    this race's with ensure_drivers), keeping only NEW_CHAMPIONSHIP_KEEPS and this race's sync."""
+    out = copy.deepcopy(DEFAULT_CONFIG)
+    for k in NEW_CHAMPIONSHIP_KEEPS:
+        if k in cfg:
+            out[k] = copy.deepcopy(cfg[k])
+    out['sync'] = copy.deepcopy(cfg['sync'])
+    # This race's round, event title and the event's flag
+    for k in RACE_ONLY_CHAMPIONSHIP_KEYS + ('event_flag',):
+        out['championship'][k] = cfg['championship'].get(k, '')
+    out['championship']['name'] = name
+    out['drivers'] = {}
+    out[PRESET_KEY] = name
+    return out
+
+
 def delete_championship(name):
     if backup_championship(name):
         os.remove(championship_file(name))
@@ -362,8 +386,13 @@ def load_config(project_path):
     defaults = {k: v for k, v in load_defaults().items() if k not in PROJECT_ONLY_KEYS}
     cfg = deep_merge(deep_merge(DEFAULT_CONFIG, defaults), data)
     if data.get('drivers') is not None:
-        # Project entries win, but drivers only known from earlier races are still available
-        cfg['drivers'] = {**defaults.get('drivers', {}), **data['drivers']}
+        if data.get(PRESET_KEY) and data.get(PRESET_KEY) != defaults.get(PRESET_KEY):
+            # Set up from another championship than the defaults: only its own drivers, so a save to it never
+            # picks up another league's roster (the Mini drivers in Super Touring)
+            cfg['drivers'] = copy.deepcopy(data['drivers'])
+        else:
+            # Project entries win, but drivers only known from earlier races are still available
+            cfg['drivers'] = {**defaults.get('drivers', {}), **data['drivers']}
     return cfg
 
 
@@ -417,9 +446,10 @@ def match_car_image(log_name, files=None):
 
 
 def match_grid_car(names, prefer=(), files=None):
-    """The car preview for a driver known by any of `names` (log name, display name, short name). A file
-    that also names the car (`prefer`, e.g. 'mini' for 'Thommo_Mini.dds' over 'Thommo.dds') wins, then an
-    exact name, then the longest match."""
+    """The car preview for a driver known by any of `names` (log name, display name, short name). When the
+    car is known (`prefer`, e.g. 'mini' or 'BMW'), only a file that also names it counts ('Thommo_Mini.dds'):
+    a preview named after the driver alone ('Daniel Born.dds') could be their car from any series, so it is
+    left for the Drivers tab to pick. Then an exact name wins, then the longest match."""
     files = files if files is not None else list_images(CAR_PREVIEW_DIR)
     keys = {k for k in (race_data.norm_key(n) for n in names if n) if len(k) >= 4}
     # Words of the names ('GrizzlyCliff' -> grizzly, 'muzzer82' -> muzzer, 'kf.MTG' -> mtg) only count at the
@@ -430,11 +460,11 @@ def match_grid_car(names, prefer=(), files=None):
             if len(w) >= 3:
                 words.add(w.lower())
     prefer = [p for p in (race_data.norm_key(w) for w in prefer if w) if len(p) >= 3]
-    # When the folder has cars named after this car ('_Mini'), a driver without one gets no car rather than
-    # their car from another series
-    named = [f for f in files if any(p in race_data.norm_key(f) for p in prefer)]
+    # A driver without a preview named after this car gets no car rather than their car from another series
+    if prefer:
+        files = [f for f in files if any(p in race_data.norm_key(f) for p in prefer)]
     best, best_score = None, 0
-    for f in (named or files):
+    for f in files:
         fk = race_data.norm_key(os.path.splitext(f)[0])
         if len(fk) < 3:
             continue
@@ -457,8 +487,12 @@ def tidy_name(name):
     return ' '.join(words) or name
 
 
-def default_driver(log_name, files=None):
+def default_driver(log_name, files=None, make=''):
+    """A new driver. With the make they raced (RaceRoom's entry list) the car image is only a preview named
+    after that make ('Thommo_Mini.dds'), never one from another series."""
+    files = files if files is not None else list_images(CAR_PREVIEW_DIR)
     image = match_car_image(log_name, files)
+    car = match_grid_car((log_name,), (make,), files) if make else image
     display = tidy_name(os.path.splitext(image)[0]) if image else tidy_name(log_name)
     if len(display) < 3:
         display = tidy_name(log_name)
@@ -471,7 +505,7 @@ def default_driver(log_name, files=None):
         'team': '',
         'make': '',
         'color': '',
-        'car_image': f"Graphics/CarPreviews/{image}" if image else '',
+        'car_image': f"Graphics/CarPreviews/{car}" if car else '',
         'logo': '',
     }
 
@@ -504,23 +538,144 @@ def move_logos_out_of_car_image(drivers):
     return moved
 
 
+def same_make(a, b):
+    """'MINI' and 'Mini', 'Alfa' and 'Alfa Romeo' are the same make."""
+    a, b = race_data.norm_key(a or ''), race_data.norm_key(b or '')
+    return bool(a and b and (a == b or a in b or b in a))
+
+
+def reconcile_car(d, entry):
+    """When the race log shows a driver in another make than the saved one (a roster copied from another
+    championship, e.g. a Mini livery in a BMW race), the team, number, car image and logo described that
+    other car: they make way for what the log recorded. Returns True when the driver changed."""
+    mfr = str((entry or {}).get('mfr') or '').strip()
+    if not mfr or not d.get('make') or same_make(d['make'], mfr):
+        return False
+    d['make'] = mfr
+    d['team'] = str(entry.get('team') or '')
+    d['number'] = str(entry.get('num') or '')
+    d['car_image'] = ''
+    d['logo'] = ''
+    d.pop('no_car', None)
+    return True
+
+
+def recorded_entries(project_path):
+    """{log name: {'num', 'car', 'class', 'team', 'mfr'}} from the race's live timing file (RaceRoom), or {}."""
+    from .timing import timing_path_for
+    path = timing_path_for(racefiles.race_file(project_path, 'race_log'))
+    entries = {}
+    if not path or not os.path.exists(path):
+        return entries
+    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+        for line in f:
+            if '"entry"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if rec.get('type') == 'entry' and rec.get('name'):
+                entries[rec['name']] = rec
+    return entries
+
+
 def ensure_drivers(cfg, roster, entries=None):
     """Adds every log name to cfg['drivers']. entries (RaceRoom's recorded entry list) fills in a
-    blank team, car number and make."""
+    blank team, car number and make, and replaces those of a driver saved in another make."""
     move_logos_out_of_car_image(cfg['drivers'])
     files = list_images(CAR_PREVIEW_DIR)
     for name in roster:
-        if name not in cfg['drivers']:
-            cfg['drivers'][name] = default_driver(name, files)
-        else:
-            cfg['drivers'][name] = {**default_driver(name, files), **cfg['drivers'][name]}
         entry = (entries or {}).get(name)
+        make = str((entry or {}).get('mfr') or '')
+        if name not in cfg['drivers']:
+            cfg['drivers'][name] = default_driver(name, files, make)
+        else:
+            cfg['drivers'][name] = {**default_driver(name, files, make), **cfg['drivers'][name]}
         if entry:
             d = cfg['drivers'][name]
+            if reconcile_car(d, entry):
+                print(f"  {name} raced a {d['make']} here: dropped the team, number, car and logo saved for "
+                      "another make")
             for key, src in (('team', 'team'), ('number', 'num'), ('make', 'mfr')):
                 if not d.get(key) and entry.get(src):
                     d[key] = str(entry[src])
     return cfg
+
+
+# ---------------------------------------------------------------- logos by team or make
+def logo_files():
+    """Every image under Graphics/Logos (subfolders too), as paths relative to the app."""
+    out = []
+    for root, _dirs, files in os.walk(LOGO_DIR):
+        for f in sorted(files):
+            if f.lower().endswith(IMAGE_EXTS):
+                out.append(relative_path(os.path.join(root, f)))
+    return out
+
+
+def _words(text):
+    return {w for w in re.findall(r'[a-z0-9]+', (text or '').lower()) if len(w) >= 3}
+
+
+def match_logo(d, entry=None, files=None):
+    """The logo in Graphics/Logos for a driver: one named after their team ('Caterham' -> caterham.png), else
+    after their make ('BMW' -> bmw.png, 'Volvo' -> volvo.png). Variants ('bmw_white.png') count when there is
+    no exact file. Returns a relative path or ''."""
+    files = files if files is not None else logo_files()
+    entry = entry or {}
+    stems = [(f, race_data.norm_key(os.path.splitext(os.path.basename(f))[0])) for f in files]
+    team = d.get('team') or entry.get('team') or ''
+    make = d.get('make') or entry.get('mfr') or ''
+    team_key, team_words = race_data.norm_key(team), _words(team)
+    make_key = race_data.norm_key(make)
+    # Team first (longest name wins, so 'redbullracing' beats 'redbull'), then the make
+    if team_key:
+        hits = [(len(k), f) for f, k in stems if len(k) >= 4 and (k == team_key or k in team_words
+                                                                    or (len(k) >= 5 and k in team_key))]
+        if hits:
+            return max(hits)[1]
+    if make_key:
+        exact = [f for f, k in stems if k == make_key]
+        if exact:
+            return exact[0]
+        variants = sorted((f for f, k in stems if k.startswith(make_key) and len(make_key) >= 3), key=len)
+        if variants:
+            return variants[0]
+    return ''
+
+
+def driver_make(d, entry=None):
+    return (d.get('make') or (entry or {}).get('mfr') or '').strip()
+
+
+# Brand colours for drivers without a colour of their own (the timing tower chips and every driver graphic)
+MAKE_COLORS = {
+    'audi': '#BB0A30', 'bmw': '#1C69D4', 'porsche': '#F2F2F2', 'ferrari': '#DC0000', 'mercedes': '#00A19C',
+    'mercedesamg': '#00A19C', 'nissan': '#C3002F', 'bentley': '#2A5C45', 'mclaren': '#FF8000',
+    'lamborghini': '#D4A017', 'aston': '#00665E', 'astonmartin': '#00665E', 'chevrolet': '#D1A000',
+    'cadillac': '#C9A227', 'ford': '#1D3F8F', 'toyota': '#EB0A1E', 'honda': '#CC0000', 'hyundai': '#002C5F',
+    'alpine': '#0055B8', 'renault': '#FFCC00', 'peugeot': '#9FD62B', 'volkswagen': '#001E50',
+    'opel': '#F7D417', 'lexus': '#1A1A1A', 'mazda': '#9B1B30', 'ktm': '#FF6600', 'radical': '#1E9E3E',
+    'cupra': '#B17457', 'lotus': '#00573F', 'alfaromeo': '#9B0E1E', 'corvette': '#D1A000', 'ruf': '#C8A951',
+    'tatuus': '#D61F26', 'saleen': '#1E1E1E', 'mclarenautomotive': '#FF8000', 'callaway': '#16365C',
+    'volvo': '#3E7CB1', 'mini': '#00843D', 'caterham': '#0B6E3F', 'alfa': '#9B0E1E', 'holden': '#C8102E',
+    'subaru': '#0039A6', 'seat': '#E5541B', 'skoda': '#4BA82E', 'citroen': '#DA291C', 'kia': '#BB162B',
+    'vauxhall': '#F7D417', 'mitsubishi': '#E60012', 'dodge': '#BA0C2F', 'chrysler': '#2B4C7E',
+}
+
+
+def make_color(make):
+    """The brand colour for a make ('BMW' -> BMW blue), or ''."""
+    mk = race_data.norm_key(make or '')
+    if not mk:
+        return ''
+    if mk in MAKE_COLORS:
+        return MAKE_COLORS[mk]
+    for k, v in MAKE_COLORS.items():
+        if mk.startswith(k) and len(k) > 3:
+            return v
+    return ''
 
 
 def commentator_bio(cfg, name):

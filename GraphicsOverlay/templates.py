@@ -62,7 +62,13 @@ class Templates:
         return gcfg.driver_meta(self.cfg, name)
 
     def driver_color(self, name):
-        c = self.meta(name).get('color')
+        """The Drivers tab colour, else the brand colour of their make (BMW blue, Renault yellow), else the
+        theme accent."""
+        m = self.meta(name)
+        c = m.get('color')
+        if not c and name:
+            entry = self.race.timing.entry(name) if getattr(self.race, 'timing', None) else {}
+            c = gcfg.make_color(gcfg.driver_make(m, entry))
         return rgba(c) if c else self.th.accent
 
     def _image_path(self, name):
@@ -539,7 +545,8 @@ class Templates:
         """The car on the starting grid: the Drivers tab car image when it is a car preview, else the preview in
         Graphics/CarPreviews that matches the driver (preferring one named after this race's car)."""
         car = self.car(name, max_w, max_h)
-        if car is not None:
+        if car is not None or self.meta(name).get('no_car'):
+            # The Drivers tab car image set to (none): no car, not one matched by name
             return car
         if not hasattr(self, '_car_files'):
             self._car_files = gcfg.list_images(gcfg.CAR_PREVIEW_DIR)
@@ -1371,7 +1378,10 @@ class Templates:
         # Header: big number on the left, SURNAME over RADIO on the right
         f_num = font(78, 'bold')
         num_w = int(text_w(f_num, number)) + 18 if number else 0
-        f_head = fit_font(surname, W - pad * 2 - num_w, 44, 'bold')
+        # The team/make logo next to the number, as it is
+        logo = self.badge(name, 64) if name else None
+        logo_w = logo.width + 18 if logo is not None else 0
+        f_head = fit_font(surname, W - pad * 2 - num_w - logo_w, 44, 'bold')
         f_radio = font(44, 'bold')
         base_name, base_radio = 66, 112  # text baselines
         head_h = base_radio + 22
@@ -1406,6 +1416,10 @@ class Templates:
         ImageDraw.Draw(img).text((right, base_radio), 'RADIO', font=f_radio, fill=white, anchor='rs')
         if number:
             ImageDraw.Draw(img).text((pad - 4, base_radio), number, font=f_num, fill=col, anchor='ls')
+        if logo is not None:
+            # Centred on the SURNAME / RADIO block
+            cy = (base_name - 34 + base_radio) / 2
+            img.alpha_composite(logo, (int(pad + num_w), int(cy - logo.height / 2)))
 
         # Body: driver lines right-aligned in their colour, replies left-aligned in white
         y = head_h + 12
