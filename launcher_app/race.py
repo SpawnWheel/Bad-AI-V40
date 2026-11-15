@@ -52,7 +52,7 @@ class RaceScreen(tk.Frame):
 
     def _build_header(self):
         s = self.meta.get("summary") or racefiles.summarize_log(race_file(self.folder, "race_log"))
-        self.banner = b = t.PhotoCanvas(self, focus=0.35, fade=0.5, height=160, on_layout=self._layout_banner)
+        self.banner = b = t.PhotoCanvas(self, focus=0.35, fade=0.5, height=184, on_layout=self._layout_banner)
         b.pack(fill="x")
         b.link(36, 30, "←  My races", lambda: self.app.show("library"), size=9, anchor="w",
                colour=t.MUTED, hover="#ffffff")
@@ -76,8 +76,56 @@ class RaceScreen(tk.Frame):
         if s.get("winner"):
             bits.append(f"won by {s['winner']}")
         b.create_text(130, 112, text="  ·  ".join(bits), fill=t.MUTED, font=(t.FONT, 10), anchor="w")
+        b.create_window(130, 150, anchor="w", window=self._championship_picker(b))
         self.folder_win = b.create_window(0, 92, anchor="e", window=t.button(
             b, "Open race folder", lambda: os.startfile(self.folder), size=9))
+
+    # ------------------------------------------------------------------ championship
+
+    @staticmethod
+    def _championships():
+        """The saved graphics championships, by name."""
+        try:
+            import sys
+            if racefiles.APP_DIR not in sys.path:
+                sys.path.insert(0, racefiles.APP_DIR)
+            from GraphicsOverlay import config as gcfg
+            return gcfg.list_championships()
+        except Exception:
+            return []
+
+    def _championship_picker(self, parent):
+        """Which championship the race belongs to: chosen before any step runs, so the graphics and the drivers'
+        details go to the right one (or nowhere, for an invitational)."""
+        f = tk.Frame(parent, bg=t.CARD, padx=10, pady=5, highlightthickness=1, highlightbackground=t.BORDER)
+        chosen = racefiles.race_championship(self.folder)
+        names = self._championships()
+        options = names + [racefiles.INVITATIONAL_LABEL]
+        if chosen and chosen != racefiles.INVITATIONAL and chosen not in names:
+            options.insert(0, chosen)  # deleted since: still shown, so the race says what it was made for
+        shown = racefiles.INVITATIONAL_LABEL if chosen == racefiles.INVITATIONAL else chosen
+        self._champ_label = t.label(f, "Championship", size=9, weight="bold",
+                                    colour=t.MUTED if chosen else t.WARNING)
+        self._champ_label.pack(side="left", padx=(0, 8))
+        var = tk.StringVar(value=shown)
+        box = ttk.Combobox(f, textvariable=var, values=options, state="readonly", width=34)
+        box.pack(side="left")
+        box.bind("<<ComboboxSelected>>", lambda e: self._choose_championship(var.get()))
+        self._champ_hint = t.label(f, "" if chosen else "Choose one before you start", size=9, colour=t.WARNING)
+        self._champ_hint.pack(side="left", padx=(8, 0))
+        return f
+
+    def _choose_championship(self, label):
+        value = racefiles.INVITATIONAL if label == racefiles.INVITATIONAL_LABEL else label
+        racefiles.set_race_championship(self.folder, value)
+        self.meta = racefiles.read_race(self.folder)
+        self._champ_label.config(fg=t.MUTED)
+        self._champ_hint.config(text="")
+        # The notes stage shows that championship's notes: save any typing, then redraw it
+        self.flush_notes()
+        self.refresh(force=True)
+        self.app.toast(f"This race is part of {label}." if value != racefiles.INVITATIONAL else
+                       "This race is a one-off: it starts with a blank slate and keeps its drivers to itself.")
 
     def _layout_banner(self, w, h):
         self.banner.coords(self.folder_win, w - 36, 92)
@@ -413,7 +461,9 @@ class RaceScreen(tk.Frame):
         t.label(c, "Paste the qualifying results (from the results screen, the league site or a spreadsheet): one "
                    "driver a line with their lap time, like 1:42.315, or gap, like +0.214. Or paste a screenshot "
                    "of them (Ctrl+V), or pick one with Read screenshot, and the AI reads it. Pasted times replace "
-                   "the recorded ones.", size=8, colour=t.DIM, wraplength=640).pack(anchor="w", pady=(10, 4))
+                   "the recorded ones. A screenshot also fills in the drivers' countries from their flags: one "
+                   "of the game's driver list at the start works too, even without any times.",
+                size=8, colour=t.DIM, wraplength=640).pack(anchor="w", pady=(10, 4))
         box = tk.Text(c, height=5, bg=t.INPUT, fg=t.TEXT, relief="flat", bd=0, font=(t.FONT, 10), wrap="none",
                       padx=10, pady=8, insertbackground=t.TEXT, highlightthickness=1, highlightbackground=t.BORDER,
                       highlightcolor=t.ACCENT)
@@ -510,6 +560,11 @@ class RaceScreen(tk.Frame):
         if not api_key:
             result.config(text="Set the Gemini API key in Settings first.", fg=t.WARNING)
             return
+        if not racefiles.race_championship(self.folder):
+            # The flags it reads are saved to the race's championship, so that has to be known, not guessed
+            result.config(text="Choose the race's championship at the top of the page first: the drivers' "
+                               "countries are saved to it.", fg=t.WARNING)
+            return
         aliases = self._driver_aliases()
         if not aliases:
             result.config(text="The race log has no starting grid to match the names to.", fg=t.WARNING)
@@ -521,17 +576,44 @@ class RaceScreen(tk.Frame):
 
         def work():
             try:
-                rows, unmatched, _ = qualifying_ai.read_screenshot(image, aliases, api_key, model)
-                self.after(0, lambda: self._screenshot_read(rows, unmatched, aliases, result))
+                rows, unmatched, _, countries = qualifying_ai.read_screenshot(image, aliases, api_key, model)
+                self.after(0, lambda: self._screenshot_read(rows, unmatched, aliases, result, countries))
             except Exception as e:
                 msg = f"The AI couldn't read the screenshot: {e}"
                 self.after(0, lambda: result.winfo_exists() and result.config(text=msg, fg=t.WARNING))
         threading.Thread(target=work, daemon=True).start()
 
-    def _screenshot_read(self, rows, unmatched, aliases, result):
+    def _save_countries(self, countries):
+        """The flags read off the screenshot go to the graphics drivers (this race and its championship).
+        Returns a sentence for the note, or ''."""
+        if not countries:
+            return ""
+        try:
+            import sys
+            if racefiles.APP_DIR not in sys.path:
+                sys.path.insert(0, racefiles.APP_DIR)
+            from GraphicsOverlay import config as gcfg
+            changed = gcfg.set_driver_countries(self.folder, countries)
+        except Exception as e:
+            return f" Couldn't save the countries: {e}."
+        where = ("this race only" if racefiles.race_championship(self.folder) == racefiles.INVITATIONAL
+                 else racefiles.race_championship(self.folder))
+        if not changed:
+            return f" The {len(countries)} flags it read match the graphics drivers already."
+        return (f" Flags: read {len(countries)}, set {len(changed)} countries for {where} ("
+                + ", ".join(f"{n} {new}" for n, (_, new) in list(changed.items())[:5])
+                + ("…" if len(changed) > 5 else "") + ").")
+
+    def _screenshot_read(self, rows, unmatched, aliases, result, countries=None):
+        flags_note = self._save_countries(countries)
         if not rows:
+            # A grid set before the session (RaceRoom's leaderboard qualifying) has no times: the flags still count
+            note = ("No lap times in the screenshot, so the grid shows none." + flags_note if countries else
+                    "The AI found no lap times or flags for this race's drivers in the screenshot.")
             if result.winfo_exists():
-                result.config(text="The AI found no lap times for this race's drivers in the screenshot.", fg=t.WARNING)
+                result.config(text=note, fg=t.SUCCESS if countries else t.WARNING)
+            if countries:
+                self.app.toast(note)
             return
         racefiles.save_qualifying(self.folder, rows, "screenshot")
         missing = [n for n in aliases if n not in {r["name"] for r in rows}]
@@ -540,6 +622,7 @@ class RaceScreen(tk.Frame):
             note += " No time for: " + ", ".join(missing[:6]) + ("…" if len(missing) > 6 else "") + "."
         if unmatched:
             note += f" {len(unmatched)} driver(s) in it aren't in this race."
+        note += flags_note
         self._quali_note = note
         self.app.toast(note)
         if self.winfo_exists():
@@ -621,15 +704,41 @@ class RaceScreen(tk.Frame):
 
     # ------------------------------------------------------------------ notes
 
+    def _championship_notes_card(self, parent):
+        """The championship's own notes, carried over to every race in it; or why there are none here."""
+        champ = racefiles.race_championship(self.folder)
+        path = racefiles.championship_notes_path(champ)
+        if path:
+            return ("championship_notes", f"Championship notes  ·  {champ}",
+                    "Everything that carries over from race to race: the drivers and their personalities, rivalries, "
+                    "standings, running jokes, how to pronounce names. Shared by every race in this championship "
+                    "and read before the race notes by the spice, commentary and graphics steps.", path)
+        c = t.card(parent, padx=18, pady=14)
+        c.pack(fill="x", pady=5)
+        t.label(c, "Championship notes", size=11, weight="bold").pack(anchor="w")
+        t.label(c, "An invitational or special event has no championship notes: put everything in the race notes."
+                if champ else "Choose the race's championship at the top of the page to write notes that carry "
+                              "over to every race in it.", size=9, colour=t.MUTED if champ else t.WARNING,
+                wraplength=640).pack(anchor="w", pady=(4, 0))
+        return None
+
     def _notes_editors(self, parent):
+        self._notes_paths = {}
+        editors = [self._championship_notes_card(parent)]
         for key, title, about in (
-                ("race_notes", "Race notes", "Championship, storylines, rivalries, nicknames, how to pronounce names, "
-                                             "who to focus on. Used by the spice, commentary and graphics steps."),
+                ("race_notes", "Race notes", "This race only: storylines, who to focus on, what happened in "
+                                             "qualifying. Used by the spice, commentary and graphics steps."),
                 ("camera_notes", "Camera notes", "Only for the camera director - e.g. 'Focus on car #24 whenever it "
                                                  "is battling for position.'"),
                 ("graphics_notes", "Graphics notes", "Background facts for the pop-up graphics, one per line. The "
                                                      "graphics AI picks the ones that fit - e.g. 'Thommo has won "
                                                      "three of the last four rounds here.'")):
+            editors.append((key, title, about, race_file(self.folder, key)))
+        for editor in editors:
+            if editor is None:
+                continue
+            key, title, about, path = editor
+            self._notes_paths[key] = path
             c = t.card(parent, padx=18, pady=14)
             c.pack(fill="x", pady=5)
             head = tk.Frame(c, bg=t.CARD)
@@ -638,11 +747,11 @@ class RaceScreen(tk.Frame):
             saved = t.label(head, "", size=8, colour=t.DIM)
             saved.pack(side="right")
             t.label(c, about, size=9, colour=t.MUTED, wraplength=640).pack(anchor="w", pady=(4, 8))
-            text = tk.Text(c, height=7 if key == "race_notes" else 4, bg=t.INPUT, fg=t.TEXT, relief="flat", bd=0,
+            text = tk.Text(c, height=7 if key in ("race_notes", "championship_notes") else 4, bg=t.INPUT, fg=t.TEXT,
+                           relief="flat", bd=0,
                            font=(t.FONT, 10), wrap="word", padx=10, pady=8, insertbackground=t.TEXT,
                            highlightthickness=1, highlightbackground=t.BORDER, highlightcolor=t.ACCENT, undo=True)
             text.pack(fill="x")
-            path = race_file(self.folder, key)
             existing = ""
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
@@ -664,10 +773,11 @@ class RaceScreen(tk.Frame):
         if not widget.winfo_exists():
             return
         content = widget.get("1.0", "end-1c").strip()
-        path = race_file(self.folder, key)
+        path = self._notes_paths.get(key) or race_file(self.folder, key)
         if not content and not os.path.exists(path):
             return
         try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content + "\n" if content else "")
             saved_label.config(text="Saved")

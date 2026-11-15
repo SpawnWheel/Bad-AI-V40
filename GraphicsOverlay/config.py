@@ -377,7 +377,9 @@ def delete_championship(name):
 
 
 def load_config(project_path):
-    """Built-in defaults <- league defaults (Graphics/graphics_defaults.json) <- this project's file."""
+    """Built-in defaults <- league defaults (Graphics/graphics_defaults.json) <- this project's file, then the
+    championship the race page chose for this race (racefiles.race_championship): that championship's setup
+    when the project isn't on it yet, or a blank slate for an invitational."""
     path = os.path.join(project_path, CONFIG_NAME)
     data = {}
     if os.path.exists(path):
@@ -385,14 +387,26 @@ def load_config(project_path):
             data = json.load(f)
     defaults = {k: v for k, v in load_defaults().items() if k not in PROJECT_ONLY_KEYS}
     cfg = deep_merge(deep_merge(DEFAULT_CONFIG, defaults), data)
+    chosen = racefiles.race_championship(project_path)
     if data.get('drivers') is not None:
-        if data.get(PRESET_KEY) and data.get(PRESET_KEY) != defaults.get(PRESET_KEY):
-            # Set up from another championship than the defaults: only its own drivers, so a save to it never
-            # picks up another league's roster (the Mini drivers in Super Touring)
+        if chosen == racefiles.INVITATIONAL or (
+                data.get(PRESET_KEY) and data.get(PRESET_KEY) != defaults.get(PRESET_KEY)):
+            # An invitational, or set up from another championship than the defaults: only its own drivers, so
+            # a save never picks up another league's roster (the Mini drivers in Super Touring)
             cfg['drivers'] = copy.deepcopy(data['drivers'])
         else:
             # Project entries win, but drivers only known from earlier races are still available
             cfg['drivers'] = {**defaults.get('drivers', {}), **data['drivers']}
+    if chosen == racefiles.INVITATIONAL:
+        if not data or data.get(PRESET_KEY):
+            # Blank slate: the layout and commentators stay, no championship's branding, sponsors or drivers
+            cfg = new_championship(cfg, '')
+            cfg.pop(PRESET_KEY, None)
+    elif chosen and data.get(PRESET_KEY) != chosen:
+        champ = load_championship(chosen)
+        if champ is not None:
+            cfg = apply_championship(cfg, champ)
+            cfg[PRESET_KEY] = chosen
     return cfg
 
 
@@ -691,6 +705,53 @@ def commentator_disclaimer(cfg):
     """The line under the AI commentators card ('' hides it)."""
     text = cfg.get('commentator_disclaimer')
     return ' '.join((DEFAULT_DISCLAIMER if text is None else text).split())
+
+
+def flag_codes():
+    """The country codes that have a flag in Graphics/Flags ('GBR', 'ESP', ...)."""
+    return sorted({os.path.splitext(f)[0].upper() for f in list_images(FLAG_DIR)})
+
+
+def set_driver_countries(project_path, countries):
+    """Saves {log name: country code} (read off the game's own flags) where this race's drivers live: its
+    graphics setup, and the championship the race page chose for it (backed up first) plus the graphics defaults
+    when they are that championship. An invitational keeps them to itself. Never guesses a championship: raises
+    ValueError when the race has none chosen. Returns {name: (old code, new code)} for the drivers changed."""
+    chosen = racefiles.race_championship(project_path)
+    if not chosen:
+        raise ValueError("choose the race's championship first")
+    countries = {n: c.upper() for n, c in countries.items() if c}
+    if not countries:
+        return {}
+    changed = {}
+
+    def apply(drivers):
+        n = 0
+        for name, code in countries.items():
+            d = drivers.get(name)
+            if d is None:
+                d = drivers[name] = default_driver(name)
+            if (d.get('country') or '').upper() != code:
+                changed.setdefault(name, ((d.get('country') or '').upper(), code))
+                d['country'] = code
+                n += 1
+        return n
+
+    # This race's setup, as the graphics would load it (already on the chosen championship)
+    cfg = load_config(project_path)
+    if apply(cfg['drivers']):
+        save_config(project_path, cfg)
+    preset = None if chosen == racefiles.INVITATIONAL else chosen
+    defaults = load_defaults()
+    champ = load_championship(preset) if preset else None
+    if champ is not None and apply(champ.setdefault('drivers', {})):
+        backup_championship(preset)
+        with open(championship_file(preset), 'w', encoding='utf-8') as f:
+            json.dump(champ, f, indent=2, ensure_ascii=False)
+    if defaults and defaults.get(PRESET_KEY) == preset and apply(defaults.setdefault('drivers', {})):
+        with open(DEFAULTS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(defaults, f, indent=2, ensure_ascii=False)
+    return changed
 
 
 def driver_meta(cfg, name):

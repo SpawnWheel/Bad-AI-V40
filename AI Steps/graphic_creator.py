@@ -65,7 +65,8 @@ def main():
     with open(prompt_file, 'r', encoding='utf-8') as f:
         prompt_text = f.read()
 
-    notes = racefiles.notes_text(racefiles.race_file(project_path, "race_notes"))
+    # The championship's notes and this race's
+    notes = racefiles.notes_for_ai(project_path)
     full_prompt = (f"{prompt_text}\n\nProject Specific Notes:\n{notes or '(none)'}"
                    f"{racefiles.graphics_notes_block(project_path)}\n\n{brief}")
 

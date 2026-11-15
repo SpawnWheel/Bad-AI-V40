@@ -278,7 +278,10 @@ class GraphicsSetup:
 
     def refresh_championship_bar(self):
         name = self.cfg.get(gcfg.PRESET_KEY)
-        self.champ_name_label.config(text=name or "No championship (this race only)", fg=ACCENT_LIGHT if name else DIM)
+        one_off = (gcfg.racefiles.INVITATIONAL_LABEL
+                   if gcfg.racefiles.race_championship(self.project_path) == gcfg.racefiles.INVITATIONAL
+                   else "No championship (this race only)")
+        self.champ_name_label.config(text=name or one_off, fg=ACCENT_LIGHT if name else DIM)
         self.champ_box.config(values=[n for n in gcfg.list_championships() if n != name])
         self.champ_switch_var.set('')
         self.champ_save_btn.config(text=f"Save to \"{name}\"" if name else "Save championship")
@@ -1054,8 +1057,9 @@ class GraphicsSetup:
         if not gem:
             return
         api_key, model = gem
-        notes = gcfg.racefiles.notes_text(self.files['project_notes'])
-        self.set_status("Asking the AI to read the race notes…")
+        # The championship's notes (carried over from race to race) and this race's
+        notes = gcfg.racefiles.notes_for_ai(self.project_path)
+        self.set_status("Asking the AI to read the championship and race notes…")
 
         def work():
             try:
@@ -1502,9 +1506,15 @@ class GraphicsSetup:
         self.cfg['sync']['auto'] = self.auto_sync.get()
         path = gcfg.save_config(self.project_path, self.cfg)
         msg = f"Saved {os.path.basename(path)}"
-        if self.save_default_var.get():
+        # The race page's championship follows what this race was saved as (switched, started or saved as new
+        # here); without one it is a one-off, like an invitational
+        preset = self.cfg.get(gcfg.PRESET_KEY)
+        gcfg.racefiles.set_race_championship(self.project_path, preset or gcfg.racefiles.INVITATIONAL)
+        if self.save_default_var.get() and preset:
             gcfg.save_defaults(self.cfg)
             msg += " and the defaults for future races"
+        elif self.save_default_var.get():
+            msg += " (a one-off event, so not as the defaults for future races)"
         self.set_status(msg)
         return path
 

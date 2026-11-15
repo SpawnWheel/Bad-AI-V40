@@ -360,6 +360,15 @@ class App:
         if running:
             self.show_activity(running)
             return
+        if not racefiles.race_championship(folder):
+            # Everything after this point uses the championship (the graphics, the drivers' details), so it is
+            # chosen first rather than guessed from whichever championship was used last
+            messagebox.showwarning(
+                "Choose the championship first",
+                "Which championship is this race part of?\n\nPick it at the top of the race page, under the race "
+                f"details: one of your championships, or \"{racefiles.INVITATIONAL_LABEL}\" for a one-off that "
+                "starts with a blank slate.")
+            return
         if (step.get("prompt_folder") or sid == "camera") and not self.settings.get("gemini_api_key"):
             messagebox.showwarning(step["title"], "This step uses the AI. Add your Gemini API key in Settings first.")
             return

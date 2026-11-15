@@ -126,6 +126,49 @@ def update_race(folder, **fields):
     return data
 
 
+# ---------------------------------------------------------------- championship
+# Every race says which championship it belongs to (chosen on the race page before any step runs), so the graphics
+# and anything learned about the drivers (their flags) go to that championship and no other. An invitational or
+# special event belongs to none: it starts with a blank slate and keeps what it learns to itself.
+INVITATIONAL = "__invitational__"
+INVITATIONAL_LABEL = "Invitational / special event"
+
+
+def race_championship(folder):
+    """The championship name chosen for the race, INVITATIONAL, or '' when none has been chosen yet."""
+    return str(read_race(folder).get("championship") or "") if folder else ""
+
+
+def set_race_championship(folder, name):
+    update_race(folder, championship=name or "")
+
+
+# Notes that belong to the championship rather than one race (the drivers, rivalries, standings, running jokes),
+# written once and carried over to every race in it. An invitational has none.
+CHAMPIONSHIP_NOTES_DIR = os.path.join(APP_DIR, "Graphics", "Championships", "Notes")
+
+
+def championship_notes_path(name):
+    """The notes file of a championship, or '' for an invitational or no championship."""
+    if not name or name == INVITATIONAL:
+        return ""
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_") or "championship"
+    return os.path.join(CHAMPIONSHIP_NOTES_DIR, f"{slug}.txt")
+
+
+def notes_for_ai(folder):
+    """The race's championship notes and race notes, as one block for the AI steps, or "" when there are none."""
+    champ = race_championship(folder)
+    parts = []
+    champ_notes = notes_text(championship_notes_path(champ)) if championship_notes_path(champ) else ""
+    if champ_notes:
+        parts.append(f"Championship notes ({champ}, carried over from race to race):\n{champ_notes}")
+    race_notes = notes_text(race_file(folder, "race_notes"))
+    if race_notes:
+        parts.append(f"Race notes (this race):\n{race_notes}" if champ_notes else race_notes)
+    return "\n\n".join(parts)
+
+
 # ---------------------------------------------------------------- grid intro
 # Optional pre-race intro: the timing step adds a [GRID] event GRID seconds before the green flag, so the
 # commentators talk over a full-screen starting grid. The export holds one frame of the replay under it

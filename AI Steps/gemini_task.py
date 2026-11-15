@@ -61,6 +61,23 @@ def prompt_directives(prompt_text):
     return "\n".join(kept), found
 
 
+def championship_notes(folders):
+    """(notes, championship name) of the race's championship (racefiles), or ('', '')."""
+    app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
+    try:
+        import racefiles
+    except ImportError:
+        return "", ""
+    for folder in folders:
+        champ = racefiles.race_championship(folder)
+        if champ:
+            path = racefiles.championship_notes_path(champ)
+            return (racefiles.notes_text(path) if path else ""), champ
+    return "", ""
+
+
 def entry_list(folders):
     """Every driver's car, number and livery team as the sim recorded them (RaceRoom's timing file), or ''."""
     import json
@@ -141,12 +158,17 @@ def run_ai_step():
                 project_notes_path = possible_path
 
     extra_context = ""
+    # The championship's notes come first (carried over from race to race); the race's own notes follow and win
+    champ_notes, champ = championship_notes(folders)
+    if champ_notes:
+        extra_context += f"\n\nChampionship Notes ({champ}, carried over from race to race):\n{champ_notes}"
+        print(f"Loaded the championship notes for {champ}")
     if project_notes_path:
         try:
             with open(project_notes_path, 'r', encoding='utf-8') as f:
                 notes = "\n".join(l for l in f.read().splitlines() if not l.lstrip().startswith("#")).strip()
             if notes:
-                extra_context = f"\n\nProject Specific Instructions:\n{notes}"
+                extra_context += f"\n\nProject Specific Instructions:\n{notes}"
                 print(f"Loaded race notes from: {project_notes_path}")
         except Exception as e:
             print(f"Found {os.path.basename(project_notes_path)} but failed to read it: {e}")
