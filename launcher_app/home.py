@@ -95,6 +95,11 @@ class HomeScreen(tk.Frame):
                                     size=12, bold=True)
         self.items["voices"] = c.link(0, 0, "Design driver and engineer voices in the Voice studio  →",
                                       self.app.launch_voice_studio, size=10)
+        self.items["map_hint"] = c.create_text(0, 0, text="New track? Map its corners and straights before you race:",
+                                               fill=t.WARNING, font=(t.FONT, 10), anchor="w")
+        self.items["map_links"] = [c.link(0, 0, f"Corner Mapper - {t.SIM_NAMES[sim]}",
+                                          lambda s=sim: self.app.launch_corner_mapper(s), size=10, bold=True, anchor="w")
+                                   for sim in ("AMS2", "RaceRoom")]
         c.on_layout = self._layout_pick
 
     def _on(self, key):
@@ -191,6 +196,18 @@ class HomeScreen(tk.Frame):
         c.coords(self.items["count"], cx, cy + 362)
         c.coords(self.items["link"], cx, cy + 388)
         c.coords(self.items["voices"], cx, cy + 414)
+        # The Corner Mapper reminder: hint text, then a link per sim, centred as one line
+        parts = [self.items["map_hint"]] + self.items["map_links"]
+        widths = []
+        for item in parts:
+            c.coords(item, 0, 0)
+            box = c.bbox(item)
+            widths.append(box[2] - box[0] if box else 0)
+        gap = 14
+        x = cx - (sum(widths) + gap * (len(parts) - 1)) / 2
+        for item, wd in zip(parts, widths):
+            c.coords(item, x, cy - 130)
+            x += wd + gap
 
     # ------------------------------------------------------------------ live session
 
@@ -228,11 +245,13 @@ class HomeScreen(tk.Frame):
             self.service_labels[key] = lab
 
         self.saved_card = t.card(c, padx=18, pady=12)
+        self.map_card = t.card(c, padx=18, pady=12, bg=t.WARNING_SOFT)
+        self._shown_map = None
         self.stop_btn = t.button(c, "■  Stop session", self.app.stop_session, kind="danger", size=11, padx=18, pady=8)
         self.mapper_btn = t.button(c, "Corner Mapper", lambda: self.app.launch_corner_mapper(s["sim"]), size=10)
         self.windows = {name: c.create_window(0, 0, window=w, anchor="nw") for name, w in (
             ("status", self.status_card), ("engineer", self.service_cards["engineer"]),
-            ("logger", self.service_cards["logger"]), ("saved", self.saved_card),
+            ("logger", self.service_cards["logger"]), ("map", self.map_card), ("saved", self.saved_card),
             ("stop", self.stop_btn), ("mapper", self.mapper_btn))}
         c.on_layout = self._layout_live
         self.refresh()
@@ -259,6 +278,15 @@ class HomeScreen(tk.Frame):
             c.coords(self.windows[key], x + i * (half + 12), y)
             c.itemconfigure(self.windows[key], width=half)
         y += self.service_cards["engineer"].winfo_reqheight() + 12
+        if self.map_card.winfo_children():
+            c.itemconfigure(self.windows["map"], state="normal", width=width)
+            c.coords(self.windows["map"], x, y)
+            for w in self.map_card.winfo_children():
+                if isinstance(w, tk.Label) and w.cget("wraplength"):
+                    w.config(wraplength=width - 60)
+            y += self.map_card.winfo_reqheight() + 12
+        else:
+            c.itemconfigure(self.windows["map"], state="hidden")
         if self.saved_card.winfo_children():
             c.itemconfigure(self.windows["saved"], state="normal", width=width)
             c.coords(self.windows["saved"], x, y)
@@ -271,6 +299,26 @@ class HomeScreen(tk.Frame):
         y += self.stop_btn.winfo_reqheight() + 18
         c.coords(self.items["hint"], x, y)
         c.itemconfigure(self.items["hint"], width=width)
+
+    def _refresh_map_card(self, s):
+        """Warns when the recorder found no corner map for this track: the log then can't say where things happened."""
+        unmapped = s.get("logger") and s.get("map_track") and not s.get("map_corners")
+        key = s.get("map_track") if unmapped else None
+        if key == self._shown_map:
+            return
+        self._shown_map = key
+        for w in self.map_card.winfo_children():
+            w.destroy()
+        if not unmapped:
+            return
+        t.label(self.map_card, f"⚠  {t.pretty_track(key)} has no corner map", size=11, weight="bold",
+                colour=t.WARNING, bg=t.WARNING_SOFT).pack(anchor="w")
+        t.label(self.map_card, "Races recorded here won't say which corner or straight an overtake or accident "
+                               "happened at, so the commentary gets vague. Map the track with the Corner Mapper "
+                               "before you race the session you want to keep. It only needs doing once per track.",
+                size=10, colour=t.TEXT, bg=t.WARNING_SOFT, justify="left", wraplength=700).pack(anchor="w", pady=(4, 8))
+        t.button(self.map_card, "Open the Corner Mapper", lambda: self.app.launch_corner_mapper(s["sim"]),
+                 kind="primary", size=10).pack(anchor="w")
 
     def refresh(self):
         s = self.app.session
@@ -317,6 +365,8 @@ class HomeScreen(tk.Frame):
                 lab.config(text=f"●  {proc.state.capitalize()} - see its output", fg="#ff6a5f")
             else:
                 lab.config(text=s.get(f"{key}_off") or "Off", fg=t.DIM)
+
+        self._refresh_map_card(s)
 
         notes = s.get("notes", [])
         shown = getattr(self, "_shown_notes", None)

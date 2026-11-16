@@ -656,6 +656,7 @@ class AMS2EventLogger:
             if track_len > 0:
                 self.log("TRACK", f"Track Length: {track_len:.1f} meters", sim_time=sim_now)
             self.load_track_corners(track_loc, track_var)
+            racefiles.emit_status(state="track", track=track_display, corners=len(self.current_track_corners))
 
         # Session and State
         # A restarted race goes back to "not started" without changing the session: record it afresh

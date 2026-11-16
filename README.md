@@ -7,12 +7,15 @@ BAD AI does two things for **Automobilista 2** and **RaceRoom**:
 
 You click one logo before you race. Afterwards you pick the race from a list and follow the steps.
 
+> **New track?** Run the [Corner Mapper](#map-the-track-first-corner-mapper) on it **before** you race, so the AI knows where on track every overtake and accident happened.
+
 ---
 
 ## Contents
 
 - [Install](#install)
 - [Start the app](#start-the-app)
+- [Map the track first (Corner Mapper)](#map-the-track-first-corner-mapper)
 - [Racing](#racing)
 - [Making a replay](#making-a-replay)
 - [Where everything is saved](#where-everything-is-saved)
@@ -21,6 +24,7 @@ You click one logo before you race. Afterwards you pick the race from a list and
 - [Graphics in detail](#graphics-in-detail)
 - [Troubleshooting](#troubleshooting)
 - [Upgrading from the old launcher](#upgrading-from-the-old-launcher)
+- [Help and contact](#help-and-contact)
 
 ---
 
@@ -67,12 +71,25 @@ The app has three screens, shown along the top:
 | **My races** | Every race you've recorded. Open one to make its replay. |
 | **Settings** | Gemini key, where your screen recordings are saved, and the race engineer. |
 
+## Map the track first (Corner Mapper)
+
+> **Important:** map the track with the **Corner Mapper** before you race on it. It must be done **before the race is recorded**, because the recorder writes the corner names into the log as it goes. Without a map, the AI can't tell where overtakes and accidents happened, and the commentary gets vague.
+
+You only need to do this once per track layout. If you start a session on a track that has no map, the live session screen shows a warning with an **Open the Corner Mapper** button, so you can map it before the race you want to keep.
+
+1. Open the Corner Mapper from any of these places:
+   - the **Corner Mapper** links under *Ready to race?* on the **Race** screen
+   - **Settings** → **Tools**
+   - the **Corner Mapper** button on the live session screen
+2. Drive a lap and mark each part of the track: not just the corners, but the straights, chicanes and other named sections too (for example *Start/finish straight*, *Back straight*). The more of the lap is named, the better the AI can place what happened.
+
 ## Racing
 
-1. On the **Race** screen, click the **AMS2** or **RaceRoom** logo.
-2. The race engineer and the race recorder start in the background, and the screen shows the live session.
-3. Start the sim and race as usual. Hold **Caps Lock** (or your wheel button) to talk to your engineer.
-4. When you're done, click **Stop session** or just close BAD AI. Both stop cleanly and your races are saved.
+1. Mapped this track yet? If not, run the [Corner Mapper](#map-the-track-first-corner-mapper) first.
+2. On the **Race** screen, click the **AMS2** or **RaceRoom** logo.
+3. The race engineer and the race recorder start in the background, and the screen shows the live session.
+4. Start the sim and race as usual. Hold **Caps Lock** (or your wheel button) to talk to your engineer.
+5. When you're done, click **Stop session** or just close BAD AI. Both stop cleanly and your races are saved.
 
 What gets recorded:
 
@@ -106,27 +123,105 @@ RaceRoom doesn't share driver data during replays, so RaceRoom races have to be 
 
 Go to **My races** and click **Make replay** on a race. The race screen shows the steps on the left. Each step explains what to do, and the next button to press is always the red one.
 
-| Step | What happens | Your part |
-| --- | --- | --- |
-| **Race notes** | Notes that every AI step reads: championship, storylines, rivalries, nicknames, how to pronounce names. **Camera notes** are only for the camera director. | Type them in. They save automatically. Optional, but they make a big difference. |
-| **1. Film the replay** | The **Camera Director** plans the camera shots with AI and switches cameras while the replay plays. | Press **Generate**, load the replay in the sim, start your screen recorder (OBS), sync at the green flag, press **Play Sequence**. Then pick the video in the **Replay video** box. The newest recordings are suggested. |
-| **2. Build the event list** | Merges the camera notes into the race log, then the AI picks the moments worth talking about. | In **Review & sync the events**, watch the video, fix or add events, and sync the log to the video. Press **Save**. It saves into the race; no file name needed. |
-| **3. Write the commentary** | Adds colour from your race notes, gives each event a word count, and writes the commentators' script. | Press **Run all**. Pick a different commentary prompt (commentator pair) first if you like. Tick **Starting grid before the start** first for a pre-race intro (see below). |
-| **4. Voice it** | Generates the voices, then stitches them into one commentary track. | The voice generator opens in your browser. When the clips are done, press **Stop** on that step, then **Run** to stitch the audio. |
-| **5. Graphics** | Broadcast graphics: timing tower, pop-ups, driver cards. | Set the graphics up once (they carry over to your next race), then let the AI plan the pop-ups. |
-| **6. Export** | Cuts the replay to the commentary, adds the audio and graphics, and saves the MP4. | Press **Run**, then **Watch**. |
+At a glance:
 
-### Starting grid before the start (optional)
+| Step | What you do |
+| --- | --- |
+| **Race notes** | Type a few notes about the race (optional). |
+| **1. Film the replay** | Camera Director: **Generate (Gemini)**, sync to the green flag, **Play Sequence** while OBS records. Then **Use this** on your recording. |
+| **2. Build the event list** | **Run** the merge, **Run** the event picker, then line the video up with the log in **Review & sync the events**. |
+| **3. Write the commentary** | Starting grid and qualifying times (optional), then **Run** spice, line lengths and commentary. |
+| **4. Voice it** | Record the voices in the browser, then **Run** the stitcher. |
+| **5. Graphics** | Set up the graphics (optional), then **Run** the pop-up planner. |
+| **6. Export** | **Run** and make a coffee. |
 
-On **Write the commentary**, tick **Starting grid before the start** and the video opens on a full-screen starting grid while the commentators welcome the viewers and talk through the grid, then fades into the replay.
+The full walkthrough is below.
 
-- **Grid shown for:** how many seconds of commentary before the green flag (5–30, default 10).
-- **Replay starts:** how many seconds before the green flag the replay starts moving (default 2). The recording before that is usually the sim's menus, so the video holds the frame at that point under the grid. **Check frame** shows it; pick a moment where the replay is already on screen.
+> **Before you start:** has the track been mapped with the [Corner Mapper](#map-the-track-first-corner-mapper)? It has to be done **before the race is recorded**, otherwise the log can't say where things happened.
+
+### Race notes
+
+Type in anything the AI should know: the championship, storylines, rivalries, nicknames, how to pronounce names. They save automatically.
+
+These notes are sent to the AI models (the spice step, the commentary writer and the graphics). You can leave them blank, but then the AI invents more of the story itself. **Camera notes** are only read by the Camera Director.
+
+### 1. Film the replay
+
+This step makes the pictures for your video: the sim plays the replay, the **Camera Director** switches cameras, and you screen-record it.
+
+1. On the **Camera Director** step, press **Open**. The Camera Director opens in its own window.
+2. Press **Generate (Gemini)**. The race log is sent to Gemini, which plans the camera shots. Wait until it's done (this enables **Play Sequence**). Do this before syncing.
+3. Open **OBS** (or your screen recorder) and load the race replay in the sim.
+4. **Sync the log time to the sim time** in the **Sync Tools** box:
+   - In the sim, play the replay from the start until the lights go green, and note the replay time. In AMS2 that's usually 5 or 6 seconds in. Enter it as **Sim Green Flag** (or press **Capture Sim GF** at that moment).
+   - Find the green flag in the log and enter it as **Log Green Flag**. It is usually `00:00:00`.
+   - Press **Apply Sync**.
+5. Go back to the very start of the replay (time zero) in the sim. In AMS2, press the replay's play button and quickly pause it again, so the button is highlighted and ready.
+6. Start recording in OBS.
+7. In the Camera Director, press **Play Sequence**. It starts the replay in the sim and the camera plan together, so they stay in sync.
+8. Close the sim's replay bar before the green flag so it isn't in the video, then leave it alone. The Camera Director switches cameras for you.
+9. When the replay ends, stop recording.
+
+Back on the race screen, tell the app which video you recorded. The **Replay video** box suggests your newest recordings (from the folder set in **Settings**). Click **Use this** next to it, or **Choose file…** to pick it yourself.
+
+### 2. Build the event list
+
+1. **Merge camera notes into the log:** press **Run**. One click.
+2. **Pick the events for commentary:** check the **Prompt** list (the latest prompt is chosen for you) and press **Run**. Wait for the AI to return the events.
+3. **Review & sync the events:** press **Open**. The main job here is to line your recorded video up with the log:
+   1. Fast-forward the video to the start of the race (the green flag).
+   2. In the list, click the first event. It should be the green flag.
+   3. Press **Sync All to Selected Row**. Every event now lines up with the video.
+
+   You can also add events here or describe them better. If the log only says someone was overtaken but you can see they ran wide into the grass, write *XXX runs wide into the grass*. This helps most with wall contact where the car doesn't stop, because then no accident is logged. The app is good at spotting crashes from several positions lost, so you don't need to add every one.
+
+   Press **Save**. It saves into the race; no file name needed.
+
+### 3. Write the commentary
+
+This page starts with two optional extras for the start of the video: the starting grid and the qualifying times. Then three steps write the script.
+
+**Starting grid before the start (optional).** Tick it and the video opens on a full-screen starting grid while the commentators welcome the viewers and talk through the grid, then fades into the replay.
+
+- **Grid shown for:** how many seconds of commentary before the green flag (5–30, default 10). About 15 seconds works well.
+- **Replay starts:** how many seconds before the green flag the replay starts moving (default 2). This keeps the sim's menus out of the video: the video holds the frame at that point under the grid. **Check frame** shows it; pick a moment where the replay is already on screen.
 - **Music:** **Add track…** copies a song into the `Music` folder. It plays under the grid, ducks under the commentators and fades out as the replay starts. **Quiet / Normal / Loud** sets its level.
 - The grid shows each car's position, name, number, flag, team, logo and car, over the blurred race frame. The car comes from `Graphics\CarPreviews`: the Drivers tab car image when it is a car preview, else the file named after the driver, preferring one named after this race's car (`Thommo_Mini.dds` in a Mini race). The logo comes from the Drivers tab **Logo** (or a logo set as the car image).
 - Nothing after the start moves: the intro uses the time before the green flag that was cut away before. Switching it on or off, or changing the length, marks **Work out how long each line can be** out of date, so run the commentary, voices and export again. Changing the music or the replay start only needs a new export.
 - The recording has to start at least that long before the green flag; if it doesn't, the intro is shortened to fit.
-- **Qualifying times:** pole's lap time and everyone else's gap show on the grid, and the commentators get them too. They come from the recorder (race with it on during qualifying) or from the **Qualifying times** box under the starting grid settings: paste the results from the results screen, the league site or a spreadsheet, one driver a line with a lap time (`1:42.315`) or gap (`+0.214`), and press **Read pasted results**. A screenshot of the results works too: paste it into the box (Ctrl+V) or pick it with **Read screenshot…**, and the AI reads the names and times (it needs the Gemini key). Pasted times replace recorded ones. A driver without a time (or a race without any) simply shows none. AMS2 replays carry no qualifying, so paste the results for races logged from a replay.
+
+**Qualifying times (optional).** Pole's lap time and everyone else's gap show on the grid, and the commentators get them too.
+
+- If the recorder was on during qualifying, the times are read from the logs automatically.
+- If not, use the **Qualifying times** box under the starting grid settings. Paste the results from the results screen, the league site or a spreadsheet, one driver a line with a lap time (`1:42.315`) or gap (`+0.214`), and press **Read pasted results**.
+- Or paste a **screenshot** of the results into the box (Ctrl+V), or pick it with **Read screenshot…**. The AI reads the names and times, and also fills in the drivers' country flags. It needs the Gemini key, and the race's championship chosen at the top of the page.
+- Pasted times replace recorded ones. A driver without a time (or a race without any) simply shows none. AMS2 replays carry no qualifying, so paste the results for races logged from a replay.
+
+**Then the three automatic steps** (press **Run** on each, or **Run all**):
+
+1. **Add in spice:** builds the subplots of the race from your notes and the AI's own research. Pick the latest prompt, or write your own. Some prompts are deliberately a little unhinged.
+2. **Work out how long each line can be:** gives each event a word budget. It packs in more words per second near the start and then levels off, so the first minute or so is exciting with fewer pauses.
+3. **Write the commentary:** pick your commentators in the **Prompt** list. A few commentator pairs come with the app, and it's easy to make your own. Press **Run** and wait for the script.
+
+### 4. Voice it
+
+1. **Record the voices:** press **Open**. This opens the voice generator in your browser and loads the voice model (faster-qwen3-tts).
+   - It should find the voices the commentary needs and show them with green ticks. If one isn't ticked, find out why before going on: often a typo in the commentator's name returned by the AI, a prompt that made the AI return the wrong name, or a voice that isn't loaded. This is rare.
+   - Change **Limit (0 for all)** from 5 to **0** and press **Start Processing**. This takes a while.
+   - You can keep or redo clips as they come in, or just leave it to run. The model unloads itself a minute after it finishes.
+   - When it's done, press **Stop** on the step and close the browser tab.
+2. **Stitch the audio together:** press **Run**. It joins the clips into one commentary track (`10_commentary_audio.wav`).
+
+### 5. Graphics
+
+1. **Graphics setup (optional, but a nice touch):** press **Open** for a preview of your race video where you set up the timing tower, branding, drivers and pop-ups. There's a lot in here; see [Graphics in detail](#graphics-in-detail). Most settings carry over to your next race. Save and close when you're done.
+2. **Plan the pop-up graphics:** press **Run**. The AI works out the timings and the extra pop-up boxes to go with your setup. You can go back to Graphics setup to check the plan under **Planned Graphics**, but it's usually right.
+
+### 6. Export
+
+Press **Run** and make a cup of coffee. A 30-minute video takes about 10 minutes to export with FFmpeg. Then press **Watch it**.
+
+### Step badges and prompts
 
 How the step badges work:
 
@@ -181,7 +276,7 @@ Tools with their own window (Camera Director, Review & Sync, Graphics setup, the
 - **Gemini (AI):** API key, the model used by the replay steps, max output tokens and thinking level.
 - **Replay recordings:** the folder OBS (or your recorder) saves to, so the newest videos can be suggested. Default: your Windows *Videos* folder.
 - **Race engineer:** persona, emotion, push-to-talk, models and strategy options. These are saved on top of `RaceEngineer\config.yaml`; anything else is edited in that file.
-- **Tools:** the **Corner Mapper** for AMS2 and RaceRoom. Drive a lap to map a track's corner names, so the log and commentary can say where things happened.
+- **Tools:** the **Corner Mapper** for AMS2 and RaceRoom. Drive a lap to map a track's corners and straights, so the log and commentary can say where things happened. Do it before the race is recorded (see [Map the track first](#map-the-track-first-corner-mapper)).
 
 Settings are saved when you click **Save settings** or leave the screen.
 
@@ -220,3 +315,7 @@ Projects from the old launcher (`Projects\`) can be brought into **My races**. O
 - The `Projects` folder itself is not changed.
 
 The old **Scan Files** button is gone: every step writes a fixed file name, so the app always knows what's done.
+
+## Help and contact
+
+Stuck, or found a bug? Find me on Discord (**Spawnwheel**), or open an issue in this repository and I'll get in touch.

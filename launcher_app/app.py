@@ -267,7 +267,9 @@ class App:
         if not s or proc is not s["logger"]:
             return
         state = st.get("state")
-        if state == "recording":
+        if state == "track":
+            s.update(map_track=st.get("track"), map_corners=st.get("corners") or 0)
+        elif state == "recording":
             s.update(state="recording", track=st.get("track"), folder=st.get("folder"), rec_started=time.time())
         elif state == "saved":
             s["notes"].append(("saved", f"Saved: race at {t.pretty_track(st.get('track'))} ({t.minutes(st.get('seconds'))})",

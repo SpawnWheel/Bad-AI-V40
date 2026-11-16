@@ -379,6 +379,7 @@ class RaceroomEventLogger:
                 self.log("SYSTEM", f"Loaded {len(self.current_landmarks)} corner landmarks for {track_display}")
             else:
                 self.log("SYSTEM", f"Notice: No corner landmarks found for layout {header.layout_id} ({track_display}).")
+            racefiles.emit_status(state="track", track=track_display, corners=len(self.current_landmarks))
 
         # Session
         session_key = (header.session_type, header.session_iteration)
