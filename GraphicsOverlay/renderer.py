@@ -71,6 +71,7 @@ AUTO_MAX_SHIFT = 30.0
 GRID_LEAD = 5.0       # the starting grid is up this long before its commentary is due (the video opens ~0.5 s before)
 GRID_ANIM_AT = GRID_LEAD - 0.6  # ... and its scene starts playing in here, as the video opens
 GRID_ANIM_DUR = 2.2   # about how long the cars take to come in (see starting_grid.py)
+FASTEST_LAP_MERGE = 10.0  # a fastest lap this soon after the last one replaces it (one banner per lap)
 PIT_GROUP_GAP = 12.0  # pit entries this close together share one IN PITS tag
 PIT_GROUP_MAX = 5
 
@@ -161,6 +162,9 @@ class OverlayRenderer:
                 items.append({'id': 'auto_start_movers', 'type': 'start_movers', 'time': t, 'duration': 8.0,
                               'lane': 'popup', 'auto': True, 'shift': True, 'data': rows})
         if auto.get('fastest_lap'):
+            # At most one per lap: when several cars beat it on the same lap (or within a few seconds, when the
+            # field crosses the line on different lap numbers), only the last, which is the quickest, shows
+            shown = []
             for i, e in enumerate(race.events_video()):
                 if e['type'] != 'fastest_lap' or (gf is not None and e['t'] < gf):
                     continue
@@ -168,6 +172,13 @@ class OverlayRenderer:
                     continue
                 if lf is not None and e['t'] > lf + 5:
                     continue
+                last = shown[-1][1] if shown else None
+                if last and ((e.get('lap') is not None and e.get('lap') == last.get('lap'))
+                             or e['t'] - last['t'] < FASTEST_LAP_MERGE):
+                    shown[-1] = (i, e)
+                else:
+                    shown.append((i, e))
+            for i, e in shown:
                 items.append({'id': f'auto_fl_{i}', 'type': 'fastest_lap', 'time': e['t'] + 1.0, 'duration': 7.0,
                               'lane': 'top', 'auto': True, 'driver': e['driver'],
                               'data': {k: e.get(k) for k in ('lap_time', 'lap', 'gain', 'prev_driver')}})
