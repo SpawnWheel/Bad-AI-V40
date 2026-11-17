@@ -115,6 +115,7 @@ class Templates:
 
     @staticmethod
     def badge_w(badge):
+        """Room the badge takes at the right-hand end of a card; a car image goes to the left of it."""
         return badge.width + 18 if badge is not None else 0
 
     def flag_img(self, country, h):
@@ -587,7 +588,7 @@ class Templates:
             for i, ln in enumerate(lines):
                 text_vcenter(img, 18, top + 127 + 26 * i, ln, f_text, th.muted)
         if car:
-            img.alpha_composite(car, (int(W - car.width - 6), int(top + 112 - car.height + 6)))
+            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + 112 - car.height + 6)))
         self.place_badge(img, badge, top, 112)
         return img
 
@@ -731,7 +732,7 @@ class Templates:
         ovr = self._overtake_row(name, row_w, row_h, True, n, chips)
         img.alpha_composite(ovr, (x0 + lift, int(round(slot_y(ov_slot)))))
         if car:
-            img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + panel_h - car.height + 4)))
         self.place_badge(img, badge, top, panel_h)
         return img
 
@@ -797,7 +798,7 @@ class Templates:
         self.name_block(img, 110, top + 10, name, 420, 36, 20)
         self.text_lines(img, 110, top + 80, lines, f, th.muted, 24)
         if car:
-            img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + panel_h - car.height + 4)))
         self.place_badge(img, badge, top, panel_h)
         return img
 
@@ -920,7 +921,7 @@ class Templates:
             text_vcenter(img, x + (flag.width + 12 if flag else 0), top + 40, head, f_head, th.text)
         text_vcenter(img, x, top + (78 if head else panel_h / 2), caption, f_cap, th.muted)
         if car:
-            img.alpha_composite(car, (int(W - car.width - 6), int(top + panel_h - car.height + 4)))
+            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + panel_h - car.height + 4)))
         self.place_badge(img, badge, top, panel_h)
         return img
 

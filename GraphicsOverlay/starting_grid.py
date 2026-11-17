@@ -34,7 +34,11 @@ EXIT_STAGGER = 0.022
 PUSH_IN = 0.06        # background zoom over the whole scene
 BLUR = 16
 SKEW = 0.22           # slant of the car slots (share of their height)
-SPONSOR_H = 110       # the title sponsor in the top right, about the championship logo's height
+SPONSOR_H = 110       # a lone sponsor in the top right, about the championship logo's height
+SPONSOR_TOP_H = 78    # with several: the title sponsor on top ...
+SPONSOR_LOW_H = 50    # ... and the timing and partner sponsors side by side under it
+SPONSOR_GAP = 18      # between the two rows
+SPONSOR_KINDS = ('title', 'timing', 'partner')
 
 
 def paste(frame, src, x, y):
@@ -195,7 +199,8 @@ class StartingGrid:
             im = Image.new('RGBA', (int(text_w(f_sub, sub)) + 8, 36), (0, 0, 0, 0))
             text_vcenter(im, 0, 18, sub, f_sub, th.text[:3] + (200,))
             parts['sub'] = (im, x + lw + 26, 55)
-        right = W - 96 - (tpl.sponsor_w('title', SPONSOR_H) + 36 if tpl.sponsor('title') else 0)
+        sponsors = self.sponsor_parts()
+        right = min(p[1] for p in sponsors.values()) - 36 if sponsors else W - 96
         title = ((champ.get('event_name') or '').strip() or gcfg.clean_track_name(tpl.race.track)).upper()
         f_title = fit_font(title, right - x, 92, 'bold')
         im = Image.new('RGBA', (int(text_w(f_title, title)) + 24, 118), (0, 0, 0, 0))
@@ -214,15 +219,54 @@ class StartingGrid:
             ImageDraw.Draw(im).rectangle((0, 16, 46, 19), fill=th.accent2)
             text_vcenter(im, 60, 18, ellipsize(info, f_info, iw - 60), f_info, th.accent2)
             parts['info'] = (im, x, 196)
-        if tpl.sponsor('title'):
-            # As tall as the championship logo, level with it on the right
-            im = Image.new('RGBA', (W, SPONSOR_H + 20), (0, 0, 0, 0))
-            tpl.sponsor_mark(im, W - 96, (SPONSOR_H + 20) / 2, 'title', SPONSOR_H)
-            bbox = im.getbbox()
-            if bbox:
-                top = int(126 - (SPONSOR_H + 20) / 2)
-                parts['sponsor'] = (im.crop(bbox), bbox[0], top + bbox[1])
+        parts.update(sponsors)
         self._header = parts
+        return parts
+
+    def sponsor_piece(self, kind, max_w, h):
+        """One sponsor's logo as it is (or its name without one) fitted in max_w x h, or None when unset."""
+        sp = self.tpl.sponsor(kind)
+        if not sp:
+            return None
+        name, logo = sp
+        if logo is not None:
+            return fit_image(logo, max_w, h)
+        label = name.upper()
+        f = fit_font(label, max_w, int(h * 0.8), 'bold_cond')
+        im = Image.new('RGBA', (int(text_w(f, label)) + 4, h), (0, 0, 0, 0))
+        text_vcenter(im, 0, h / 2, label, f, self.th.text)
+        return im
+
+    def sponsor_parts(self):
+        """The championship's sponsors in the top right, level with its logo, as header pieces
+        {key: (image, x, y)}: a lone sponsor as tall as the logo; with several, the title sponsor on top and the
+        timing and partner sponsors side by side under it (a thin divider between them)."""
+        kinds = [k for k in SPONSOR_KINDS if self.tpl.sponsor(k)]
+        if not kinds:
+            return {}
+        right = self.W - 96
+        if len(kinds) == 1:
+            im = self.sponsor_piece(kinds[0], SPONSOR_H * 4, SPONSOR_H)
+            return {'sponsor0': (im, right - im.width, int(126 - im.height / 2))}
+        top_kinds = kinds[:1] if kinds[0] == 'title' else []
+        low_kinds = kinds[len(top_kinds):]
+        rows = []
+        if top_kinds:
+            rows.append([self.sponsor_piece('title', 380, SPONSOR_TOP_H)])
+        rows.append([self.sponsor_piece(k, 240, SPONSOR_LOW_H) for k in low_kinds])
+        heights = [SPONSOR_TOP_H if top_kinds and i == 0 else SPONSOR_LOW_H for i in range(len(rows))]
+        y = 126 - (sum(heights) + SPONSOR_GAP * (len(rows) - 1)) / 2
+        parts, n, gap = {}, 0, 44
+        for row, h in zip(rows, heights):
+            x = right - (sum(im.width for im in row) + gap * (len(row) - 1))
+            for j, im in enumerate(row):
+                if j:
+                    parts[f'sponsor_div{n}'] = (Image.new('RGBA', (2, h), (255, 255, 255, 60)),
+                                                int(x - gap / 2 - 1), int(y))
+                parts[f'sponsor{n}'] = (im, int(x), int(y + (h - im.height) / 2))
+                x += im.width + gap
+                n += 1
+            y += h + SPONSOR_GAP
         return parts
 
     def slot(self, name, pos, w, h):
@@ -414,7 +458,12 @@ class StartingGrid:
             im = wipe(parts['info'][0], ease_in_out((t - 0.45) / 0.45))
             if im is not None:
                 show('info', img=im)
-        show('sponsor', ease_out_quint((t - 0.5) / 0.6))
+        # The sponsors one after another, title sponsor first
+        for key in parts:
+            if key.startswith('sponsor'):
+                i = int(key.lstrip('sponsor_div'))
+                e = ease_out_quint((t - 0.5 - 0.12 * i) / 0.6)
+                show(key, e, dx=(0 if 'div' in key else 18 * (1 - e)))
         # Accent rule drawing across under the header
         rw = int(self.W * ease_in_out((t - 0.15) / 0.8) * keep)
         if rw > 2:

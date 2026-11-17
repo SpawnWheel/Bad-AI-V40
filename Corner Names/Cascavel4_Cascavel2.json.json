@@ -1,0 +1,62 @@
+{
+  "track_location": "Cascavel4",
+  "track_variation": "Cascavel2",
+  "track_length": 3030.5,
+  "corners": [
+    {
+      "name": "Turn 1",
+      "start": 265.2,
+      "end": 660.2
+    },
+    {
+      "name": "Uphill section",
+      "start": 717.6,
+      "end": 867.6
+    },
+    {
+      "name": "Mergulho",
+      "start": 922.7,
+      "end": 1047.7
+    },
+    {
+      "name": "Esse",
+      "start": 1115.4,
+      "end": 1265.4
+    },
+    {
+      "name": "Running down the hill",
+      "start": 1379.3,
+      "end": 1649.3
+    },
+    {
+      "name": "Turn 6",
+      "start": 1746.9,
+      "end": 1866.9
+    },
+    {
+      "name": "Turn 7",
+      "start": 1917.1,
+      "end": 2037.1
+    },
+    {
+      "name": "The back straight",
+      "start": 2084.0,
+      "end": 2509.0
+    },
+    {
+      "name": "The final corner",
+      "start": 2665.8,
+      "end": 2785.8
+    },
+    {
+      "name": "The main straight",
+      "start": 2840.2,
+      "end": 2960.2
+    },
+    {
+      "name": "Braking into T1",
+      "start": 110.0,
+      "end": 230.0
+    }
+  ]
+}
