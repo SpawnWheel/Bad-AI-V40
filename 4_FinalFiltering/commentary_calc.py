@@ -25,12 +25,16 @@ WRITTEN_SHARE = 0.85
 # The start is shouted and rushed: events in the first seconds after the green flag get more words
 START_WORDS_PER_SEC = 2.8
 START_SECONDS = 25
-# The winner's moment: lines in the seconds after the winner crosses the line (back markers finishing, a pass for
-# a minor place) are folded into the winner's line, so the booth has the whole time to celebrate the win instead of
-# announcing him in one breath and reading out the cars behind. A podium finisher (P2/P3) ends the fold.
+# The winner's moment: lines in the seconds after the winner crosses the line (the cars behind finishing, a pass
+# for a minor place) are folded into the winner's line, so the booth has the whole time to celebrate the win instead
+# of announcing him in one breath and reading out the cars behind. Podium finishers inside the hold are folded too:
+# at Cascavel P3 crossed 11 s after the winner, which left the booth 3 words around his radio celebration.
 WINNER_HOLD_SEC = 20
 WINNER_RE = re.compile(r'\[FINISH\].*?took P1!')
-PODIUM_FINISH_RE = re.compile(r'to take P[23]\b')
+# The booth's own words on the winner's line, on top of his radio celebration (the radio is voiced too)
+WINNER_BOOTH_WORDS = 45
+WINNER_RADIO_RE = re.compile(r'\(Radio\)(.*?)(?:While the winner celebrates:|$)')
+QUOTE_RE = re.compile(r'"([^"]*)"')
 RADIO_TAIL_RE = re.compile(r'\s*\(Radio\).*$')
 STAMP_RE = re.compile(r'^\d{2}:\d{2}:\d{2}\s*-\s*')
 
@@ -48,7 +52,7 @@ def fold_winner_moment(parsed_data):
         if p['timestamp'] is None:
             keep.append(p)
             continue
-        if (p['timestamp'] - win_t).total_seconds() > WINNER_HOLD_SEC or PODIUM_FINISH_RE.search(p['original_text']):
+        if (p['timestamp'] - win_t).total_seconds() > WINNER_HOLD_SEC:
             keep.extend(rest[n:])
             break
         # Radio from a minor place would talk over the winner: dropped
@@ -58,6 +62,12 @@ def fold_winner_moment(parsed_data):
         keep[win] = dict(line, original_text=f"{line['original_text']} While the winner celebrates: {' '.join(folded)}")
         print(f"Folded {len(folded)} line(s) after the winner into the winner's moment.")
     return keep
+
+
+def radio_words(text):
+    """Words of the quoted radio on a line (the lines folded in after "While the winner celebrates:" have none)."""
+    m = WINNER_RADIO_RE.search(text)
+    return sum(len(q.split()) for q in QUOTE_RE.findall(m.group(1))) if m else 0
 
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -259,6 +269,8 @@ def main():
         rate = START_WORDS_PER_SEC if at_start else WORDS_PER_SEC
         words = max(duration * rate, (duration - PAUSE_SEC) * VOICE_WORDS_PER_SEC / WRITTEN_SHARE)
         word_count = max(3, min(int(round(words)), MAX_WORDS))
+        if WINNER_RE.search(current_item['original_text']):
+            word_count = max(word_count, radio_words(current_item['original_text']) + WINNER_BOOTH_WORDS)
         
         # formatting message
         new_line = f"{current_item['original_text']} Commentate in {word_count} words"

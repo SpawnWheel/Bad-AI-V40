@@ -1394,8 +1394,14 @@ class Templates:
         f_who = font(17, 'bold_cond')
         who_h = 22
         blocks = []
-        for seg in segments:
-            lines = wrap(f"“{seg['quote'].upper()}”", f_line, text_max - 20, 4 if len(segments) == 1 else 3)
+        # A driver's rant runs long: the card grows downwards to fit it rather than cutting it short. The card has
+        # room for 12 quote lines in all (it stays on screen), taken from the longest quote when they need more.
+        quotes = [f"“{seg['quote'].upper()}”" for seg in segments]
+        room = [len(wrap(q, f_line, text_max - 20, 99)) for q in quotes]
+        while sum(room) > 12 and max(room) > 2:
+            room[room.index(max(room))] -= 1
+        for seg, q, n in zip(segments, quotes, room):
+            lines = wrap(q, f_line, text_max - 20, n)
             who = (seg.get('label') or '').upper() if not seg.get('is_driver') else ''
             blocks.append((seg.get('is_driver'), lines, who))
         body_h = (sum(len(ls) * line_h + (who_h if who else 0) for _, ls, who in blocks)

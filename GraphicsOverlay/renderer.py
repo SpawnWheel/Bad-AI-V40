@@ -58,6 +58,7 @@ RADIO_LEAD = 0.25       # a radio card starts sliding in this long before its wo
 RADIO_HOLD = 1.2        # ... and stays up this long after them
 RADIO_MIN = 3.5         # a card nobody takes over from is up at least this long, so it can be read
 RADIO_CHAIN_GAP = 2.5   # radio lines closer than this are one exchange (each card hands over to the next)
+RADIO_CENTRED_H = 300   # radio cards up to this tall are centred on the layout's cy; taller ones extend downwards
 VOICE_WPS = 2.9         # words a second, to estimate when lines play without the audio step's clip timeline
 EST_LINE_GAP = 0.4
 # Race control messages about stewards, investigations or penalties (old plans) are not shown
@@ -778,7 +779,8 @@ class OverlayRenderer:
             # Middle right: slides in from the right edge, wiping open right-to-left
             rz = self.cfg['layout']['radio']
             x = rz['right'] + margin - img.width + (1 - p_in) * 60 + p_out * 30
-            y = rz['cy'] - img.height / 2
+            # Centred up to the height of an ordinary exchange; a longer one (a rant) keeps that top and grows down
+            y = rz['cy'] - min(img.height, RADIO_CENTRED_H) / 2
             alpha = min(1.0, p_in * 1.4) * (1 - p_out)
             src = img
             if phase == 'in':
