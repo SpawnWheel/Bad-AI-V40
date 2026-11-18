@@ -741,7 +741,8 @@ class AMS2EventLogger:
         # Deferred Starting Grid + Green Flag logging.
         # AMS2 reports all-zero mRacePosition at the exact race start transition.
         # We wait until positions are populated, then log the grid followed by
-        # the green flag message, both at the actual sim time.
+        # the green flag message, both stamped with the moment the race went green
+        # (positions took 2 s at Cascavel, which put the start at 0:00:02 instead of 0:00:00).
         if self.starting_grid_pending:
             positions_ready = False
             for i in range(self.data.mNumParticipants):
@@ -752,10 +753,11 @@ class AMS2EventLogger:
             
             # Proceed if positions are populated, or after 10 seconds of sim time (safety net)
             if positions_ready or (sim_now - self.starting_grid_pending_sim_time >= 10.0):
-                self.log_starting_grid(sim_time=sim_now)
+                green_at = self.starting_grid_pending_sim_time
+                self.log_starting_grid(sim_time=green_at)
                 if not self.green_flag_logged:
-                    self.log("SESSION", "Green Flag! The race begins!", sim_time=sim_now)
-                    self.green_flag_time = sim_now
+                    self.log("SESSION", "Green Flag! The race begins!", sim_time=green_at)
+                    self.green_flag_time = green_at
                     self.green_flag_logged = True
                 self.starting_grid_pending = False
 
