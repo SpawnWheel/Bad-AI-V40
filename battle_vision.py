@@ -12,7 +12,13 @@ side-by-side lines.
 import collections
 
 TREND_WINDOW = 5.0     # seconds the closing/dropping-back trend is measured over
-TREND_METRES = 2.0     # the gap has to change by this much to count as closing or dropping back
+TREND_METRES = 2.0     # the gap has to shrink by this much to count as closing
+# Dropping back needs more: at Cascavel 2 m was enough and 34 of 82 "dropping back" cars were back on the gearbox,
+# alongside or past within 30 s. A gap in metres also stretches by itself as both cars accelerate out of a corner,
+# so the time gap (metres / speed) has to grow too, and the car behind has to be a few lengths back by now.
+DROP_METRES = 6.0
+DROP_SECONDS = 0.15
+DROP_MIN_GAP = 10.0
 HISTORY_SEC = 12.0
 WATCH_METRES = 40.0    # pairs further apart than this are forgotten
 BRAKING_DECEL = 4.0    # m/s per second of slowing that counts as braking
@@ -41,14 +47,15 @@ class BattleVision:
         while h and t - h[0][0] > HISTORY_SEC:
             h.popleft()
 
-    def _trend(self, key, t, gap):
+    def _trend(self, key, t, gap, speed):
         """'closing', 'dropping' or 'holding' over the last TREND_WINDOW seconds."""
         old = next((s for s in self.hist.get(key, ()) if t - s[0] <= TREND_WINDOW), None)
         if old is None or t - old[0] < 2.0:
             return 'holding'
         if gap - old[1] < -TREND_METRES:
             return 'closing'
-        if gap - old[1] > TREND_METRES:
+        time_gap_grew = gap / max(speed, 10.0) - old[1] / max(old[2], 10.0)
+        if gap >= DROP_MIN_GAP and gap - old[1] > DROP_METRES and time_gap_grew > DROP_SECONDS:
             return 'dropping'
         return 'holding'
 
@@ -64,9 +71,11 @@ class BattleVision:
 
     @staticmethod
     def _where(phase, corner):
+        """Where on the track, only when the corner map names the spot. Without a name there's no place to give:
+        "on the straight" came from the car's speed alone and was said wherever the map had a gap."""
         if corner:
             return f" into {corner}" if phase == 'braking' else f" through {corner}"
-        return " on the straight" if phase == 'straight' else ""
+        return ""
 
     def side_by_side(self, key, t, behind, pos_b, ahead, pos_a, speed, corner, was_drafting, count):
         where = self._where(self._phase(key, t, behind, speed), corner)
@@ -77,7 +86,7 @@ class BattleVision:
         return f"Side by side! {behind} (P{pos_b}) is alongside {ahead} (P{pos_a}){where}!"
 
     def drafting(self, key, t, gap, behind, pos_b, ahead, pos_a, speed, corner, count):
-        trend = self._trend(key, t, gap)
+        trend = self._trend(key, t, gap, speed)
         phase = self._phase(key, t, behind, speed)
         if gap < 6:
             near = f"right on the gearbox of {ahead} (P{pos_a})"
