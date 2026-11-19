@@ -30,6 +30,8 @@ Contains:
 
 *Rule on the Booth's Bits:* When the notes ask the commentators for a specific bit (a ritual introduction, a catchphrase, an impression, a way of talking about a driver), pass it on whole. Plant a talking point that asks the booth for the full bit by name, on a ramble with a long gap after it (15 seconds or more), e.g. `(Quip) Laurie's proper introduction: the full Top Gear Stig treatment, two or three escalating "Some say..." claims, ending "All we know is..."`. Never write a shortened version of the bit yourself ("some say he sleeps in tweed"): the booth delivers it, in full.
 
+*Rule on Using the Notes:* The notes tell you who these people are; they are not a script. The last broadcasts replayed the notes' talking points almost word for word (Thommo's crew and their kebabs, ATI Boy's steak bet, Payne calling his pit wall "southern softies"), so every race sounded like the one before. Use the notes for personalities, rivalries, history and facts, then invent this race's material yourself: new incidents, new grudges, new schemes, new jokes. A joke or running gag from the notes or an earlier round may come back only with a genuinely new twist, and at most twice in the race. (A bit the notes explicitly ask the booth for, see the rule above, is the exception: pass it on whole.)
+
 *Rule on Missing Notes:* If PROJECT NOTES is missing, empty, or sparse, do not write generic material. Treat it as a blank canvas: invent bold personalities, high-stakes grudges, and team dynamics from scratch using the driver names and grid positions in the log.
 
 #### 2. RACE LOG (Physical Ground Truth)
@@ -98,9 +100,10 @@ Silently read the entire race log start-to-finish before writing. Construct a co
 
 ```
 [ STEP 1: THE ORIGINALITY ENGINE & HIGH-CONCEPT FRAME ]
-Generate 4–6 distinct narrative concepts. Commit fully to one specific, audacious piece of paddock lore, bizarre psychological obsession, covert team sabotage, underground bet, or high-stakes conspiracy.
+First write down the 5 most obvious storylines for this race: what the notes and the log suggest straight away, and the stock motorsport plots (a secret deal, sabotage, a stolen setup, a grudge, a rumour, a bet). Throw them all out: they are what any writer would come up with, and the viewers have heard them before.
+Then generate 4–6 fresh concepts and commit fully to one audacious idea that could only happen to these drivers, in these cars, in this race.
 * It must be explainable in one paragraph.
-* It must have one memorable anchor (an absurd modification, an illicit agreement, a cursed setup, a psychological breakdown, a stolen secret).
+* It must have one memorable anchor: a specific object, place, habit or moment, not a category of plot.
 * It must escalate with the track conditions and race phases.
 * The commentary treats the absurdity with deadpan, high-stakes broadcast sincerity, but should be completely shocked by it too.
 
@@ -127,7 +130,7 @@ Map emotional trajectories with at least one sharp mid-race reversal. These are 
 * Example: Reluctant Number-Two → Frustrated Obedience → Fluke Opportunity → Cold Defiance → Paddock Hero.
 
 [ STEP 6: NARRATIVE CAUSALITY MAPPING & THE OPPORTUNITY LEDGER ]
-The story grows out of the race, not out of a schedule. Go through the log and mark every opportunity: each overtake, side-by-side fight, contact, spin, off, pit stop, lead change, gap closing, and every radio call you plan. Decide which of them push the story somewhere NEW: a pass starts a grudge, contact turns a rivalry into a feud, a pit stop exposes a betrayal, a radio rant leaks a secret, a spin wrecks someone's plan. At least 5 of the story's turns must be triggered by a specific track event at that timestamp.
+The story grows out of the race, not out of a schedule. At least one storyline must grow out of an odd, specific detail in this race's log that the notes never mention: a strange pit stop, a car that sat still, a lap far off the pace, a driver nobody managed to pass, two cars that kept meeting at the same corner. Look for it before you look at the notes. Go through the log and mark every opportunity: each overtake, side-by-side fight, contact, spin, off, pit stop, lead change, gap closing, and every radio call you plan. Decide which of them push the story somewhere NEW: a pass starts a grudge, contact turns a rivalry into a feud, a pit stop exposes a betrayal, a radio rant leaks a secret, a spin wrecks someone's plan. At least 5 of the story's turns must be triggered by a specific track event at that timestamp.
 Anchor every physical anomaly in the log to a story motive:
 * A sudden loss of pace = A cockpit panic, a radio argument, or an overcooked gamble.
 * A pit entrance slow-down = A catastrophic miscommunication or strategic betrayal.
@@ -143,7 +146,7 @@ Calculate percentages based on total log duration:
 * 80%–100% (The Radical Resolution & Payoff): The final consequences land. The landscape is fundamentally transformed compared to Lap 1.
 
 [ STEP 8: THE RUNNING-GAG LEDGER ]
-Plan 2–4 running gags or recurring bits that the booth can keep returning to (an absurd backstory detail, a driver's odd radio habit, a livery, a bet, a prediction one commentator keeps getting wrong). Map where each is planted, where it returns with a twist, and where it pays off. Each return must escalate or flip the joke, never repeat it.
+Plan 2–4 running gags or recurring bits that the booth can keep returning to, found in this race (a detail of a livery, a car, a driver's radio, something that happened on track), not carried over from the notes. Map where each is planted, where it returns with a twist, and where it pays off. Each return must escalate or flip the joke, never repeat it.
 
 [ STEP 9: SCENE-CRAFTING COMMENTARY RUNS ]
 When two or more "Commentator's ramble." lines come close together (consecutive, or with only battle updates between them), treat them as ONE continuous conversation on ONE thread:
@@ -172,6 +175,7 @@ Verify before writing:
 10b. Could a viewer explain every storyline: what it is, who's in it, why it matters and how it ended? Was each one opened in a scene of its own, and does every return link back to the last beat?
 10c. Is every radio call between a driver and his own engineer, with no driver-to-driver radio? Are 2–3 of them proper rants? Does each one sound like a real team radio clip, not a writer's joke?
 10d. Did every bit the notes ask the booth for get a talking point that asks for it in full?
+10e. Is most of this race's material new, rather than the notes' talking points replayed? Did the obvious first ideas get thrown out, and does one storyline come from an odd detail in the log? Does any talking point open with "Paddock word", "Rumour is", "Word is" or "reportedly", or ask "A, or B?"? Rewrite it.
 11. Does about a third of the talking points draw on the real Super Touring history, and is every real-life fact one your research found?
 12. Is every known competitor (a creator, a sim racing name, a real driver) used, only with public racing facts you are sure belong to them? Does every famous-name entrant get played straight, and is an offensive name treated as an ordinary unknown driver, with nothing said about who it refers to?
 ```
@@ -202,23 +206,16 @@ The last broadcast's backstory felt repetitive: it was set up early and then res
 Begin every replaced ramble with ONE hook type in round brackets, followed by the talking point. The hook tells the booth HOW to talk about it (it is never spoken aloud).
 
 * **(Revelation)** A new story fact lands. Give the fact plus the angle that makes it shocking or funny.
-  `(Revelation) Born's pit-wall headset is reportedly taped on, thanks to the cheese-injured thumb. He's relaying strategy by elbow.`
-* **(Debate)** A genuine two-sided question the booth can disagree on. State BOTH sides.
-  `(Debate) Payne pulling away: is he managing the tyres beautifully, or burning them up to escape Bailz's tow before the closing laps?`
+* **(Debate)** A genuine question the booth can disagree on. Give the tension and what's at stake; let the booth find the sides.
 * **(Question)** Something one commentator can ask the other, ideally the expert/ex-driver.
-  `(Question) What does it actually feel like with a championship rival filling your mirrors for ten laps and you can't break the tow?`
 * **(Anecdote)** A prompt for a commentator's personal memory or "I've been there" moment. Give the theme, not the story.
-  `(Anecdote) Racing at altitude: the thin air, the brakes going long, the moment you realise the car isn't the one you practised in.`
 * **(Quip)** A comic set-up the booth can land: a livery, a name, an absurd detail. Give the ingredient, not the punchline.
-  `(Quip) The Rick and Morty Mini is defending like it's been told the multiverse depends on fourth place.`
 * **(Callback)** Bring back an earlier gag or storyline with an escalation. Say what it calls back to.
-  `(Callback) The gouda incident again: Born has now banned all dairy from the DNF garage, and the mechanics are not happy.`
 * **(Continue)** The next beat of the conversation started by the previous talking point (see STEP 9): the reply, the twist, the punchline. Never a new topic.
 * **(Radio)** A radio exchange between a driver and his own engineer (in quotation marks), every turn labelled with who says it. It is played on air in the drivers' and engineers' own voices and shown as a team radio graphic (see Radio Snippets below).
   `(Radio) Born: "He's all over me. All over me!" Engineer: "Gap behind is two tenths." Born: "I KNOW it's two tenths, I can SEE him!" Engineer: "...Copy."`
   `(Radio) Payne: "That's three times now. Three times he's moved under braking and nobody's doing anything about it. I'm not having it, I'm telling you now, if he does it again I'm not lifting. I'm not. Tell race control. Are they even watching?" Engineer: "We've noted it, Dom." Payne: "Noted. Brilliant."`
 * **(Insight)** Real racing analysis for the expert to unpack: this track's key corners and overtaking spots, what this car is like to drive here, tyre and fuel behaviour, the strategy options (undercut, staying out), how the field has split into packs and what that means. Use real knowledge of the circuit and car, and what your research found about the real car and team in Super Touring; never invent statistics.
-  `(Insight) The field's split into three groups. Does the lead pack's fight let Born's group catch up, or is the gap already too big?`
 
 Hook rules:
 * **Variety:** Never use the same hook type more than twice in a row. Across the race, aim for roughly: Radio 20%, Revelation 15%, Insight 15%, Debate 15%, Question 10%, Quip 10%, Anecdote 10%, Callback 5%.
@@ -230,10 +227,12 @@ Hook rules:
 
 ### TALKING-POINT WRITING & CHRONOLOGY RULES
 
-* **Action-to-Meaning Principle:** Never just restate the graphic on screen ("Dom Payne is in P1"). Explain what that position means inside the unfolding drama ("Payne's silence on the radio: is that calm, or does he know the engine map won't last?").
+* **Action-to-Meaning Principle:** Never just restate the graphic on screen ("Dom Payne is in P1"). Explain what that position means inside the unfolding drama.
 * **Strict Chronology (Zero Future Knowledge):** Commentators only know what has happened up to the current millisecond.
   * *Forbidden:* Stating spins, retirements, or overtakes before the exact timestamp they appear in the log.
   * *Permitted:* Observational suspicion ("He's missing apexes and smoking that front left," "Pit crew is scrambling").
+* **No stock shapes.** The last broadcasts opened nearly every revelation with "Paddock word…", "Rumour is…", "Word is…" or "reportedly", and wrote nearly every debate as "Is he doing A, or B?". Don't use those openers at all, and vary how talking points are built: a flat fact, a detail just noticed, a contradiction, a number that doesn't add up, a question with no "or" in it.
+* **Not everything is gossip.** Most story beats are things that happen or can be seen or heard: on track, on the radio, in the pit lane. Second-hand rumours are the exception, not the way every story arrives.
 * **High-Paced & Evolving:** Never repeat the same thematic point across entries. Every talking point must advance the narrative, introduce a fresh complication, or reveal a new layer.
 * **Leave Room to Talk:** A good talking point has an open edge: an unanswered question, a contradiction, a "but", a detail that begs a reaction.
 * **Tone:** Sharp tactical insight, dry humour, paddock gossip, escalating urgency. Avoid dry engineering readouts (no endless tyre telemetry percentages).
