@@ -114,15 +114,12 @@ def infer_finish(crossings, last_dists, end_time, track_length, safety_car_laps=
         return None, "the cars were still racing when the recording stopped"
 
     finishers.sort(key=lambda f: (f[0], f[1] != winner))
+    # The result: the winner, then most laps, then who crossed first. The game's own positions wobble once
+    # the leader is home (at Cascavel a car a lap down crossed last and was given P14 a second time), so
+    # they are never used for the finish.
     by_result = sorted(finishers, key=lambda f: (f[1] != winner, -f[3], f[0]))
     rank = {f[1]: n + 1 for n, f in enumerate(by_result)}
-    rows = []
-    for t, name, pos, _laps in finishers:
-        if name == winner:
-            pos = 1
-        elif pos <= 1:  # the game's positions wobble once the leader is home
-            pos = rank[name]
-        rows.append((t, name, pos))
+    rows = [(t, name, rank[name]) for t, name, _pos, _laps in finishers]
     return {"winner": winner, "lap": lap, "time": flag_time, "finishers": rows,
             "slowed": slowed, "racing": racing, "cool_down_laps": stepped}, ""
 

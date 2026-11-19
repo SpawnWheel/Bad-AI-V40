@@ -30,6 +30,7 @@ class Timing:
         path = timing_path_for(race.raw_log_path)
         if path and os.path.exists(path):
             self._load(path)
+            self._apply_finish()
         if not self.states:
             self._from_log()
         self.times = [s['t'] for s in self.states]
@@ -108,6 +109,43 @@ class Timing:
                                 'yel': rec.get('yel') or []})
         self.entries = entries
         self.recorded = bool(self.states)
+
+    def _apply_finish(self):
+        """Once the winner has the flag the game's own order wobbles (the cool-down lap: at Cascavel the tower
+        said FINISH with Jaavib ahead of the winner), so from then on the order is the finish from the log: each
+        car moves to its finishing place, marked finished, the moment it crosses the line, and the cars still
+        racing follow in running order. A state is added at each crossing so the tower changes right then."""
+        order = self.race.finish_order() if self.race.finish else []
+        if not order or not self.states:
+            return
+        win_t = min(t for t, _, _ in order)
+        times = [s['t'] for s in self.states]
+        for ft in sorted({t for t, _, _ in order}):
+            i = bisect.bisect_right(times, ft) - 1
+            if i >= 0 and self.states[i]['t'] != ft:
+                st = dict(self.states[i], t=ft, rows=[dict(r) for r in self.states[i]['rows']])
+                self.states.insert(i + 1, st)
+                times.insert(i + 1, ft)
+        for st in self.states:
+            if st['t'] < win_t:
+                continue
+            home = sorted((pos, name) for t, pos, name in order if t <= st['t'])
+            by_name = {r['name']: r for r in st['rows']}
+            done = {name for _, name in home}
+            rows = []
+            for _, name in home:
+                r = dict(by_name.get(name) or {'name': name})
+                # The game's gaps after the flag are cool-down laps, not racing gaps
+                r.update(finish=FINISH_FINISHED, pit=0, interval=None, gap=None, laps_down=0)
+                rows.append(r)
+            rows += [dict(r) for r in st['rows'] if r['name'] not in done]
+            counts = {}
+            for n, r in enumerate(rows, 1):
+                c = self.entry(r['name']).get('class') or self.race.classes.get(r['name']) or ''
+                counts[c] = counts.get(c, 0) + 1
+                r['pos'], r['pos_class'] = n, counts[c]
+                r.pop('pos_game', None)
+            st['rows'] = rows
 
     def _from_log(self):
         """Order from RaceData's order changes, gaps from the latest standings snapshot."""

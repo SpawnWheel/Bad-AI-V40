@@ -11,6 +11,7 @@ from pydub.silence import detect_leading_silence
 # Padding kept either side of the commentary when clipping the video
 PAD_BEFORE_SEC = 0.5
 PAD_AFTER_SEC = 0.5
+HOLD_END_MAX_SEC = 15.0  # how far past the end of the recording the video may run for the last commentary line
 
 # Volume of the original game audio underneath the commentary (0 = commentary only), after GAME_LEVELER
 GAME_AUDIO_VOLUME = 1.0
@@ -123,8 +124,8 @@ def measure_lufs(path, start, duration):
 
 
 def music_filter(music):
-    """The grid music -> [music]: the part that plays (it starts at output time music['start'], before the clip
-    when that is negative), set to its level with a fixed gain, faded in and out, padded to the clip's length."""
+    """A music bed -> [music['label']]: the part that plays (it starts at output time music['start'], before the
+    clip when that is negative), set to its level with a fixed gain, faded in and out, padded to the clip's length."""
     start, seek = max(0.0, music['start']), max(0.0, -music['start'])
     length = music['end'] - start
     fade = min(MUSIC_FADE_SEC, length / 2)
@@ -132,36 +133,48 @@ def music_filter(music):
     return (f"[{music['input']}:a]atrim=start={seek:.3f}:duration={length:.3f},asetpts=PTS-STARTPTS,"
             f"aresample=48000,aformat=channel_layouts=stereo,volume={music['gain_db']:.2f}dB,"
             f"afade=t=in:st=0:d={fade_in},afade=t=out:st={length - fade:.3f}:d={fade:.3f},"
-            f"adelay={int(start * 1000)}:all=1,apad=whole_dur={music['clip_duration']:.3f}[music]")
+            f"adelay={int(start * 1000)}:all=1,apad=whole_dur={music['clip_duration']:.3f}[{music['label']}]")
 
 
-def build_audio_filter(has_game_audio, hold_rel=None, music=None):
+def build_audio_filter(has_game_audio, hold_rel=None, musics=(), pad_to=None):
     """hold_rel: output time the replay starts playing after the grid intro (the game is silent before it).
-    music: the grid music (see grid_music), or None."""
+    musics: the music beds (the grid music, and the same track again under the results), each with its input
+    and label set by build_command. pad_to: the output's length when it runs on past the end of the recording
+    (the last commentary line still playing), so the game sound is padded with silence to it."""
     commentary = "[1:a]aresample=48000,aformat=channel_layouts=stereo"
+    if pad_to:
+        commentary += f",apad=whole_dur={pad_to:.3f}"
+    beds = "".join(music_filter(m) + ";" for m in musics)
+    labels = "".join(f"[{m['label']}]" for m in musics)
     if has_game_audio and GAME_AUDIO_VOLUME > 0:
         # The game ducks under the commentators while they talk and comes back up in the gaps.
         # amix follows the game audio's length; adding apad here deadlocks ffmpeg
         intro = f",afade=t=in:st={hold_rel:.3f}:d={GAME_FADE_IN_SEC}" if hold_rel else ""
+        # (a padded game track needs its full length given: an open-ended apad never lets amix finish)
+        pad = f",apad=whole_dur={pad_to:.3f}" if pad_to else ""
         f = (
-            f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,{GAME_LEVELER},volume={GAME_AUDIO_VOLUME}{intro}[game];"
+            f"[0:a:0]aresample=48000,aformat=channel_layouts=stereo,{GAME_LEVELER},volume={GAME_AUDIO_VOLUME}{intro}{pad}[game];"
             f"{commentary},asplit=2[comm][key];"
             f"[game][key]sidechaincompress=threshold={DUCK_THRESHOLD}:ratio={DUCK_RATIO}:attack=15:release=450:makeup=1[ducked];"
         )
-        if music:
-            return (f + music_filter(music) + ";"
-                    "[ducked][comm][music]amix=inputs=3:duration=first:normalize=0,alimiter=limit=0.95[aout]")
-        return f + "[ducked][comm]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]"
-    if music:
-        return (f"{commentary},apad=whole_dur={music['clip_duration']:.3f}[comm];" + music_filter(music) + ";"
-                "[comm][music]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[aout]")
+        # Past the end of the recording the game chain finishes a second early (Cascavel's sign-off was still
+        # cut), so a padded mix runs to its longest input; -t ends the clip
+        length = "longest" if pad_to else "first"
+        return (f + beds + f"[ducked][comm]{labels}amix=inputs={2 + len(musics)}:duration={length}:normalize=0,"
+                "alimiter=limit=0.95[aout]")
+    if musics:
+        return (f"{commentary},apad=whole_dur={musics[0]['clip_duration']:.3f}[comm];" + beds +
+                f"[comm]{labels}amix=inputs={1 + len(musics)}:duration=first:normalize=0,alimiter=limit=0.95[aout]")
     # Pad the commentary with silence so it covers the trailing clip padding
     return f"{commentary},apad[aout]"
 
 
 def build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay=None,
-                  intro=None):
-    """intro: {'hold_rel', 'hold_png', 'music' (see grid_music)} for the starting grid, or None."""
+                  intro=None, results_music=None):
+    """intro: {'hold_rel', 'hold_png', 'music' (see grid_music)} for the starting grid, or None.
+    results_music: the grid music again under the results (see results_music), or None.
+    A clip running on past the end of the recording (the last commentary line still playing) holds the last
+    frame for the rest, under the results' background."""
     bitrate = info['video_bitrate']
     nvenc = encoder.endswith('_nvenc')
     cmd = ["ffmpeg", "-y", "-hide_banner", "-stats", "-loglevel", "error"]
@@ -177,30 +190,40 @@ def build_command(video_path, audio_path, output_path, info, clip_start, clip_du
     n_inputs = 2
     video_map, base = "0:v:0", "0:v"
     video_filters = []
+    over = clip_start + clip_duration - info['duration'] if info['duration'] > 0 else 0.0
+    pad_to = None
+    if over > 0.05:
+        video_filters.append(f"[0:v]tpad=stop_mode=clone:stop_duration={over + 1:.3f}[src]")
+        video_map, base, pad_to = "[src]", "src", clip_duration
     if overlay:
         # The overlay timeline already starts at clip_start, so it is not seeked
         cmd += ["-f", "concat", "-safe", "0", "-i", overlay]
         overlay_input = n_inputs
         n_inputs += 1
-    hold_rel = music = None
+    hold_rel = None
+    musics = []
     if intro:
         hold_rel = intro['hold_rel']
         # Before the replay starts, one frame of it is held (the recording there is the sim's menus)
         cmd += ["-loop", "1", "-framerate", f"{fps:.6g}", "-t", f"{clip_duration:.3f}", "-i", intro['hold_png']]
         w, h = info['size']
         video_filters.append(f"[{n_inputs}:v]scale={w}:{h},format=yuv420p,setsar=1[hold];"
-                             f"[0:v][hold]overlay=0:0:enable='lt(t,{hold_rel:.3f})':eof_action=pass[base]")
+                             f"[{base}][hold]overlay=0:0:enable='lt(t,{hold_rel:.3f})':eof_action=pass[base]")
         n_inputs += 1
         base, video_map = "base", "[base]"
         if intro.get('music'):
-            cmd += ["-i", intro['music']['path']]
-            music = dict(intro['music'], input=n_inputs, clip_duration=clip_duration)
-            n_inputs += 1
+            musics.append(intro['music'])
+    if results_music:
+        musics.append(results_music)
+    for k, m in enumerate(musics):
+        cmd += ["-i", m['path']]
+        musics[k] = dict(m, input=n_inputs, clip_duration=clip_duration, label=f"music{k}")
+        n_inputs += 1
     if overlay:
         video_filters.append(graphics.overlay_filter(f"{fps:.6g}", info['size'], overlay_input=overlay_input,
                                                      base=base))
         video_map = "[vout]"
-    filters = ";".join(video_filters + [build_audio_filter(info['has_audio'], hold_rel, music)])
+    filters = ";".join(video_filters + [build_audio_filter(info['has_audio'], hold_rel, musics, pad_to)])
     cmd += [
         "-t", f"{clip_duration:.3f}",
         "-filter_complex", filters,
@@ -286,6 +309,48 @@ def grid_music(settings, window, clip_start, hold_rel):
     return {'path': path, 'start': start, 'end': end, 'gain_db': gain}
 
 
+def results_music(project_path, clip_start, clip_duration, video_end):
+    """The grid music again at the end: the track played once, timed to finish as the full video ends
+    (video_end, in video time), so a test clip hears it at the same moment. It never starts before the results
+    table comes up. At the grid music's level, faded out over its last MUSIC_FADE_SEC. {'path', 'start', 'end',
+    'gain_db'} like grid_music, or None (no grid music, no results graphic, or not in this clip)."""
+    if not project_path or graphics is None:
+        return None
+    settings = racefiles.grid_intro_settings(project_path)
+    path = racefiles.grid_music_path(settings)
+    if not path:
+        return None
+    try:
+        shown = graphics.results_shown_at(project_path)
+    except Exception as e:
+        print(f"  Could not work out when the results come up ({e}); no music under them.")
+        return None
+    length = audio_duration(path)
+    if shown is None or not length:
+        return None
+    begins = max(shown, video_end - length)  # video time
+    start = begins - clip_start
+    end = min(clip_duration, video_end - clip_start)
+    if end - max(0.0, start) < 1.0:
+        return None
+    target = MUSIC_LUFS.get(settings.get('music_level'), MUSIC_LUFS["Normal"])
+    lufs = measure_lufs(path, 0.0, video_end - begins)  # all of what the full video plays
+    gain = max(-30.0, min(20.0, target - lufs)) if lufs is not None else target + 14
+    print(f"  Results music: {os.path.basename(path)} ({settings.get('music_level')}) from {begins:.1f}s to "
+          f"{video_end:.1f}s in the video, {gain:+.1f} dB")
+    return {'path': path, 'start': start, 'end': end, 'gain_db': gain}
+
+
+def audio_duration(path):
+    """Length of an audio file in seconds, or None."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                         capture_output=True, text=True).stdout.strip()
+    try:
+        return float(out)
+    except ValueError:
+        return None
+
+
 def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
     for path in (video_path, audio_path):
         if not os.path.exists(path):
@@ -305,11 +370,14 @@ def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
 
     clip_start = max(0.0, audio_start - PAD_BEFORE_SEC)
     clip_end = audio_end + PAD_AFTER_SEC
+    # The last commentary line can run past the end of the recording (Cascavel's sign-off was cut 4.5 s short):
+    # the video then runs on, the last frame held under the results, up to HOLD_END_MAX_SEC
+    if info['duration'] > 0:
+        clip_end = min(clip_end, info['duration'] + HOLD_END_MAX_SEC)
+    video_end = clip_end  # where the full video ends (a test clip times the end music by it too)
     if preview:
         # Short test render (used by Graphics Setup): (start, duration) in video time
-        clip_start, clip_end = preview[0], preview[0] + preview[1]
-    if info['duration'] > 0:
-        clip_end = min(clip_end, info['duration'])
+        clip_start, clip_end = preview[0], min(preview[0] + preview[1], video_end)
     clip_duration = clip_end - clip_start
     if clip_duration <= 0:
         print("Error: The commentary starts after the end of the video.")
@@ -321,12 +389,14 @@ def main(video_path, audio_path, output_path, use_graphics=True, preview=None):
     overlay, frames_dir = (None, None)
     if use_graphics and project_path:
         overlay, frames_dir = prepare_graphics(project_path, info, clip_start, clip_end)
+    # The grid music comes back for the end of the video (only when the graphics show the results)
+    finale = results_music(project_path, clip_start, clip_duration, video_end) if overlay else None
 
     encoders = ENCODERS.get(info['codec'], ENCODERS['h264'])
     for encoder in encoders:
         print(f"Encoding with {encoder} -> {output_path}")
         cmd = build_command(video_path, audio_path, output_path, info, clip_start, clip_duration, encoder, overlay,
-                            intro)
+                            intro, finale)
         if subprocess.run(cmd).returncode == 0:
             if frames_dir:
                 shutil.rmtree(frames_dir, ignore_errors=True)

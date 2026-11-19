@@ -459,6 +459,14 @@ class TimingTower:
             text_right -= 20
         if fastest:
             text_right -= icon + 6
+        # Pit stops made so far, on a tag after the name (not while he's in the pit lane: the value says PIT)
+        stops = r.get('stops') or 0
+        stop_tag = None
+        if stops and not r.get('pit'):
+            stop_tag = f"{stops} STOP" if stops == 1 else f"{stops} STOPS"
+            f_stop = font(max(9, fs - 6), 'bold_cond')
+            stop_w = int(text_w(f_stop, stop_tag)) + 10
+            text_right -= stop_w + 6
         if mode == 'name':
             label = meta.get('display', name)
         else:
@@ -478,6 +486,14 @@ class TimingTower:
                 col = th.accent2 if value == 'PIT' else th.red
             fv = fit_font(value, val_w - 14, fs - 3, 'semibold_cond', 9)
             text_vcenter(img, w - 12, cy + 1, value, fv, col, 'r')
+        # The stop tag always sits right against the value box, so the tags line up down the tower; the
+        # chequered flag and the fastest lap stopwatch go to the left of it
+        if stop_tag:
+            th_h = max(12, int(h * 0.56))
+            box = (marks_x - stop_w, cy - th_h / 2, marks_x, cy + th_h / 2)
+            round_rect(img, box, 3, th.accent2)
+            text_vcenter(img, (box[0] + box[2]) / 2, cy + 1, stop_tag, f_stop, contrast_text(th.accent2), 'm')
+            marks_x -= stop_w + 6
         if finished:
             marks_x -= 16
             self.tpl._checker(img, marks_x, int(cy - 6), 14, 12, 3)

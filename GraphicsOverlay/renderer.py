@@ -107,6 +107,18 @@ class OverlayRenderer:
             if not os.path.exists(self.grid_backdrop) and video and multiprocessing.parent_process() is None:
                 os.makedirs(os.path.dirname(self.grid_backdrop), exist_ok=True)
                 extract_frame(video, self.intro['hold'], self.grid_backdrop)
+        # The frame where the winner crosses the line, blurred behind the results full screen
+        self.results_backdrop = None
+        self.results_start = None  # when the results table comes up (set by _schedule)
+        self.results_cover = None  # when its background has faded up over the whole picture
+        lf = self.race.leader_finish_video
+        if project_path and lf is not None:
+            self.results_backdrop = os.path.join(project_path, gcfg.racefiles.DEBUG_DIR,
+                                                 f"results_frame_{lf:.2f}s.png")
+            video = gcfg.racefiles.read_race(project_path).get('video')
+            if not os.path.exists(self.results_backdrop) and video and multiprocessing.parent_process() is None:
+                os.makedirs(os.path.dirname(self.results_backdrop), exist_ok=True)
+                extract_frame(video, lf, self.results_backdrop)
         self.items = self._schedule()
 
     # ------------------------------------------------------------------ scheduling
@@ -208,17 +220,19 @@ class OverlayRenderer:
             items.append({'id': 'auto_cheq', 'type': 'chequered', 'time': lf + 0.3, 'duration': 9.0,
                           'lane': 'top', 'auto': True, 'driver': winner})
         if lf is not None and auto.get('results'):
+            # Each car's place fills in when it crosses the line ('at'); a car that never takes the flag shows
+            # once the last finisher is home
+            crossed = {name: race.to_video(t) for t, _, name in race.finish_order()}
+            last_home = max(crossed.values()) if crossed else lf
             rows = []
             for pos, name in race.final_classification():
                 g = race.grid_position(name)
                 rows.append({'pos': pos, 'driver': name, 'gained': (g - pos) if g else None,
-                             'stops': len(race.pit_stops_for(name))})
-            # Shown once most of the field has crossed the line
-            finish_times = [race.to_video(t) for t, _, _ in race.finish]
-            start = max(lf + 9.0, finish_times[min(len(finish_times) - 1, 2)] + 3.0)
+                             'stops': len(race.pit_stops_for(name)), 'at': crossed.get(name, last_home + 2.0)})
+            start, cover = results_times(race)
             # Long duration: it stays up until the video ends
             items.append({'id': 'auto_results', 'type': 'results', 'time': start, 'duration': 90.0,
-                          'lane': 'center', 'auto': True, 'data': {'rows': rows}})
+                          'lane': 'full', 'auto': True, 'data': {'rows': rows}, 'backdrop_at': cover})
         return items
 
     def _commentator_info_item(self, gf, lf):
@@ -567,6 +581,14 @@ class OverlayRenderer:
                     for m in unit:
                         m['time'] += shift
                         placed.append(m)
+        # The results full screen at the end: nothing starts behind it (it would never be seen)
+        # (team radio still shows: it is drawn over the results, on the right beside the table)
+        full = [a for a in auto if a['lane'] == 'full']
+        if full:
+            cover = min(a['time'] for a in full)
+            placed = [it for it in placed if it['time'] < cover or it['lane'] == 'radio'] + full
+            self.results_start = cover
+            self.results_cover = min(a.get('backdrop_at', a['time']) for a in full)
         if self.intro:
             # Nothing else starts while the grid is up (it would only be hidden behind it)
             hold = self.intro['hold']
@@ -636,9 +658,15 @@ class OverlayRenderer:
 
     # ------------------------------------------------------------------ per-frame state
     def _active(self, t):
-        """Items on screen at t; the full-screen starting grid last, so it covers everything."""
-        return sorted((it for it in self.items if it['time'] <= t < it['time'] + it['duration']),
-                      key=lambda it: it['lane'] == 'full')
+        """Items on screen at t; the full-screen starting grid and results last, so they cover everything, apart
+        from team radio over the results (it sits on the right, beside the table)."""
+        results_up = self.results_start is not None and t >= self.results_start
+
+        def layer(it):
+            if it['lane'] == 'full':
+                return 1
+            return 2 if results_up and it['lane'] == 'radio' else 0
+        return sorted((it for it in self.items if it['time'] <= t < it['time'] + it['duration']), key=layer)
 
     def _phase(self, it, t, t_in, t_out):
         """('in'|'hold'|'out', frame index within the transition)."""
@@ -673,9 +701,12 @@ class OverlayRenderer:
         return right, top
 
     def tower_shown(self, t):
-        """The timing tower comes off a few seconds after the leader takes the chequered flag."""
+        """The timing tower comes off a few seconds after the leader takes the chequered flag, or with the results
+        full screen it stays until that covers everything (else the game's own leaderboard shows in between)."""
         lf = self.race.leader_finish_video
-        return self.tpl.tower is not None and (lf is None or t < lf + TOWER_OFF_AFTER)
+        off_at = self.results_cover if self.results_cover is not None else (
+            lf + TOWER_OFF_AFTER if lf is not None else None)
+        return self.tpl.tower is not None and (off_at is None or t < off_at + 0.5)
 
     def frame_key(self, t):
         key = [self.race.flag_state_at(t)]
@@ -753,6 +784,10 @@ class OverlayRenderer:
                                              self._strips[it['id']], self._ticker_scroll(it, t), slide)
                 frame.alpha_composite(band)
                 continue
+            if it['lane'] == 'full' and it['type'] == 'results':
+                frame.alpha_composite(self.tpl.results_scene(self.size, it, t - it['time'], t,
+                                                             self.results_backdrop))
+                continue
             if it['lane'] == 'full':
                 scene = self.tpl.starting_grid(self.size, self.quali)
                 frame.alpha_composite(scene.frame(t - it['time'], it['duration'], self.grid_backdrop, GRID_ANIM_AT))
@@ -816,14 +851,16 @@ class OverlayRenderer:
             vis = max(2, int(img.width * p_in)) if phase == 'in' else img.width
             src = img.crop((0, 0, vis, img.height))
         else:
-            # Pop-ups sit centred above the ticker (clear of the timing tower) and open out from the middle
+            # Pop-ups sit centred above the ticker and open out from the middle; one wide enough to reach the
+            # leaderboard on the left moves right until it clears it
             pz = self.cfg['layout']['popups']
             y = pz['bottom'] - (img.height - margin) + p_out * 20
             alpha = min(1.0, p_in * 1.4) * (1 - p_out)
             vis = max(2, int(img.width * p_in)) if phase == 'in' else img.width
             left = (img.width - vis) // 2
             src = img.crop((left, 0, left + vis, img.height))
-            x = (W - img.width) / 2 + left
+            x_card = max((W - img.width) / 2, min(self.tpl.left_clear_x() - margin, W - img.width + margin - 24))
+            x = x_card + left
         if alpha <= 0.01:
             return
         if alpha < 0.999:
@@ -946,6 +983,31 @@ def overlay_filter(fps, video_size, base_size=(1920, 1080), overlay_input=2, bas
     # video's own pixel format so the overlay filter blends without converting every frame again
     return (f"[{overlay_input}:v]format=rgba{scale},format=yuva420p,fps={fps}[ov];"
             f"[{base}][ov]overlay=0:0:eof_action=pass:format=yuv420[vout]")
+
+
+def results_times(race):
+    """(video time the results table comes up, video time its background has covered the picture), or None
+    without a finish. The table comes up over the race once the first few are home and fills in as they cross;
+    the background fades up behind it as the last car crosses the line, where the replay stops and the game's
+    interface comes up. The export starts the grid music again with the table (see combine_video)."""
+    lf = race.leader_finish_video
+    if lf is None:
+        return None
+    crossed = sorted(race.to_video(t) for t, _, _ in race.finish_order()) or [lf]
+    start = max(lf + 9.0, crossed[min(len(crossed) - 1, 2)] + 3.0)
+    return start, max(start, crossed[-1])
+
+
+def results_shown_at(project_path):
+    """Video time the results table comes up in this race's graphics, or None (no graphics, results switched
+    off, or no finish)."""
+    if not graphics_enabled(project_path):
+        return None
+    cfg = gcfg.load_config(project_path)
+    if not cfg.get('auto_graphics', {}).get('results', True):
+        return None
+    times = results_times(gcfg.build_race(project_path, cfg))
+    return times[0] if times else None
 
 
 def graphics_enabled(project_path):

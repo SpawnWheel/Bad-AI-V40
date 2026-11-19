@@ -437,10 +437,17 @@ class RaceData:
             ev['t'] = self.to_video(e['t'])
             yield ev
 
+    def finish_order(self):
+        """[(t_log, pos, name)] of the cars that took the flag, by place. Places are numbered 1, 2, 3... in the
+        log's order (its place, then who crossed first), so a place logged twice can't repeat: Cascavel's log
+        had Daniel Born and Clinton Nortje both P14 (Nortje, a lap down, crossed 50 s later and is P15)."""
+        rows = sorted(self.finish, key=lambda f: (f[2], f[0]))
+        return [(t, i + 1, name) for i, (t, name, _pos) in enumerate(rows)]
+
     def final_classification(self):
         """[(pos, name)] from finish events, falling back to the final running order."""
         if self.finish:
-            rows = sorted(((pos, name) for _, name, pos in self.finish))
+            rows = [(pos, name) for _, pos, name in self.finish_order()]
             finished = {n for _, n in rows}
             last_order = list(self.order_changes[-1][1]) if self.order_changes else self.grid
             for name in last_order:

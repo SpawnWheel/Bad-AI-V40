@@ -385,7 +385,7 @@ def resolve_entry(raw, cfg, race, resolve, facts):
         rows, packs = race.timing.spread_at(t)
         if len(rows) < 3:
             return None, 'no gaps recorded at that moment'
-        data = {'rows': rows, 'packs': packs}
+        data = {'rows': rows, 'packs': packs, 'pos': {n: race.position_at(n, t) for n, _ in rows}}
 
     elif typ == 'insight':
         if not g['title']:

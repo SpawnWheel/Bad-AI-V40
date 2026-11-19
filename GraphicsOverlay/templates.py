@@ -12,6 +12,14 @@ from .race_data import fmt_clock
 LABEL_H = 30
 SPONSOR_TAB_H = 58  # sponsor tab on the top right of a card: taller than the label so the logo reads
 MAX_PASSED = 4  # most passed drivers one position-change card stacks
+# How the gaps card fits its space, tried in turn: marker radius, links (shortest, growth per root second,
+# longest) and the most packs shown
+_L1, _L2, _L3, _L4, _L5 = (92, 32, 236), (72, 22, 172), (64, 15, 130), (60, 12, 112), (56, 10, 96)
+GAPS_FITS = ((22, _L1, 8), (22, _L2, 8), (22, _L3, 8), (19, _L3, 8), (19, _L4, 8), (22, _L4, 6), (19, _L4, 6),
+             (16, _L4, 8), (16, _L5, 6), (19, _L5, 5), (16, _L5, 5), (14, _L5, 5), (14, _L5, 4), (14, _L5, 3))
+# The results: the background fades up over this long, the table rises in over this long, and a car's row
+# flashes for this long as it crosses the line
+RESULTS_FADE_IN, RESULTS_CARD_IN, RESULTS_FLASH = 1.0, 0.7, 1.4
 FASTEST_PURPLE = '#A239FF'
 PODIUM = {1: '#E8B923', 2: '#C3CBD6', 3: '#C9844A'}
 FLAG_COLORS = {
@@ -58,6 +66,20 @@ class Templates:
             self.tower = TimingTower(self)
 
     # ------------------------------------------------------------------ helpers
+    def left_clear_x(self):
+        """The first x right of the leaderboard on the left (the timing tower, or the AMS2 leaderboard frame
+        with the tower off), or 0 when nothing is there. Pop-ups never reach left of it."""
+        if self.tower:
+            return self.tower.x + self.tower.w + 16
+        lb = self.cfg['layout'].get('leaderboard') or {}
+        if lb.get('enabled') and self.race.has_hud:
+            return lb['x'] + lb['w'] + 16
+        return 0
+
+    def popup_max_w(self, screen_w=1920, right_margin=24):
+        """Widest a pop-up can be and still sit clear of the leaderboard (see renderer: pop-ups shift right of it)."""
+        return screen_w - max(self.left_clear_x(), right_margin) - right_margin
+
     def meta(self, name):
         return gcfg.driver_meta(self.cfg, name)
 
@@ -541,6 +563,54 @@ class Templates:
             from .starting_grid import StartingGrid
             self._starting_grid = StartingGrid(self, size, quali)
         return self._starting_grid
+
+    def results_scene(self, size, g, local, t, backdrop_path):
+        """The results: the classification table over the race, every place listed from the start and a car's
+        name filling in, with a flash, the moment it crosses the line (until then its place is an empty slot, so
+        nobody still racing is given away). As the last car crosses (g['backdrop_at']) a background fades up
+        behind the table to hide the game's interface when the replay stops: the frame where the winner crossed
+        the line, blurred and darkened under a slow push-in like the starting grid."""
+        from .starting_grid import PUSH_IN
+        W, H = size
+        frame = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        since_bd = t - g.get('backdrop_at', g['time'])
+        if since_bd >= 0:
+            grid = self.starting_grid(size)  # its blurred backdrop and shading
+            bd = grid.backdrop(backdrop_path)
+            if bd is not None:
+                z = PUSH_IN * max(0.0, min(1.0, since_bd / 60.0))
+                cw, ch = int(W * (1 + z)), int(H * (1 + z))
+                ox, oy = (bd.width - cw) // 2, (bd.height - ch) // 2
+                frame = bd.crop((ox, oy, ox + cw, oy + ch)).resize((W, H), Image.BILINEAR)
+            else:
+                frame = grid.flat_backdrop().copy()
+            frame.alpha_composite(grid.shade())
+            if since_bd < RESULTS_FADE_IN:
+                frame.putalpha(int(255 * ease_out(since_bd / RESULTS_FADE_IN)))
+        rows = [dict(r, pending=r.get('at') is not None and t < r['at']) for r in g.get('data', {}).get('rows', [])]
+        cache = self.__dict__.setdefault('_results_cards', {})
+        key = (g.get('title'), tuple(r['pending'] for r in rows))
+        if key not in cache:
+            card = self.card_results({'title': g.get('title'), 'data': {'rows': rows}})
+            cache[key] = add_shadow(card) if card is not None else None
+        if cache[key] is not None:
+            card, margin = cache[key]
+            p_in = ease_out(min(1.0, local / RESULTS_CARD_IN))
+            x, y = (W - card.width) // 2, int((H - card.height) // 2 + (1 - p_in) * 30)
+            if p_in < 0.999:
+                card = card.copy()
+                card.putalpha(card.getchannel('A').point(lambda v: int(v * p_in)))
+            frame.alpha_composite(card, (x, y))
+            # A flash across the row of a car that has just crossed the line
+            row_h = 42 if len(rows) <= 12 else 32
+            for i, r in enumerate(rows):
+                since = t - r['at'] if r.get('at') is not None else None
+                if since is not None and 0 <= since < RESULTS_FLASH:
+                    ry = y + margin + 92 + 8 + i * row_h
+                    a = int(150 * (1 - since / RESULTS_FLASH))
+                    round_rect(frame, (x + margin + 12, ry, x + card.width - margin - 12, ry + row_h), 4,
+                               self.th.accent[:3] + (a,))
+        return frame
 
     def grid_car(self, name, max_w, max_h):
         """The car on the starting grid: the Drivers tab car image when it is a car preview, else the preview in
@@ -1549,6 +1619,13 @@ class Templates:
             if i % 2 == 0:
                 round_rect(img, (12, y, W - 12, y + row_h), 4, (255, 255, 255, 14))
             cy = y + row_h / 2
+            if r.get('pending'):
+                # A place nobody has taken yet (the car is still racing to the line): just the number, dimmed
+                round_rect(img, (24, cy - 15, 64, cy + 15), 4, (255, 255, 255, 40))
+                text_vcenter(img, 44, cy + 1, str(pos), fpos, th.muted, 'm')
+                round_rect(img, (90, cy - 1, 260, cy + 1), 1, (255, 255, 255, 40))
+                y += row_h
+                continue
             box = rgba(PODIUM[pos]) if pos in PODIUM else th.text
             round_rect(img, (24, cy - 15, 64, cy + 15), 4, box)
             text_vcenter(img, 44, cy + 1, str(pos), fpos, th.dark_text, 'm')
@@ -1703,55 +1780,111 @@ class Templates:
         return img
 
     def card_gaps(self, g):
-        """The whole field on one line by gap to the leader: a marker per car with its three-letter name inside,
-        spread apart where cars are close, and the packs underneath, each named after the car leading it."""
+        """The field as its packs, left to right in race order: each pack a capsule of driver markers headed by the
+        places it covers, and between packs a link with the time gap written on it. Links grow with the gap on a
+        compressed scale (square root, capped), so every gap stays visible and a lone car half a minute up the road
+        no longer squeezes everyone else into one wall; a capped link shows a break in the line. The card is as
+        wide as its packs need."""
         th = self.th
         d = g.get('data', {})
         rows = sorted(d.get('rows') or [], key=lambda r: r[1])
         if len(rows) < 2:
             return None
-        W, panel_h = 1180, 166
-        R = 23                      # marker radius
-        step = 2 * R + 6            # closest two markers may sit
+        gap_of = dict(rows)
+        order = {name: i for i, (name, _) in enumerate(rows, 1)}
+        packs = [[n for n in p if n in gap_of] for p in (d.get('packs') or [])]
+        natural = [p for p in packs if p] or [[n for n, _ in rows]]
+        pos = d.get('pos') or {}
+
+        def place(name):
+            return pos.get(name) or order[name]
+
+        def at_most(n):
+            """The packs, or for a big strung-out field (14 packs in a 26-car Super Touring race) the field split
+            at its n - 1 biggest gaps only."""
+            if len(natural) <= n:
+                return natural
+            cuts = sorted(sorted(range(1, len(rows)), key=lambda i: rows[i][1] - rows[i - 1][1])[-(n - 1):])
+            return [[name for name, _ in rows[a:b]] for a, b in zip([0] + cuts, cuts + [len(rows)])]
+
+        margin, pad, inner = 36, 9, 6
+        # A driver with a team/make logo is shown by it, as it is, with his three letters under it (cars of one make
+        # share a logo); a driver without one gets a circle in his colour with the letters inside
+        logos = any(self.logo_path(n) for n, _ in rows)
+        # The card has to fit right of the timing tower: shorter links and a little smaller markers first, then
+        # fewer packs (the smallest gaps join their packs), then smaller markers still (see GAPS_FITS)
+        max_content = self.popup_max_w() - 2 * margin
+        for R, (link_min, link_k, link_max), most in GAPS_FITS:
+            packs = at_most(most)
+            links = [gap_of[b[0]] - gap_of[a[-1]] for a, b in zip(packs, packs[1:])]
+            S = int(2 * R * 1.25) if logos else 2 * R  # room a marker takes along the line
+            pack_w = [len(p) * S + (len(p) - 1) * inner + 2 * pad for p in packs]
+            link_w = [min(link_max, link_min + link_k * max(0.0, s) ** 0.5) for s in links]
+            content = sum(pack_w) + sum(link_w)
+            if content <= max_content:
+                break
+        W = max(760, int(content + 2 * margin))
+        panel_h = 168 if logos else 156
         img, top = self.card_canvas(W, panel_h, (g.get('title') or 'GAPS ON TRACK').upper(), sponsor='partner')
-        x0, x1 = 60, W - 60
-        cap = max(r[1] for r in rows) or 1.0
-        # True positions, then nudged apart (forwards, then back from the right edge) so no two overlap
-        xs = [x0 + (x1 - x0) * min(1.0, gap / cap) for _, gap in rows]
-        for i in range(1, len(xs)):
-            xs[i] = max(xs[i], xs[i - 1] + step)
-        if xs[-1] > x1:
-            xs[-1] = x1
-            for i in range(len(xs) - 2, -1, -1):
-                xs[i] = min(xs[i], xs[i + 1] - step)
-        x_of = {name: x for (name, _), x in zip(rows, xs)}
-        y = top + 54
-        round_rect(img, (x0 - 30, y - 2, x1 + 30, y + 2), 2, (255, 255, 255, 50))
-        # Packs underneath, named after the car at the front of each
-        for i, pack in enumerate(d.get('packs') or []):
-            px = [x_of[n] for n in pack if n in x_of]
-            if not px:
-                continue
-            a, b = min(px) - R, max(px) + R
-            lead = self.meta(pack[0])['short'].upper()
-            if len(pack) > 1:
-                label = f"LEADING GROUP  ·  {len(pack)}" if i == 0 else f"{lead} GROUP  ·  {len(pack)}"
+        cy = top + (86 if logos else 80)
+        half = R + 14 if logos else R + pad - 2  # half the capsule's height (logos have their letters under them)
+        my = cy - 8 if logos else cy             # the markers' centre line
+        x = (W - content) / 2
+        f_code = font(19 if R >= 19 else 16, 'bold_cond')
+        f_chip = font(18, 'semibold_cond')
+        line = (255, 255, 255, 70)
+        for i, pack in enumerate(packs):
+            a, b = x, x + pack_w[i]
+            lead = i == 0
+            # The link to the next pack: a line with the gap on a chip, broken when the scale was compressed
+            if i + 1 < len(packs):
+                l0, l1 = b, b + link_w[i]
+                round_rect(img, (l0, cy - 1, l1, cy + 1), 1, line)
+                if link_w[i] >= link_max:
+                    for bx in (l0 + (l1 - l0) * 0.22, l1 - (l1 - l0) * 0.22):
+                        round_rect(img, (bx - 7, cy - 4, bx + 7, cy + 4), 0, th.panel)
+                        for off in (-4, 3):
+                            polygon(img, [(bx + off - 3, cy + 9), (bx + off, cy + 9), (bx + off + 4, cy - 9),
+                                          (bx + off + 1, cy - 9)], (255, 255, 255, 150))
+                chip = f"+{links[i]:.1f}s"
+                cw = text_w(f_chip, chip) + 18
+                mx = (l0 + l1) / 2
+                round_rect(img, (mx - cw / 2, cy - 14, mx + cw / 2, cy + 14), 14, th.panel)
+                round_outline(img, (mx - cw / 2, cy - 14, mx + cw / 2, cy + 14), 14, (255, 255, 255, 90), 1)
+                text_vcenter(img, mx, cy + 1, chip, f_chip, th.text, 'm')
+            # The pack: a soft capsule behind its markers, the lead pack outlined in the accent
+            box = (a, cy - half, b, cy + half)
+            round_rect(img, box, min(half, R + pad), (255, 255, 255, 34 if lead else 22))
+            if lead:
+                round_outline(img, box, min(half, R + pad), th.accent2[:3] + (220,), 2)
+            first, last = place(pack[0]), place(pack[-1])
+            if lead:
+                label = 'LEADER' if len(pack) == 1 else f"LEAD PACK  ·  P1–{last}"
             else:
-                label = 'LEADER' if i == 0 else 'ALONE'
-            col = th.accent2 if i == 0 else (255, 255, 255, 120)
-            round_rect(img, (a, y + R + 12, b, y + R + 16), 2, col)
-            f = fit_font(label, max(b - a, 70) + 40, 16, 'bold_cond', 11)
-            text_vcenter(img, (a + b) / 2, y + R + 34, label, f, th.accent2 if i == 0 else th.muted, 'm')
-        f = font(19, 'bold_cond')
-        for name, _ in rows:
-            x = x_of[name]
-            col = self.driver_color(name)
-            round_rect(img, (x - R, y - R, x + R, y + R), R, col)
-            round_outline(img, (x - R, y - R, x + R, y + R), R, (255, 255, 255, 230), 2)
-            code = ''.join(c for c in self.meta(name)['short'].upper() if c.isalnum())[:3]
-            text_vcenter(img, x, y + 1, code, fit_font(code, 2 * R - 8, 19, 'bold_cond', 11), contrast_text(col), 'm')
-        text_vcenter(img, W - 24, top + panel_h - 14, f"LEADER TO LAST  {cap:.1f}s", font(16, 'semibold_cond'),
-                     th.muted, 'r')
+                label = f"P{first}" if len(pack) == 1 else f"P{first}–{last}"
+            fl = fit_font(label, pack_w[i] + min(link_w + [0]) * 0.6, 17, 'bold_cond', 12)
+            text_vcenter(img, (a + b) / 2, top + 26, label, fl, th.accent2 if lead else th.muted, 'm')
+            mx = a + pad + S / 2
+            for name in pack:
+                code = ''.join(c for c in self.meta(name)['short'].upper() if c.isalnum())[:3]
+                logo = self.badge(name, 2 * R - 6) if logos else None
+                if logo is not None:
+                    logo = fit_image(logo, S, 2 * R - 6)
+                    img.alpha_composite(logo, (int(mx - logo.width / 2), int(my - logo.height / 2)))
+                    text_vcenter(img, mx, cy + R + 4, code, font(15, 'bold_cond'), th.text, 'm')
+                else:
+                    r = R - 3 if logos else R
+                    col = self.driver_color(name)
+                    round_rect(img, (mx - r, my - r, mx + r, my + r), r, col)
+                    round_outline(img, (mx - r, my - r, mx + r, my + r), r, (255, 255, 255, 210), 2)
+                    text_vcenter(img, mx, my + 1, code, fit_font(code, 2 * r - 8, f_code.size, 'bold_cond', 10),
+                                 contrast_text(col), 'm')
+                mx += S + inner
+            x = b + (link_w[i] if i < len(link_w) else 0)
+        spread = rows[-1][1]
+        foot = f"{len(packs)} PACKS  ·  LEADER TO LAST  {spread:.1f}s" if len(packs) > 1 else \
+            f"ONE PACK  ·  LEADER TO LAST  {spread:.1f}s"
+        text_vcenter(img, W - 22, top + panel_h - 15, foot, font(16, 'semibold_cond'), th.muted, 'r')
         return img
 
     def card_insight(self, g):
