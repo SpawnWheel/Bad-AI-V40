@@ -1,0 +1,734 @@
+{
+  "version": 1,
+  "enabled": true,
+  "base_resolution": [
+    1920,
+    1080
+  ],
+  "championship": {
+    "name": "Super Touring",
+    "short_name": "Raceroom",
+    "season": "Season 1",
+    "round": "Round 2",
+    "event_name": "Hockenheimring",
+    "logo": "Graphics/Logos/RaceroomWhite.png",
+    "logo_tint_white": false,
+    "event_flag": "Graphics/Flags/DEU.png"
+  },
+  "theme": {
+    "accent": "#E10600",
+    "accent2": "#b94677",
+    "panel": "#0B0E14",
+    "panel_alpha": 0.62,
+    "text": "#FFFFFF",
+    "muted": "#9AA3B2"
+  },
+  "layout": {
+    "leaderboard": {
+      "enabled": true,
+      "x": 10,
+      "y": 110,
+      "w": 420,
+      "row_h": 25,
+      "pad": 15,
+      "rows": 0,
+      "header": true,
+      "footer": true
+    },
+    "map": {
+      "enabled": false,
+      "x": 1597,
+      "y": 113,
+      "w": 306,
+      "h": 299,
+      "header": false
+    },
+    "tower": {
+      "enabled": true,
+      "x": 24,
+      "y": 24,
+      "w": 400,
+      "row_h": 34,
+      "bottom": 820,
+      "rows": 0,
+      "cycle": "interval,gap,name",
+      "cycle_sec": 15,
+      "class_groups": ""
+    },
+    "logo": {
+      "enabled": true,
+      "x": 1903,
+      "y": 14,
+      "h": 58,
+      "anchor": "right"
+    },
+    "extra_logos": [],
+    "ticker": {
+      "enabled": true,
+      "y": 1018,
+      "h": 46,
+      "speed": 150,
+      "max_duration": 40,
+      "extra_hold": 10
+    },
+    "popups": {
+      "x": 40,
+      "bottom": 1000,
+      "max_w": 780
+    },
+    "radio": {
+      "right": 1902,
+      "cy": 559,
+      "w": 420
+    },
+    "leader": {
+      "y": 24
+    },
+    "pits": {
+      "x": 0,
+      "y": 150
+    },
+    "commentators": {
+      "right": 0,
+      "y": 0
+    }
+  },
+  "auto_graphics": {
+    "title_card": true,
+    "commentators": true,
+    "commentator_info": true,
+    "start_ticker": true,
+    "standings_ticker": true,
+    "start_movers": true,
+    "fastest_lap": true,
+    "new_leader": true,
+    "pit_stops": true,
+    "gap_tracker": true,
+    "radio": true,
+    "chequered": true,
+    "results": true,
+    "stewards": true,
+    "sponsors": true
+  },
+  "popup_types": {
+    "driver_card": true,
+    "battle": true,
+    "overtake": true,
+    "race_control": true,
+    "stat": true,
+    "movers": true,
+    "headline": true,
+    "gaps": true,
+    "insight": true,
+    "pit_stop": true
+  },
+  "popup_density": "medium",
+  "popup_duration": 8.0,
+  "render_fps": 15,
+  "drivers": {
+    "Daniel Born": {
+      "display": "Daniel Born",
+      "short": "BORN",
+      "number": "3",
+      "country": "RSA",
+      "team": "BMW Motorsport SA",
+      "make": "BMW",
+      "color": "#1a0cc0",
+      "car_image": "",
+      "logo": "Graphics/Logos/bmw.png"
+    },
+    "Damien Cardo": {
+      "display": "Damien Cardo",
+      "short": "CARDO",
+      "number": "10",
+      "country": "FRA",
+      "team": "Team Honda Sport",
+      "make": "Honda",
+      "color": "#CC0000",
+      "car_image": "",
+      "logo": "Graphics/Logos/Honda.png"
+    },
+    "Bruno Rizzo": {
+      "display": "Bruno Rizzo",
+      "short": "RIZZO",
+      "number": "14",
+      "country": "ITA",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Antoine Booboo": {
+      "display": "Antoine Booboo",
+      "short": "BOOBOO",
+      "number": "10",
+      "country": "FRA",
+      "team": "Team Magnus Krokström",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Francisco Patricio": {
+      "display": "Francisco Patricio",
+      "short": "PATRICIO",
+      "number": "17",
+      "country": "ESP",
+      "team": "Arena International",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Migue Morente": {
+      "display": "Migue Morente",
+      "short": "MORENTE",
+      "number": "11",
+      "country": "ESP",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "David Sawyer": {
+      "display": "David Sawyer",
+      "short": "SAWYER",
+      "number": "55",
+      "country": "GBR",
+      "team": "Ford Mondeo Racing",
+      "make": "Ford",
+      "color": "#1D3F8F",
+      "car_image": "",
+      "logo": "Graphics/Logos/ford.png"
+    },
+    "Dave Allsopp": {
+      "display": "Dave Allsopp",
+      "short": "ALLSOPP",
+      "number": "21",
+      "country": "GBR",
+      "team": "DC Cook Motorsport",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Juan Alfonso Fernández": {
+      "display": "Juan Alfonso Fernández",
+      "short": "FERNÁNDEZ",
+      "number": "89",
+      "country": "ESP",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Pepe Rodriguez": {
+      "display": "Pepe Rodriguez",
+      "short": "RODRIGUEZ",
+      "number": "4",
+      "country": "ESP",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Alessandro Comelli": {
+      "display": "Alessandro Comelli",
+      "short": "COMELLI",
+      "number": "50",
+      "country": "ITA",
+      "team": "Team Honda Sport",
+      "make": "Honda",
+      "color": "#CC0000",
+      "car_image": "",
+      "logo": "Graphics/Logos/Honda.png"
+    },
+    "Never Quit69": {
+      "display": "Never Quit69",
+      "short": "QUIT69",
+      "number": "3",
+      "country": "GBR",
+      "team": "Williams Renault Dealer Racing",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Maciek Okrasz": {
+      "display": "Maciek Okrasz",
+      "short": "OKRASZ",
+      "number": "5",
+      "country": "POL",
+      "team": "Nescafé Blend 37 - Williams Renault",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Yo Yo": {
+      "display": "Yo Yo",
+      "short": "YO",
+      "number": "55",
+      "country": "JPN",
+      "team": "Ford Mondeo Racing",
+      "make": "Ford",
+      "color": "#1D3F8F",
+      "car_image": "",
+      "logo": "Graphics/Logos/ford.png"
+    },
+    "Dominikos Moustakas": {
+      "display": "Dominikos Moustakas",
+      "short": "MOUSTAKAS",
+      "number": "9",
+      "country": "GRE",
+      "team": "Esso Ultron Team Peugeot",
+      "make": "Peugeot",
+      "color": "#9FD62B",
+      "car_image": "",
+      "logo": "Graphics/Logos/Peugeot.png"
+    },
+    "Jona Mingo": {
+      "display": "Jona Mingo",
+      "short": "MINGO",
+      "number": "32",
+      "country": "ESP",
+      "team": "Ford Mondeo Racing",
+      "make": "Ford",
+      "color": "#1D3F8F",
+      "car_image": "",
+      "logo": "Graphics/Logos/ford.png"
+    },
+    "Txus Arias": {
+      "display": "Txus Arias",
+      "short": "ARIAS",
+      "number": "7",
+      "country": "ESP",
+      "team": "Opel-Team Holzer",
+      "make": "Opel",
+      "color": "#F7D417",
+      "car_image": "",
+      "logo": "Graphics/Logos/Opel.png"
+    },
+    "Pierre Nirrengarten": {
+      "display": "Pierre Nirrengarten",
+      "short": "NIRRENGARTEN",
+      "number": "2",
+      "country": "FRA",
+      "team": "CD-Verbist Racing",
+      "make": "Audi",
+      "color": "#BB0A30",
+      "car_image": "",
+      "logo": "Graphics/Logos/audi.png"
+    },
+    "Jens Trautmann": {
+      "display": "Jens Trautmann",
+      "short": "TRAUTMANN",
+      "number": "16",
+      "country": "GER",
+      "team": "BMW Motorsport",
+      "make": "BMW",
+      "color": "#1C69D4",
+      "car_image": "",
+      "logo": "Graphics/Logos/bmw.png"
+    },
+    "Steffen Ostenstad": {
+      "display": "Steffen Ostenstad",
+      "short": "OSTENSTAD",
+      "number": "27",
+      "country": "NOR",
+      "team": "BMW Italia",
+      "make": "BMW",
+      "color": "#1C69D4",
+      "car_image": "",
+      "logo": "Graphics/Logos/bmw.png"
+    },
+    "Ignacio Marin": {
+      "display": "Ignacio Marin",
+      "short": "MARIN",
+      "number": "89",
+      "country": "ESP",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Jordan Osborne": {
+      "display": "Jordan Osborne",
+      "short": "OSBORNE",
+      "number": "1",
+      "country": "GBR",
+      "team": "Nescafé Blend 37 - Williams Renault",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Javier Reyero": {
+      "display": "Javier Reyero",
+      "short": "REYERO",
+      "number": "11",
+      "country": "ESP",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Szymon Pierzynski": {
+      "display": "Szymon Pierzynski",
+      "short": "PIERZYNSKI",
+      "number": "1",
+      "country": "POL",
+      "team": "Nescafé Blend 37 - Williams Renault",
+      "make": "Renault",
+      "color": "#FFCC00",
+      "car_image": "",
+      "logo": "Graphics/Logos/Renault.png"
+    },
+    "Ivan Lopez Miralles": {
+      "display": "Ivan Lopez Miralles",
+      "short": "MIRALLES",
+      "number": "10",
+      "country": "ESP",
+      "team": "Team Magnus Krokström",
+      "make": "Volvo",
+      "color": "#3E7CB1",
+      "car_image": "",
+      "logo": "Graphics/Logos/volvo.png"
+    },
+    "Bydo Empire": {
+      "display": "Bydo Empire",
+      "short": "EMPIRE",
+      "number": "2",
+      "country": "GER",
+      "team": "Sprite Racing",
+      "make": "Honda",
+      "color": "#CC0000",
+      "car_image": "",
+      "logo": "Graphics/Logos/Honda.png"
+    },
+    "Kevin Schneider": {
+      "display": "Kevin Schneider",
+      "short": "SCHNEIDER",
+      "number": "3",
+      "country": "",
+      "team": "Opel-Team Holzer",
+      "make": "Opel",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Sjors Melis": {
+      "display": "Sjors Melis",
+      "short": "MELIS",
+      "number": "89",
+      "country": "",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Cody Jackson": {
+      "display": "Cody Jackson",
+      "short": "JACKSON",
+      "number": "3",
+      "country": "",
+      "team": "Williams Renault Dealer Racing",
+      "make": "Renault",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Christian müller": {
+      "display": "Christian Müller",
+      "short": "MÜLLER",
+      "number": "4",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Sergio Fernández": {
+      "display": "Sergio Fernández",
+      "short": "FERNÁNDEZ",
+      "number": "4",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Damien Pradel": {
+      "display": "Damien Pradel",
+      "short": "PRADEL",
+      "number": "26",
+      "country": "",
+      "team": "BMW Fina Oreca",
+      "make": "BMW",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "steven simpson": {
+      "display": "Steven Simpson",
+      "short": "SIMPSON",
+      "number": "5",
+      "country": "",
+      "team": "Honda Team VZM-Mobil 1",
+      "make": "Honda",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Roelof van der Zee": {
+      "display": "Roelof Van Der Zee",
+      "short": "ZEE",
+      "number": "11",
+      "country": "",
+      "team": "Euroteam",
+      "make": "Alfa Romeo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Erik Kovačić": {
+      "display": "Erik Kovačić",
+      "short": "KOVAČIĆ",
+      "number": "15",
+      "country": "",
+      "team": "Picko Troberg Racing",
+      "make": "Alfa Romeo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "FERNANDO PANIAGUA": {
+      "display": "FERNANDO PANIAGUA",
+      "short": "PANIAGUA",
+      "number": "89",
+      "country": "",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Enrico Della Bianca": {
+      "display": "Enrico Della Bianca",
+      "short": "BIANCA",
+      "number": "14",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Marco Mazzini": {
+      "display": "Marco Mazzini",
+      "short": "MAZZINI",
+      "number": "1",
+      "country": "",
+      "team": "Williams Renault Dealer Racing",
+      "make": "Renault",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Alessandro Fassina": {
+      "display": "Alessandro Fassina",
+      "short": "FASSINA",
+      "number": "14",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Dave Dos": {
+      "display": "Dave Dos",
+      "short": "DOS",
+      "number": "89",
+      "country": "",
+      "team": "Belgium Race Invest",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Alexander Colleselli": {
+      "display": "Alexander Colleselli",
+      "short": "COLLESELLI",
+      "number": "4",
+      "country": "",
+      "team": "Opel-Team Holzer",
+      "make": "Opel",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Ralf Wessolleck": {
+      "display": "Ralf Wessolleck",
+      "short": "WESSOLLECK",
+      "number": "11",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Wayne Moir": {
+      "display": "Wayne Moir",
+      "short": "MOIR",
+      "number": "3",
+      "country": "",
+      "team": "Williams Renault Dealer Racing",
+      "make": "Renault",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "David Gomez": {
+      "display": "David Gomez",
+      "short": "GOMEZ",
+      "number": "21",
+      "country": "",
+      "team": "DC Cook Motorsport",
+      "make": "Renault",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Sebastian Hoffmann": {
+      "display": "Sebastian Hoffmann",
+      "short": "HOFFMANN",
+      "number": "10",
+      "country": "",
+      "team": "Team Magnus Krokström",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Francki Marinen": {
+      "display": "Francki Marinen",
+      "short": "MARINEN",
+      "number": "11",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "John McKenzie": {
+      "display": "John McKenzie",
+      "short": "MCKENZIE",
+      "number": "7",
+      "country": "",
+      "team": "Honda Team VZM-Mobil 1",
+      "make": "Honda",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "John Henry": {
+      "display": "John Henry",
+      "short": "HENRY",
+      "number": "22",
+      "country": "",
+      "team": "DC Cook Motorsport",
+      "make": "Honda",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Hendrik Schlage": {
+      "display": "Hendrik Schlage",
+      "short": "SCHLAGE",
+      "number": "14",
+      "country": "",
+      "team": "Volvo S40 Racing",
+      "make": "Volvo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "Simon Elliot": {
+      "display": "Simon Elliot",
+      "short": "ELLIOT",
+      "number": "1",
+      "country": "",
+      "team": "Nordauto Engineering",
+      "make": "Alfa Romeo",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    },
+    "geoffrey gleeson": {
+      "display": "Geoffrey Gleeson",
+      "short": "GLEESON",
+      "number": "3",
+      "country": "",
+      "team": "BMW Motorsport SA",
+      "make": "BMW",
+      "color": "",
+      "car_image": "",
+      "logo": ""
+    }
+  },
+  "sponsors": {
+    "title": {
+      "name": "",
+      "logo": "Graphics/Logos/shell.webp"
+    },
+    "timing": {
+      "name": "",
+      "logo": "Graphics/Logos/TagHeur.png"
+    },
+    "partner": {
+      "name": "",
+      "logo": "Graphics/Logos/AutoTrader.png"
+    }
+  },
+  "commentators": {
+    "Antonio Lobato": {
+      "bio": "Renowned Spanish Formula 1 television commentator."
+    },
+    "Pedro de la Rosa": {
+      "bio": "Former Formula 1 driver and broadcast analyst."
+    },
+    "Toni Cuquerella": {
+      "bio": "Veteran Formula 1 engineer and race analyst."
+    },
+    "Mike Joy": {
+      "bio": "Longtime lead NASCAR lap-by-lap commentator for Fox Sports."
+    },
+    "Darrell Waltrip": {
+      "bio": "Three-time NASCAR Cup champion and Hall of Fame broadcaster."
+    },
+    "Larry McReynolds": {
+      "bio": "Championship-winning NASCAR crew chief and technical race analyst."
+    },
+    "Martin Haven": {
+      "bio": "British motorsport sports broadcaster. Lead commentator for the FIA World Endurance Championship."
+    },
+    "Anthony Davidson": {
+      "bio": "Former F1 driver, 2014 World Endurance Champion. Commentator for Sky Sports F1 and WEC."
+    }
+  },
+  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_8bj2278bj2278bj2.jfif",
+  "commentator_disclaimer": null,
+  "championship_preset": "Super Touring Season 1"
+}

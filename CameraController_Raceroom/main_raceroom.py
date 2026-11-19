@@ -6,6 +6,7 @@ import sys
 import os
 import threading
 import time
+import unicodedata
 from datetime import datetime, timedelta
 from pynput.keyboard import Key, Listener
 import pydirectinput
@@ -195,10 +196,17 @@ def name_key(name):
     return "".join(c for c in (name or "").casefold() if c.isascii() and c.isalnum())
 
 
+def sort_letters(text):
+    """Letters as the replay's dropdown sorts them: case ignored and accents folded onto the plain letter,
+    so "müller" sorts as "muller" (after "Moir"), not as "mller" with the ü dropped (before "Moir")."""
+    folded = unicodedata.normalize("NFKD", text or "").casefold()
+    return "".join(c for c in folded if c.isascii() and c.isalnum())
+
+
 def dropdown_sort_key(name):
     """The replay's driver dropdown is sorted by surname: everything after the first name."""
     first, _, rest = (name or "").strip().partition(" ")
-    return (name_key(rest), name_key(first))
+    return (sort_letters(rest), sort_letters(first))
 
 
 def timing_file(log_path):
@@ -826,9 +834,9 @@ class RaceroomCameraController:
         """With the replay bar showing, picks the driver from the bar's driver dropdown: one clean cut.
 
         The row is worked out from the race's entrants in surname order. RaceRoom is then asked which car is
-        in view; if it is another entrant, the list order differed from the guess there, so it is corrected
-        from the row that car really sits on and picked once more. Returns True/False, or None when the
-        dropdown can't be used here (no entrant list or too many cars) and the arrows should be used.
+        in view; if it is another entrant, the list order differed from the guess there, so the nearby rows
+        are tried (see _next_row). Returns True/False, or None when the dropdown can't be used here (no
+        entrant list or too many cars) and the arrows should be used.
         """
         order = self.dropdown_order
         if not order or len(order) > DRIVER_LIST_MAX:
@@ -843,14 +851,15 @@ class RaceroomCameraController:
             return False
         if name_key(car["name"]) == name_key(name):
             return True
-        row, rows = target, len(order)
-        for attempt in range(3):
+        row, rows, tried = target, len(order), set()
+        for attempt in range(4):
             if not self._driver_menu_open(rect):
                 self._click(rect, DRIVER_MENU_X, BAR_Y)
                 if not self._wait_for(lambda: self._driver_menu_open(rect), 0.5):
                     self.log_message("Driver menu did not open")
                     return False
             slot = car["slot"]
+            tried.add(row)
             self._click(rect, DRIVER_ITEM_X, MENU_BOTTOM_Y - MENU_ROW * (rows - 1 - row))
             deadline = time.time() + 0.6
             car = self._focused_car()
@@ -868,11 +877,28 @@ class RaceroomCameraController:
                 self.log_message(f"{name} has already left the replay (retired) - now on {car['name']}")
                 return False
             landed = self._order_index(order, car["name"])
-            if landed is None or landed == row or car["slot"] == slot:
+            if landed is None or car["slot"] == slot:
                 break # Nothing to correct from: the car didn't change, or a car that isn't in the list
-            row = min(max(row + (row - landed), 0), rows - 1) # The guess was off by (landed - row) rows here
+            row = self._next_row(target, landed - row, tried, rows)
+            if row is None:
+                break
+            self.log_message(f"Dropdown landed on {car['name']} - trying row {row + 1} for {name}")
         self.log_message(f"Could not reach {name} from the driver dropdown (now on {car['name']})")
         return False
+
+    @staticmethod
+    def _next_row(target, off, tried, rows):
+        """The next dropdown row to try for the target after a miss, where the row clicked held the car the
+        guess put `off` rows further down.
+
+        The whole list being shifted (an extra or missing name above) puts the target `off` rows up; one name
+        sorted differently from the guess swaps neighbours and puts it `off` rows down. Both are tried, then
+        the rows closest to the guess.
+        """
+        candidates = [target - off, target + off]
+        for step in range(1, rows):
+            candidates += [target - step, target + step]
+        return next((r for r in candidates if 0 <= r < rows and r not in tried), None)
 
     def _click_burst(self, rect, ahead, clicks, slot):
         """Clicks a driver arrow several times in a row, then waits once for the car in view to settle."""
@@ -1033,6 +1059,10 @@ class RaceroomCameraController:
                     if driver or position is not None:
                         reached = self._pick_driver(rect, driver)
                         if reached is None: # No entry list, or more cars than the dropdown shows
+                            reached = self._step_to_driver(rect, driver, position, log_time)
+                        elif not reached and not self._retired_driver(driver, log_time):
+                            # The dropdown missed (its order differed from the guess): walk there with the arrows
+                            self.log_message(f"Trying the driver arrows for {driver}")
                             reached = self._step_to_driver(rect, driver, position, log_time)
                     if new_camera and not by_hotkey and self._pick_camera(rect, new_camera):
                         self.log_message(f"Camera: {new_camera} (menu)")
