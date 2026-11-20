@@ -17,17 +17,12 @@ This tool automates driver switching in Automobilista 2 (AMS2) based on a race e
 ## Usage
 1. **Generate Sequence:** Click "Generate (Gemini)" and select your race log file (e.g., `Race_20260501_150848.txt`).
 2. **Load Sequence:** If you already have a JSON sequence, click "Load JSON".
-3. **Sync Timer:**
-   - Note the time of the "Green Flag" in your log (default 00:00:06).
-   - In the sim, when the race starts (or at any known time), click "Capture Sim GF".
-   - Click "Apply Sync" to calculate the offset.
+3. **Sync Timer:** nothing to do. *Log Green Flag* is read from the green flag line in the race log, and *Sim Green Flag* starts at 00:00:06 (where the lights almost always go green in an AMS2 replay), so the offset is set as soon as the log loads. Once the replay is past the green flag, the tool reads the replay's own clock from AMS2's shared memory and corrects the offset, so the guess no longer matters. "Capture Sim GF" and "Apply Sync" are still there to override it by hand.
 4. **Play:** Click "Play Sequence". The tool will automatically switch drivers at the specified timecodes.
 
 ## Configuration
-You can adjust the following in the UI or `config_ams2.json`:
-- **Hold Time:** How long a key is held down.
-- **Gap:** Delay between keypresses.
-- **Max Drivers:** The number of participants in the race (used to reset the selection to P1).
+- **Max Drivers** (in the window): the number of participants in the race (used to reset the selection to P1).
+- `hold_time` and `step_gap` (only in `config_ams2.json`): how long a key is held down, and the delay between key presses.
 
 ## Notes
 - The game window must be in focus for keypresses to work.

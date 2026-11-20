@@ -153,9 +153,9 @@ This step makes the pictures for your video: the sim plays the replay, the **Cam
 2. Press **Generate (Gemini)**. The race log is sent to Gemini, which plans the camera shots. Wait until it's done (this enables **Play Sequence**). Do this before syncing.
 3. Open **OBS** (or your screen recorder) and load the race replay in the sim.
 4. **Sync the log time to the sim time** in the **Sync Tools** box:
-   - In the sim, play the replay from the start until the lights go green, and note the replay time. In AMS2 that's usually 5 or 6 seconds in. Enter it as **Sim Green Flag** (or press **Capture Sim GF** at that moment).
-   - Find the green flag in the log and enter it as **Log Green Flag**. It is usually `00:00:00`.
-   - Press **Apply Sync**.
+   - **Log Green Flag** is filled in for you from the green flag line in the race log.
+   - **AMS2:** nothing else to do. The Camera Director assumes the lights go green 6 seconds into the replay, then corrects itself from the replay's own clock once the race is under way.
+   - **RaceRoom:** press **Capture Sim GF** when the replay shows the green flag. The sync is applied straight away. (If you type a **Sim Green Flag** in by hand instead, press **Apply Sync**.)
 5. Go back to the very start of the replay (time zero) in the sim. In AMS2, press the replay's play button and quickly pause it again, so the button is highlighted and ready.
 6. Start recording in OBS.
 7. In the Camera Director, press **Play Sequence**. It starts the replay in the sim and the camera plan together, so they stay in sync.

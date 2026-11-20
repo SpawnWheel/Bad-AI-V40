@@ -223,6 +223,22 @@ def is_green_flag_line(line):
     return GRID_TAG not in line and "green flag" in line.lower()
 
 
+LOG_STAMP_RE = re.compile(r"^\s*(\d+):(\d{2}):(\d{2})\s*-\s*") # The loggers write "0:01:04 - [SESSION] ..."
+
+
+def log_green_flag(log_path):
+    """Log time in seconds of the first green flag in a logger's race log, or None."""
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                m = LOG_STAMP_RE.match(line)
+                if m and is_green_flag_line(line):
+                    return parse_seconds(*m.groups())
+    except (OSError, TypeError):
+        pass
+    return None
+
+
 def green_flag_time(folder):
     """Video time of the green flag in the latest event list (reviewed or later), or None."""
     for key in ("events_timed", "events_spiced", "events_reviewed", "events"):
