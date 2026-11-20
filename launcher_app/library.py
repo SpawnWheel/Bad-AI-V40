@@ -167,6 +167,8 @@ class LibraryScreen(tk.Frame):
             extra.append(s["race_length"])
         if meta.get("imported_from"):
             extra.append(f"imported from {meta['imported_from']}")
+        if meta.get("copied_from"):
+            extra.append("fresh copy")
         t.label(c, "  ·  ".join(extra), size=9, colour=t.DIM).grid(row=2, column=1, sticky="w")
 
         done, total = pipeline.progress(folder)

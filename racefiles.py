@@ -659,6 +659,34 @@ def list_races(include_archived=False):
     return races
 
 
+# What a fresh copy of a race keeps: the recording and what the user wrote or chose before any step ran.
+# Everything a step makes (camera plan, events, commentary, audio, graphics, video) is left behind.
+FRESH_COPY_FILES = ("race_log", "timing", "qualifying", "race_notes", "camera_notes", "graphics_notes")
+FRESH_COPY_META = ("sim", "track", "started_at", "ended_at", "status", "summary", "championship", "grid_intro")
+
+
+def fresh_copy(folder):
+    """A new race folder beside this one holding only the race log, its data and the notes, so the replay can be
+    made again from the start while the original stays as it is. Returns the new folder."""
+    target = unique_folder(folder)
+    os.makedirs(target)
+    try:
+        for key in FRESH_COPY_FILES:
+            src = race_file(folder, key)
+            if os.path.isfile(src):
+                shutil.copy2(src, race_file(target, key))
+        meta = read_race(folder)
+        fresh = {k: meta[k] for k in FRESH_COPY_META if k in meta}
+        fresh["copied_from"] = os.path.basename(folder)
+        fresh["copied_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+        with open(os.path.join(target, RACE_JSON), "w", encoding="utf-8") as f:
+            json.dump(fresh, f, indent=2, ensure_ascii=False)
+    except Exception:
+        shutil.rmtree(target, ignore_errors=True)
+        raise
+    return target
+
+
 def save_to_history(path, keep=5):
     """Copies a file (or folder) into the race's history/ folder before a step overwrites it."""
     if not os.path.exists(path):

@@ -77,8 +77,10 @@ class RaceScreen(tk.Frame):
             bits.append(f"won by {s['winner']}")
         b.create_text(130, 112, text="  ·  ".join(bits), fill=t.MUTED, font=(t.FONT, 10), anchor="w")
         b.create_window(130, 150, anchor="w", window=self._championship_picker(b))
-        self.folder_win = b.create_window(0, 92, anchor="e", window=t.button(
-            b, "Open race folder", lambda: os.startfile(self.folder), size=9))
+        self.folder_btn = t.button(b, "Open race folder", lambda: os.startfile(self.folder), size=9)
+        self.folder_win = b.create_window(0, 92, anchor="e", window=self.folder_btn)
+        self.copy_win = b.create_window(0, 92, anchor="e", window=t.button(
+            b, "Start over in a copy", self.start_over_copy, size=9))
 
     # ------------------------------------------------------------------ championship
 
@@ -129,6 +131,26 @@ class RaceScreen(tk.Frame):
 
     def _layout_banner(self, w, h):
         self.banner.coords(self.folder_win, w - 36, 92)
+        self.banner.coords(self.copy_win, w - 36 - self.folder_btn.winfo_reqwidth() - 10, 92)
+
+    def start_over_copy(self):
+        """Makes a copy of the race with only the race log, its data and the notes, and opens it."""
+        if not messagebox.askyesno(
+                "Start over in a copy",
+                "Make a new copy of this race that starts from the beginning?\n\n"
+                "The copy keeps the race log, timing data, qualifying times, notes, championship and starting grid "
+                "setting. Nothing a step made comes with it (camera plan, events, commentary, voices, graphics, "
+                "replay video), so you pick the replay video again.\n\n"
+                "This race stays exactly as it is.", parent=self):
+            return
+        self.flush_notes()
+        try:
+            copy = racefiles.fresh_copy(self.folder)
+        except OSError as e:
+            messagebox.showerror("Start over in a copy", f"Could not make the copy:\n{e}", parent=self)
+            return
+        self.app.toast(f"Started over in a copy: {os.path.basename(copy)}")
+        self.app.open_race(copy)
 
     # ------------------------------------------------------------------ refresh
 
