@@ -20,6 +20,7 @@ from r3e_shared import R3ESharedMemory, decode
 import camera_gemini
 import incidents
 import racefiles
+import obs_sync
 
 # Disable pydirectinput's safety pause and failsafe
 pydirectinput.PAUSE = 0.01
@@ -333,17 +334,20 @@ class RaceroomCameraController:
             self.pause_start_time = datetime.now()
             self.log_message("Paused")
             self.status_msg.set("PAUSED (Space to Resume)")
+            self.recorder.pause() # The video stops too, so the video offset holds after the pause
         else:
             if self.pause_start_time:
                 pause_duration = datetime.now() - self.pause_start_time
                 self.playback_start_time += pause_duration
             self.log_message("Resumed")
             self.status_msg.set("Running...")
+            self.recorder.resume()
 
     def on_closing(self):
         self.is_playing_sequence = False
         if hasattr(self, 'global_listener'):
             self.global_listener.stop()
+        self.recorder.close()
         self.shm.close()
         self.root.destroy()
 
@@ -437,7 +441,7 @@ class RaceroomCameraController:
         sync_f.pack(fill=tk.X, pady=5)
 
         self.log_gf_time = tk.StringVar(value="00:00:06")
-        self.sim_gf_time = tk.StringVar(value="00:00:00")
+        self.sim_gf_time = tk.StringVar(value="") # Typed in: the replay time of the green flag
 
         sf1 = ttk.Frame(sync_f); sf1.pack(fill=tk.X, pady=2)
         ttk.Label(sf1, text="Log Green Flag:").pack(side=tk.LEFT, padx=2)
@@ -447,9 +451,11 @@ class RaceroomCameraController:
         ttk.Label(sf2, text="Sim Green Flag:").pack(side=tk.LEFT, padx=2)
         ttk.Entry(sf2, textvariable=self.sim_gf_time, width=10).pack(side=tk.RIGHT, padx=2)
 
-        sf3 = ttk.Frame(sync_f); sf3.pack(fill=tk.X, pady=2)
-        ttk.Button(sf3, text="Capture Sim GF", command=self._set_sim_gf_now).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        ttk.Button(sf3, text="Apply Sync", command=self._calculate_and_set_offset).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=2)
+        # Time Offset follows the two boxes: no button to press
+        self._sync_job = None
+        self._clock_writing = False # Set while the director itself writes Sim Green Flag
+        for var in (self.log_gf_time, self.sim_gf_time):
+            var.trace_add("write", self._green_flag_changed)
 
         # Race Log Input (pre-loaded from launcher)
         input_f = ttk.LabelFrame(self.main_frame, text="Race Log Input")
@@ -471,6 +477,8 @@ class RaceroomCameraController:
         self.input_status_label = input_lbl
 
         ttk.Button(inp_row, text="Change", command=self._browse_input_file).pack(side=tk.RIGHT, padx=2)
+
+        self.recorder = obs_sync.Recorder(self.main_frame, self.root, self.log_message, "RaceRoom")
 
         # Sequence Controls
         seq_f = ttk.LabelFrame(self.main_frame, text="Sequence")
@@ -1354,22 +1362,28 @@ class RaceroomCameraController:
 
     # ------------------------------------------------------------------ sync and playback
 
-    def _set_sim_gf_now(self):
-        elapsed = datetime.now() - self.playback_start_time
-        ts = int(max(0, elapsed.total_seconds()))
-        self.sim_gf_time.set(f"{ts//3600:02}:{(ts%3600)//60:02}:{ts%60:02}")
-        self._calculate_and_set_offset()
+    def _green_flag_changed(self, *_):
+        """A green flag box changed: re-sync once typing pauses."""
+        if self._clock_writing:
+            return
+        if self._sync_job:
+            self.root.after_cancel(self._sync_job)
+        self._sync_job = self.root.after(600, self._calculate_and_set_offset)
 
     def _calculate_and_set_offset(self):
-        try:
-            l_parts = list(map(int, self.log_gf_time.get().split(":")))
-            log_sec = l_parts[0]*3600 + l_parts[1]*60 + l_parts[2]
-            s_parts = list(map(int, self.sim_gf_time.get().split(":")))
-            sim_sec = s_parts[0]*3600 + s_parts[1]*60 + s_parts[2]
-            self.time_offset.set(log_sec - sim_sec)
-            self.log_message(f"Offset synced: {self.time_offset.get()}s")
-        except:
-            messagebox.showerror("Error", "Invalid time format (HH:MM:SS)")
+        """Time Offset = Log Green Flag - Sim Green Flag. A box left empty (or half typed) changes nothing."""
+        self._sync_job = None
+        log_sec = racefiles.parse_clock(self.log_gf_time.get())
+        sim_sec = racefiles.parse_clock(self.sim_gf_time.get())
+        if log_sec is None or sim_sec is None:
+            return
+        offset = round(log_sec - sim_sec, 3)
+        if offset == self.time_offset.get():
+            return
+        self.time_offset.set(offset)
+        self.log_message(f"Offset synced: {offset:g}s (log green flag {self.log_gf_time.get()} - sim green flag "
+                         f"{self.sim_gf_time.get()})")
+        self._mark_video()
 
     def start_sequence_playback(self):
         if self.is_playing_sequence:
@@ -1379,6 +1393,11 @@ class RaceroomCameraController:
             threading.Thread(target=self._set_replay_playing, args=(False,), daemon=True).start()
             return
 
+        if racefiles.parse_clock(self.sim_gf_time.get()) is None and not messagebox.askyesno(
+                "Sim Green Flag", "Sim Green Flag is empty, so the camera plan isn't synced to the replay.\n\n"
+                "Scrub the replay to the green flag, type its replay time into Sim Green Flag, scrub back to the "
+                "start, then press Play Sequence.\n\nPlay anyway, unsynced?"):
+            return
         self.is_playing_sequence = True
         self.is_paused = False
         self.current_driver = None
@@ -1401,6 +1420,10 @@ class RaceroomCameraController:
 
     def _run_sequence(self):
         # Start the replay in RaceRoom; the sequence clock starts the moment it is playing
+        self.status_msg.set("Starting the OBS recording..." if self.recorder.enabled else "Starting the replay...")
+        if not self.recorder.start():
+            self._sequence_cancelled()
+            return
         self.status_msg.set("Starting the replay...")
         if self.data["settings"].get("camera_method") == "hotkeys":
             self._set_replay_playing(False)
@@ -1415,6 +1438,7 @@ class RaceroomCameraController:
         if self._set_replay_playing(True):
             self.log_message("Replay started in RaceRoom")
         self.playback_start_time = datetime.now()
+        self.recorder.mark(self._log_now)
         self.status_msg.set("Running...")
         self.log_message("Sequence started")
 
@@ -1454,7 +1478,21 @@ class RaceroomCameraController:
         self.next_change = None
         self._show_countdown()
         self.root.after(0, lambda: self.play_btn.config(text="Play Sequence"))
-        self.log_message("Sequence finished")
+        self.log_message("Sequence finished" + (" - press Stop Recording when the replay ends" if self.recorder.recording else ""))
+
+    def _sequence_cancelled(self):
+        self.is_playing_sequence = False
+        self.status_msg.set("Ready")
+        self.root.after(0, lambda: self.play_btn.config(text="Play Sequence"))
+
+    def _log_now(self):
+        """The sequence clock: where the race log is right now."""
+        return (datetime.now() - self.playback_start_time).total_seconds() + self.time_offset.get()
+
+    def _mark_video(self):
+        """Saves the video offset again after the sequence clock was re-synced mid-play."""
+        if self.is_playing_sequence:
+            threading.Thread(target=self.recorder.mark, args=(self._log_now,), daemon=True).start()
 
     def _execute_item(self, item):
         self._save_director_note(item.get("timecode", "00:00:00"), self._note_text(item))

@@ -52,7 +52,8 @@ By default the director uses:
 ## Usage
 1. Open the replay in RaceRoom and pick the RaceRoom window (click `R` to refresh).
 2. **Generate (Gemini)** from the race log, or **Load JSON**. The **Gemini Thinking** window shows the model's reasoning live as it streams. The model and thinking level are set next to the Generate button (default gemini-3.8-flash, HIGH).
-3. Sync: *Log Green Flag* is filled in from the green flag line in the race log. Click **Capture Sim GF** when the replay shows the green flag and the offset is applied straight away. (**Apply Sync** is for a *Sim Green Flag* typed in by hand.)
-4. **Play Sequence** syncs the cameras, then starts the RaceRoom replay and the sequence together. **Stop Sequence** pauses the replay. Space pauses and resumes both.
+3. Sync: *Log Green Flag* is filled in from the green flag line in the race log. Scrub the replay to the green flag, type its replay time into *Sim Green Flag* (`1:12`, `0:01:12` or `72`), then scrub back to the start. *Time Offset* follows the two boxes by itself. Play Sequence asks first if *Sim Green Flag* is still empty.
+4. **Play Sequence** starts the OBS recording on the chosen scene (with **Record with OBS** ticked), syncs the cameras, then starts the RaceRoom replay and the sequence together and saves the video offset to the race's `02_video_sync.json`. **Stop Sequence** pauses the replay. Space pauses and resumes the replay, the sequence and the recording.
+5. **Stop Recording** when the replay ends: it becomes the race's replay video. Set OBS up first: see *Set up OBS recording* in the main README.
 
 Settings are saved in `config_raceroom.json`. `hold_time` there is how long a key is held down; it isn't shown in the window.

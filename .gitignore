@@ -27,6 +27,7 @@ Combiner/combined_race_log.txt
 CameraController/*_director_notes.txt
 launcher_config.json
 launcher_state.json
+obs_scenes.json
 
 # Car preview images are personal to each user
 Graphics/CarPreviews/*

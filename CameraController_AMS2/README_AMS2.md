@@ -17,8 +17,9 @@ This tool automates driver switching in Automobilista 2 (AMS2) based on a race e
 ## Usage
 1. **Generate Sequence:** Click "Generate (Gemini)" and select your race log file (e.g., `Race_20260501_150848.txt`).
 2. **Load Sequence:** If you already have a JSON sequence, click "Load JSON".
-3. **Sync Timer:** nothing to do. *Log Green Flag* is read from the green flag line in the race log, and *Sim Green Flag* starts at 00:00:06 (where the lights almost always go green in an AMS2 replay), so the offset is set as soon as the log loads. Once the replay is past the green flag, the tool reads the replay's own clock from AMS2's shared memory and corrects the offset, so the guess no longer matters. "Capture Sim GF" and "Apply Sync" are still there to override it by hand.
+3. **Sync Timer:** nothing to do. *Log Green Flag* is read from the green flag line in the race log, and *Sim Green Flag* starts at 00:00:06 (where the lights almost always go green in an AMS2 replay), so the offset is set as soon as the log loads. Once the replay is past the green flag, the tool reads the replay's own clock from AMS2's shared memory and corrects the offset, so the guess no longer matters. To override it by hand, type a different *Sim Green Flag*: *Time Offset* follows the two boxes by itself.
 4. **Play:** Click "Play Sequence". The tool will automatically switch drivers at the specified timecodes.
+5. **Recording (OBS):** with "Record with OBS" ticked, Play Sequence switches OBS to the chosen scene and starts recording, and the video offset is saved to the race's `02_video_sync.json` (again once the replay clock is read). Space pauses the recording with the sequence. "Stop Recording" stops it and makes it the race's replay video. Set OBS up first: see *Set up OBS recording* in the main README.
 
 ## Configuration
 - **Max Drivers** (in the window): the number of participants in the race (used to reset the selection to P1).

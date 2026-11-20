@@ -16,6 +16,7 @@ You click one logo before you race. Afterwards you pick the race from a list and
 - [Install](#install)
 - [Start the app](#start-the-app)
 - [Map the track first (Corner Mapper)](#map-the-track-first-corner-mapper)
+- [Set up OBS recording (once)](#set-up-obs-recording-once)
 - [Racing](#racing)
 - [Making a replay](#making-a-replay)
 - [Where everything is saved](#where-everything-is-saved)
@@ -83,6 +84,30 @@ You only need to do this once per track layout. If you start a session on a trac
    - the **Corner Mapper** button on the live session screen
 2. Drive a lap and mark each part of the track: not just the corners, but the straights, chicanes and other named sections too (for example *Start/finish straight*, *Back straight*). The more of the lap is named, the better the AI can place what happened.
 
+## Set up OBS recording (once)
+
+The Camera Director can run OBS for you. When you press **Play Sequence** it switches OBS to the right scene for the sim, starts the recording, and notes exactly where in the video the race starts. Then:
+
+- you don't press record or stop in OBS,
+- the finished recording becomes the race's replay video by itself,
+- **Review & sync the events** opens with the events already lined up with the video, so you don't have to scrub to the green flag.
+
+You need **OBS 28 or newer**, which has the WebSocket server built in (check in OBS under *Help* → *About*). Do this once:
+
+1. **Switch on OBS's WebSocket server** (this is how the app talks to OBS). In OBS, open **Tools** → **WebSocket Server Settings**, tick **Enable WebSocket server**, and click **OK**. Leave everything else as it is.
+2. **Check the app can reach OBS.** In the app, open **Settings** → **OBS (recording)** and press **Test connection**. It should say *Connected to OBS…* and list your scenes. If it doesn't, the message says what's wrong.
+   - There's no password to copy: with OBS on the same PC, leave **Server port** and **Server password** blank and the app reads them from OBS.
+   - Only if OBS runs on a different PC: put that PC's IP address in **Server IP**, and copy the port and password from OBS (**Tools** → **WebSocket Server Settings** → **Show Connect Info**), then press **Save settings**.
+3. **Pick a scene for each sim.** If your AMS2 and RaceRoom recordings use different OBS scenes, each Camera Director remembers its own. The choice is saved on this PC only (`obs_scenes.json`, never shared or updated by the app), because everyone's OBS has its own scenes. On a new PC both start on **(current scene)**.
+   - Open the **AMS2** Camera Director (on an AMS2 race). In its **Recording (OBS)** box, press **R** to load your OBS scenes, then pick your AMS2 scene from **Scene**.
+   - Do the same in the **RaceRoom** Camera Director with your RaceRoom scene.
+   - Leave it on **(current scene)** if you'd rather switch scenes in OBS yourself.
+4. **Check the recording format.** In OBS under **Settings** → **Output** → **Recording**, record straight to **MP4** (or *Hybrid MP4*), as now. If OBS records MKV and remuxes it to MP4 afterwards, the race is given the MKV, so pick the MP4 yourself with **Use this**.
+
+While filming, don't pause or stop the recording in OBS. Press **Space** to pause (it pauses the replay, the camera plan and the recording together) and **Stop Recording** in the Camera Director to finish. That keeps the video lined up with the log.
+
+Don't want OBS controlled? Untick **Record with OBS** in the Camera Director. Then you record yourself, as before, and line the video up by hand in Review & sync.
+
 ## Racing
 
 1. Mapped this track yet? If not, run the [Corner Mapper](#map-the-track-first-corner-mapper) first.
@@ -128,8 +153,8 @@ At a glance:
 | Step | What you do |
 | --- | --- |
 | **Race notes** | Type a few notes about the race (optional). |
-| **1. Film the replay** | Camera Director: **Generate (Gemini)**, sync to the green flag, **Play Sequence** while OBS records. Then **Use this** on your recording. |
-| **2. Build the event list** | **Run** the merge, **Run** the event picker, then line the video up with the log in **Review & sync the events**. |
+| **1. Film the replay** | Camera Director: **Generate (Gemini)**, then **Play Sequence**. It starts the OBS recording on the sim's scene. **Stop Recording** when the replay ends. |
+| **2. Build the event list** | **Run** the merge, **Run** the event picker, then check the events in **Review & sync the events**. They open already lined up with the video. |
 | **3. Write the commentary** | Starting grid and qualifying times (optional), then **Run** spice, line lengths and commentary. |
 | **4. Voice it** | Record the voices in the browser, then **Run** the stitcher. |
 | **5. Graphics** | Set up the graphics (optional), then **Run** the pop-up planner. |
@@ -147,31 +172,37 @@ These notes are sent to the AI models (the spice step, the commentary writer and
 
 ### 1. Film the replay
 
-This step makes the pictures for your video: the sim plays the replay, the **Camera Director** switches cameras, and you screen-record it.
+This step makes the pictures for your video: the sim plays the replay, the **Camera Director** switches cameras, and OBS records it. Set up OBS first, once (see [Set up OBS recording](#set-up-obs-recording-once)).
 
 1. On the **Camera Director** step, press **Open**. The Camera Director opens in its own window.
-2. Press **Generate (Gemini)**. The race log is sent to Gemini, which plans the camera shots. Wait until it's done (this enables **Play Sequence**). Do this before syncing.
-3. Open **OBS** (or your screen recorder) and load the race replay in the sim.
+2. Press **Generate (Gemini)**. The race log is sent to Gemini, which plans the camera shots. Wait until it's done (this enables **Play Sequence**).
+3. Open **OBS** and load the race replay in the sim. In the Camera Director's **Recording (OBS)** box, check that **Record with OBS** is ticked and your scene for this sim is picked.
 4. **Sync the log time to the sim time** in the **Sync Tools** box:
    - **Log Green Flag** is filled in for you from the green flag line in the race log.
    - **AMS2:** nothing else to do. The Camera Director assumes the lights go green 6 seconds into the replay, then corrects itself from the replay's own clock once the race is under way.
-   - **RaceRoom:** press **Capture Sim GF** when the replay shows the green flag. The sync is applied straight away. (If you type a **Sim Green Flag** in by hand instead, press **Apply Sync**.)
+   - **RaceRoom:** in the sim, scrub the replay to the moment the lights go green and read the replay time. Type it into **Sim Green Flag** (for example `1:12`; `0:01:12` and `72` work too). **Time Offset** updates by itself, with no button to press.
 5. Go back to the very start of the replay (time zero) in the sim. In AMS2, press the replay's play button and quickly pause it again, so the button is highlighted and ready.
-6. Start recording in OBS.
-7. In the Camera Director, press **Play Sequence**. It starts the replay in the sim and the camera plan together, so they stay in sync.
-8. Close the sim's replay bar before the green flag so it isn't in the video, then leave it alone. The Camera Director switches cameras for you.
-9. When the replay ends, stop recording.
+6. In the Camera Director, press **Play Sequence**. It switches OBS to your scene and starts the recording (if OBS is already recording, it carries on with that recording), then starts the replay in the sim and the camera plan together, so they stay in sync. You don't press record in OBS.
+7. Close the sim's replay bar before the green flag so it isn't in the video, then leave it alone. The Camera Director switches cameras for you.
+8. Need to pause? Press **Space**. It pauses the replay, the camera plan and the OBS recording together, and **Space** again resumes all three. Don't pause in OBS itself.
+9. When the replay ends, press **Stop Recording** in the Camera Director's **Recording (OBS)** box. OBS saves the video, and it becomes this race's **Replay video** by itself.
 
-Back on the race screen, tell the app which video you recorded. The **Replay video** box suggests your newest recordings (from the folder set in **Settings**). Click **Use this** next to it, or **Choose file…** to pick it yourself.
+The Camera Director saves where the race sits in the video as `02_video_sync.json` in the race folder. The next step uses it to line the events up with the video. Its Activity Log shows the measurement, for example *Video offset +14.32s*.
+
+**If you stopped the recording in OBS instead**, or recorded without OBS, tell the app which video you recorded: the **Replay video** box on the race screen suggests your newest recordings (from the folder set in **Settings**). Click **Use this** next to it, or **Choose file…** to pick it yourself.
+
+**If OBS can't be reached** when you press **Play Sequence**, the Camera Director says why and asks whether to play anyway. If you do, record yourself and line the video up by hand in the next step.
 
 ### 2. Build the event list
 
 1. **Merge camera notes into the log:** press **Run**. One click.
 2. **Pick the events for commentary:** check the **Prompt** list (the latest prompt is chosen for you) and press **Run**. Wait for the AI to return the events.
-3. **Review & sync the events:** press **Open**. The main job here is to line your recorded video up with the log:
-   1. Fast-forward the video to the start of the race (the green flag).
-   2. In the list, click the first event. It should be the green flag.
-   3. Press **Sync All to Selected Row**. Every event now lines up with the video.
+3. **Review & sync the events:** press **Open**. The main job here is to make sure your video and the log line up.
+   - **Recorded through the Camera Director with OBS:** the events open already lined up. The bar at the bottom of the window says *Lined up with the video automatically* and shows the offset. Check it: double-click the time of the green flag row, press play, and the lights should go green right then.
+   - **Not lined up** (the bottom bar says there is no video offset, or the check above is off), line it up by hand:
+     1. Fast-forward the video to the start of the race (the green flag).
+     2. In the list, click the first event. It should be the green flag.
+     3. Press **Sync All to Selected Row**. Every event now lines up with the video.
 
    You can also add events here or describe them better. If the log only says someone was overtaken but you can see they ran wide into the grass, write *XXX runs wide into the grass*. This helps most with wall contact where the car doesn't stop, because then no accident is logged. The app is good at spotting crashes from several positions lost, so you don't need to add every one.
 
@@ -244,6 +275,7 @@ Each race is one folder in `Races\`, and every file has the same name in every r
 | `01_race_log.txt` | The race recorder |
 | `01_race_log_timing.jsonl` | The race recorder (live timing for the graphics) |
 | `02_camera_sequence.json`, `02_director_notes.txt` | Camera Director |
+| `02_video_sync.json` | Camera Director: where the race log sits in the OBS recording (video time = log time + offset) |
 | `03_combined_log.txt` | Merge camera notes into the log |
 | `04_events.txt` | Pick the events for commentary |
 | `05_events_reviewed.txt` | Review & sync the events |
@@ -275,6 +307,7 @@ Tools with their own window (Camera Director, Review & Sync, Graphics setup, the
 
 - **Gemini (AI):** API key, the model used by the replay steps, max output tokens and thinking level.
 - **Replay recordings:** the folder OBS (or your recorder) saves to, so the newest videos can be suggested. Default: your Windows *Videos* folder.
+- **OBS (recording):** how the Camera Director reaches OBS's WebSocket server to record for you. With OBS on this PC, leave the port and password blank: they're read from OBS. **Test connection** checks it. See [Set up OBS recording](#set-up-obs-recording-once).
 - **Race engineer:** persona, emotion, push-to-talk, models and strategy options. These are saved on top of `RaceEngineer\config.yaml`; anything else is edited in that file.
 - **Tools:** the **Corner Mapper** for AMS2 and RaceRoom. Drive a lap to map a track's corners and straights, so the log and commentary can say where things happened. Do it before the race is recorded (see [Map the track first](#map-the-track-first-corner-mapper)).
 
@@ -304,6 +337,10 @@ Then **Plan the pop-up graphics** lets the AI choose the moments for driver card
 | No race was saved | Only race sessions of 5 minutes or more are kept. Check the recorder's output in **Activity**. |
 | RaceRoom replays have no driver data | RaceRoom doesn't share driver data during replays. Record the race live. |
 | The video won't open in **Review & sync the events** (or plays without a picture) | Windows is missing the video codecs. Install the free [K-Lite Codec Pack](https://codecguide.com/download_kl.htm) (the **Basic** version is enough), then open the review window again. |
+| The Camera Director says **OBS isn't answering** | Open OBS before pressing **Play Sequence**, and check the WebSocket server is switched on (**Tools** → **WebSocket Server Settings** → **Enable WebSocket server**) and the port matches **Settings** → **OBS (recording)**. |
+| **OBS turned down the password** | In **Settings** → **OBS (recording)**, clear **Server password** so it's read from OBS, and press **Save settings**. (OBS on another PC: copy it again from **Tools** → **WebSocket Server Settings** → **Show Connect Info**.) |
+| OBS records the wrong scene | In the Camera Director's **Recording (OBS)** box, press **R** and pick the scene again. Each sim's Camera Director keeps its own scene. If the saved scene no longer exists in OBS (renamed, or a different PC), it records whatever scene OBS is showing and says so in its Activity Log. |
+| **Review & sync** opens with the events not lined up | The video wasn't recorded through the Camera Director, or it's a different video from the one it recorded (the bottom bar says which). Line it up by hand with **Sync All to Selected Row**. |
 | Something in the app itself went wrong | Details are written to `launcher_errors.log` in this folder. |
 
 ## Upgrading from the old launcher
