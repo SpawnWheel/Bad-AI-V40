@@ -30,6 +30,7 @@ FILES = {
     "timing": "01_race_log_timing.jsonl",
     "camera_sequence": "02_camera_sequence.json",
     "director_notes": "02_director_notes.txt",
+    "video_sync": "02_video_sync.json", # Video time vs log time, measured through OBS (obs_sync.py)
     "combined_log": "03_combined_log.txt",
     "events": "04_events.txt",
     "events_reviewed": "05_events_reviewed.txt",
@@ -221,6 +222,39 @@ def stamp_seconds(line):
 
 def is_green_flag_line(line):
     return GRID_TAG not in line and "green flag" in line.lower()
+
+
+def parse_clock(text):
+    """Seconds from a typed time: "72", "1:12", "0:01:12" or "1:12.5". None when it isn't one (yet)."""
+    parts = (text or "").strip().split(":")
+    if not 1 <= len(parts) <= 3:
+        return None
+    try:
+        values = [float(p) for p in parts]
+    except ValueError:
+        return None
+    if any(v < 0 for v in values) or any(v >= 60 for v in values[1:]):
+        return None
+    seconds = 0.0
+    for v in values:
+        seconds = seconds * 60 + v
+    return seconds
+
+
+LOG_STAMP_RE = re.compile(r"^\s*(\d+):(\d{2}):(\d{2})\s*-\s*") # The loggers write "0:01:04 - [SESSION] ..."
+
+
+def log_green_flag(log_path):
+    """Log time in seconds of the first green flag in a logger's race log, or None."""
+    try:
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                m = LOG_STAMP_RE.match(line)
+                if m and is_green_flag_line(line):
+                    return parse_seconds(*m.groups())
+    except (OSError, TypeError):
+        pass
+    return None
 
 
 def green_flag_time(folder):

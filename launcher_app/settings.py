@@ -1,6 +1,7 @@
-"""Settings: the Gemini key and models, where replay videos are saved, and the race engineer."""
+"""Settings: the Gemini key and models, where replay videos are saved, OBS, and the race engineer."""
 import json
 import os
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -94,6 +95,7 @@ class SettingsScreen(tk.Frame):
 
         self._ai_card()
         self._folders_card()
+        self._obs_card()
         self._engineer_cards()
         self._tools_card()
 
@@ -151,6 +153,39 @@ class SettingsScreen(tk.Frame):
                  highlightcolor=t.ACCENT).pack(side="left", ipady=4)
         t.button(row, "Browse…", self._browse_videos, size=9).pack(side="left", padx=(8, 0))
 
+    def _obs_card(self):
+        s = self.app.settings
+        c = self._card("OBS (recording)", "The Camera Director starts and stops the OBS recording and notes where the "
+                                          "replay starts in the video, so Review & Sync lines the events up by itself. "
+                                          "In OBS, tick Tools > WebSocket Server Settings > Enable WebSocket server. "
+                                          "With OBS on this PC, leave the port and password blank: they're read from OBS.")
+        self.vars["obs_host"] = tk.StringVar(value=s.get("obs_host", "localhost"))
+        self.vars["obs_port"] = tk.StringVar(value=str(s.get("obs_port") or ""))
+        self.vars["obs_password"] = tk.StringVar(value=s.get("obs_password", ""))
+        self._field(c, 2, 0, "Server IP (localhost when OBS runs on this PC)", self.vars["obs_host"])
+        self._field(c, 2, 1, "Server port (blank = from OBS)", self.vars["obs_port"], width=14)
+        self._field(c, 4, 0, "Server password (blank = from OBS on this PC)", self.vars["obs_password"], width=50, show="•")
+        row = tk.Frame(c, bg=t.CARD)
+        row.grid(row=6, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        t.button(row, "Test connection", self._test_obs, size=9).pack(side="left")
+        self.obs_result = t.label(row, "", size=9, colour=t.MUTED, wraplength=620)
+        self.obs_result.pack(side="left", padx=(12, 0))
+
+    def _test_obs(self):
+        import obs_sync
+        try:
+            port = int(self.vars["obs_port"].get() or 0)
+        except ValueError:
+            self.obs_result.config(text="The port must be a number, or blank (OBS's default is 4455).", fg=t.MUTED)
+            return
+        host, password = self.vars["obs_host"].get().strip() or "localhost", self.vars["obs_password"].get()
+        self.obs_result.config(text="Connecting…", fg=t.MUTED)
+
+        def work():
+            ok, text = obs_sync.test_connection(host, port, password)
+            self.after(0, lambda: self.obs_result.config(text=text, fg=t.TEXT if ok else t.MUTED))
+        threading.Thread(target=work, daemon=True).start()
+
     def _browse_videos(self):
         path = filedialog.askdirectory(parent=self, initialdir=self.vars["videos_folder"].get())
         if path:
@@ -198,11 +233,19 @@ class SettingsScreen(tk.Frame):
         except ValueError:
             messagebox.showerror("Settings", "Max output tokens must be a whole number.", parent=self)
             return False
+        try:
+            obs_port = int(self.vars["obs_port"].get() or 0) or ""
+        except ValueError:
+            messagebox.showerror("Settings", "The OBS server port must be a number, or blank (OBS's default is 4455).", parent=self)
+            return False
         s["gemini_api_key"] = self.vars["gemini_api_key"].get().strip()
         s["gemini_model"] = self.vars["gemini_model"].get().strip()
         s["gemini_max_output_tokens"] = tokens
         s["gemini_thinking_level"] = self.vars["gemini_thinking_level"].get()
         s["videos_folder"] = self.vars["videos_folder"].get().strip()
+        s["obs_host"] = self.vars["obs_host"].get().strip() or "localhost"
+        s["obs_port"] = obs_port
+        s["obs_password"] = self.vars["obs_password"].get()
         if not self.save_engineer():
             return False
         self.app.save_settings()

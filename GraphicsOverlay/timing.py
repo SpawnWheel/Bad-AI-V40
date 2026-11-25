@@ -114,7 +114,9 @@ class Timing:
         """Once the winner has the flag the game's own order wobbles (the cool-down lap: at Cascavel the tower
         said FINISH with Jaavib ahead of the winner), so from then on the order is the finish from the log: each
         car moves to its finishing place, marked finished, the moment it crosses the line, and the cars still
-        racing follow in running order. A state is added at each crossing so the tower changes right then."""
+        racing fill the places around them in running order. A lapped car keeps its own place: at Oulton Park
+        RayFin took the flag P13 right behind the top four and jumped to P5 while the cars between were still
+        racing. A state is added at each crossing so the tower changes right then."""
         order = self.race.finish_order() if self.race.finish else []
         if not order or not self.states:
             return
@@ -132,13 +134,19 @@ class Timing:
             home = sorted((pos, name) for t, pos, name in order if t <= st['t'])
             by_name = {r['name']: r for r in st['rows']}
             done = {name for _, name in home}
-            rows = []
-            for _, name in home:
+            finished = []
+            for pos, name in home:
                 r = dict(by_name.get(name) or {'name': name})
                 # The game's gaps after the flag are cool-down laps, not racing gaps
                 r.update(finish=FINISH_FINISHED, pit=0, interval=None, gap=None, laps_down=0)
-                rows.append(r)
-            rows += [dict(r) for r in st['rows'] if r['name'] not in done]
+                finished.append((pos, r))
+            racing = [dict(r) for r in st['rows'] if r['name'] not in done]
+            rows = []
+            while finished or racing:
+                if finished and (not racing or finished[0][0] <= len(rows) + 1):
+                    rows.append(finished.pop(0)[1])
+                else:
+                    rows.append(racing.pop(0))
             counts = {}
             for n, r in enumerate(rows, 1):
                 c = self.entry(r['name']).get('class') or self.race.classes.get(r['name']) or ''

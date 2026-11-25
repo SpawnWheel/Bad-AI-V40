@@ -88,12 +88,14 @@ STAGES = [
                "from. You can change them at any time."),
     dict(id="film", title="Film the replay", steps=["camera"],
          about="1. Open the Camera Director and press Generate - the AI plans the camera shots from your race log.\n"
-               "2. Load the race replay in the sim and start recording your screen (OBS or similar).\n"
-               "3. Use the Sync tools at the green flag, then press Play Sequence - the director switches cameras for you.\n"
-               "4. When the replay ends, stop recording and pick the video below."),
+               "2. Open OBS and load the race replay in the sim (RaceRoom: set the green flag in the Sync tools).\n"
+               "3. Press Play Sequence - the director starts the OBS recording on the sim's scene and switches cameras.\n"
+               "4. When the replay ends, press Stop Recording - the video is picked below by itself.\n"
+               "Recording without OBS? Untick Record with OBS, record yourself and pick the video below."),
     dict(id="events", title="Build the event list", steps=["combine", "events", "review"],
-         about="The AI picks the moments worth talking about. Then you watch the video in Review & Sync, "
-               "fix or add events, and line the log up with the video so the commentary lands on time."),
+         about="The AI picks the moments worth talking about. Then you watch the video in Review & Sync and "
+               "fix or add events. A video recorded through OBS opens already lined up with the log; otherwise "
+               "line it up yourself so the commentary lands on time."),
     dict(id="commentary", title="Write the commentary", steps=["spice", "timing", "commentary"],
          about="Three automatic steps: the AI adds colour from your race notes, each event gets a word count "
                "to fit its gap, and then the commentators' script is written. Press Run all and wait."),

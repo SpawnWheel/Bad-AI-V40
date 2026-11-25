@@ -9,11 +9,11 @@
     "name": "Caterham Academy",
     "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 3",
-    "event_name": "Sebring ",
+    "round": "Round 2",
+    "event_name": "Hockenheimring",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Flags/USA.png"
+    "event_flag": "Graphics/Flags/BRA.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -96,6 +96,7 @@
   "auto_graphics": {
     "title_card": true,
     "commentators": true,
+    "commentator_info": true,
     "start_ticker": true,
     "standings_ticker": true,
     "start_movers": true,
@@ -104,9 +105,9 @@
     "pit_stops": true,
     "gap_tracker": true,
     "radio": true,
-    "stewards": true,
     "chequered": true,
     "results": true,
+    "stewards": true,
     "sponsors": true
   },
   "popup_types": {
@@ -133,17 +134,19 @@
       "team": "Itchy & Scratchy Racing",
       "make": "Caterham",
       "color": "#07f8f8",
-      "car_image": "Graphics/Logos/ItchyScratchy.png"
+      "car_image": "Graphics/CarPreviews/Dom Payne.dds",
+      "logo": "Graphics/Logos/ItchyScratchy.png"
     },
     "[RCV]ATIBoy69": {
       "display": "ATI Boy",
       "short": "ATIBOY",
       "number": "420",
-      "country": "NLD",
+      "country": "NED",
       "team": "Cheech and Chong",
       "make": "Caterham",
       "color": "#48824d",
-      "car_image": "Graphics/Logos/cheechchong.png"
+      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/caterham_academy/rcv_atiboy_65/preview.dds",
+      "logo": "Graphics/Logos/cheechchong.png"
     },
     "[RCV]Neworder": {
       "display": "New Order",
@@ -153,7 +156,8 @@
       "team": "Foxy Stoat Racing",
       "make": "Caterham",
       "color": "#F97316",
-      "car_image": "Graphics/Logos/stoat.png"
+      "car_image": "Graphics/CarPreviews/NewOrder.dds",
+      "logo": "Graphics/Logos/stoat.png"
     },
     "Daniel Born": {
       "display": "Daniel Born",
@@ -163,7 +167,8 @@
       "team": "Red Bull",
       "make": "Caterham",
       "color": "#1a0cc0",
-      "car_image": "Graphics/Logos/redbull.png"
+      "car_image": "Graphics/CarPreviews/Daniel Born.dds",
+      "logo": "Graphics/Logos/redbull.png"
     },
     "[RCV]thommo": {
       "display": "Thommo",
@@ -173,7 +178,8 @@
       "team": "Ping",
       "make": "Caterham",
       "color": "#ebf9fa",
-      "car_image": "Graphics/Logos/ping.png"
+      "car_image": "Graphics/CarPreviews/Thommo.dds",
+      "logo": "Graphics/Logos/ping.png"
     },
     "kf.MTG": {
       "display": "MTG",
@@ -183,7 +189,8 @@
       "team": "Silent Assassin",
       "make": "Caterham",
       "color": "#000000",
-      "car_image": "Graphics/Logos/silentassasin2.png"
+      "car_image": "Graphics/CarPreviews/MTG.dds",
+      "logo": "Graphics/Logos/silentassasin2.png"
     },
     "AlfaQuadSA": {
       "display": "AlfaQuadSA",
@@ -193,7 +200,8 @@
       "team": "Caterham",
       "make": "Caterham",
       "color": "#047857",
-      "car_image": "Graphics/Logos/caterham.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
     },
     "clinton.nortje": {
       "display": "Clinton Nortje",
@@ -203,7 +211,8 @@
       "team": "Back to the Future",
       "make": "Caterham",
       "color": "#e8eb67",
-      "car_image": "Graphics/Logos/BackToFuture.png"
+      "car_image": "Graphics/CarPreviews/clinton.nortje.dds",
+      "logo": "Graphics/Logos/BackToFuture.png"
     },
     "inthebagbud": {
       "display": "InTheBagBud",
@@ -213,7 +222,8 @@
       "team": "Beavertown Neck Oil",
       "make": "Caterham",
       "color": "#18d7e7",
-      "car_image": "Graphics/Logos/Beavertown.png"
+      "car_image": "Graphics/CarPreviews/InTheBagBud.dds",
+      "logo": "Graphics/Logos/Beavertown.png"
     },
     "mattikake": {
       "display": "Mattikake",
@@ -223,7 +233,8 @@
       "team": "McLaren Mini",
       "make": "Caterham",
       "color": "#f4b92f",
-      "car_image": "Graphics/Logos/McLaren.webp"
+      "car_image": "",
+      "logo": "Graphics/Logos/McLaren.webp"
     },
     "Lucas Degen": {
       "display": "Lucas Degen",
@@ -233,7 +244,8 @@
       "team": "Mini",
       "make": "MINI",
       "color": "#008000",
-      "car_image": "Graphics/Logos/mini.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/mini.png"
     },
     "[RCV]muzzer82": {
       "display": "Muzzer",
@@ -243,7 +255,8 @@
       "team": "Rick and Morty",
       "make": "Caterham",
       "color": "#215cc0",
-      "car_image": "Graphics/Logos/rickmorty.png"
+      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/caterham_academy/rcv_muzzer_62/preview.dds",
+      "logo": "Graphics/Logos/rickmorty.png"
     },
     "grizzlycliff1": {
       "display": "GrizzlyCliff",
@@ -253,7 +266,8 @@
       "team": "Team Gulf",
       "make": "MINI",
       "color": "#04dddd",
-      "car_image": "Graphics/Logos/gulf.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/gulf.png"
     },
     "jaavib": {
       "display": "Jaavib",
@@ -263,7 +277,8 @@
       "team": "John Player Special",
       "make": "Caterham",
       "color": "#c4a31e",
-      "car_image": "Graphics/Logos/jps.png"
+      "car_image": "Graphics/CarPreviews/Jaavib.dds",
+      "logo": "Graphics/Logos/jps.png"
     },
     "Holdany": {
       "display": "Holdany",
@@ -273,17 +288,19 @@
       "team": "Mini",
       "make": "MINI",
       "color": "#e10600",
-      "car_image": "Graphics/Logos/mini.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/mini.png"
     },
     "Bill(AuchAye)_[SR-50]": {
       "display": "Bill",
       "short": "BILL",
       "number": "5",
-      "country": "SCT",
+      "country": "GBR",
       "team": "Thistle Racing",
       "make": "Caterham",
       "color": "#d909b5",
-      "car_image": "Graphics/Logos/ThistleRacing.png"
+      "car_image": "Graphics/CarPreviews/Bill.dds",
+      "logo": "Graphics/Logos/ThistleRacing.png"
     },
     "[RCV]RayFin": {
       "display": "Rayfin",
@@ -293,7 +310,8 @@
       "team": "Canadian Eagle",
       "make": "Caterham",
       "color": "#0bc8d7",
-      "car_image": "Graphics/Logos/EagleRacing.png"
+      "car_image": "Graphics/CarPreviews/Rayfin.dds",
+      "logo": "Graphics/Logos/EagleRacing.png"
     },
     "Bill(AuchAye)_": {
       "display": "Bill",
@@ -313,7 +331,8 @@
       "team": "Private",
       "make": "Caterham",
       "color": "#16d50d",
-      "car_image": "Graphics/Logos/CaterhamWhite.png"
+      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/caterham_academy/rcv_googlebear_56/preview.dds",
+      "logo": "Graphics/Logos/Cloud.png"
     },
     "dmk": {
       "display": "DMK",
@@ -323,7 +342,8 @@
       "team": "Mini Poland",
       "make": "MINI",
       "color": "",
-      "car_image": "Graphics/Logos/mini.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/mini.png"
     },
     "[RCV]kenevo": {
       "display": "Kenevo Mini",
@@ -333,7 +353,8 @@
       "team": "Mulch",
       "make": "MINI",
       "color": "",
-      "car_image": "Graphics/Logos/Mulch2.png"
+      "car_image": "",
+      "logo": "Graphics/Logos/Mulch2.png"
     },
     "[RCV]RayFin [MINI Cooper JCW] DNS: clinton.nortje": {
       "display": "Clinton Nortje",
@@ -347,13 +368,14 @@
     },
     "laurie_[Slip]": {
       "display": "Laurie",
-      "short": "LAURIE_",
-      "number": "",
+      "short": "LAURIE",
+      "number": "13",
       "country": "GBR",
       "team": "Stig",
       "make": "Caterham",
-      "color": "",
-      "car_image": ""
+      "color": "#D32F2F",
+      "car_image": "D:/SteamLibrary/steamapps/common/Automobilista 2/Vehicles/Textures/CustomLiveries/Overrides/caterham_academy/rcv_laurie_stig_64/preview.dds",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
     },
     "laurie_": {
       "display": "Laurie",
@@ -364,6 +386,28 @@
       "make": "",
       "color": "",
       "car_image": ""
+    },
+    "NonnyRat_[TRE]": {
+      "display": "NonnyRat_",
+      "short": "NONNYRAT_",
+      "number": "52",
+      "country": "GBR",
+      "team": "Caterham UK",
+      "make": "Caterham",
+      "color": "#ffffff",
+      "car_image": "",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
+    },
+    "SSRacing_UK": {
+      "display": "SSRacing_UK",
+      "short": "SSRACING_UK",
+      "number": "99",
+      "country": "GBR",
+      "team": "Caterham",
+      "make": "Caterham",
+      "color": "",
+      "car_image": "",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
     }
   },
   "sponsors": {
@@ -389,9 +433,24 @@
     },
     "Toni Cuquerella": {
       "bio": "Veteran Formula 1 engineer and race analyst."
+    },
+    "Mike Joy": {
+      "bio": "Longtime lead NASCAR lap-by-lap commentator for Fox Sports."
+    },
+    "Darrell Waltrip": {
+      "bio": "Three-time NASCAR Cup champion and Hall of Fame broadcaster."
+    },
+    "Larry McReynolds": {
+      "bio": "Championship-winning NASCAR crew chief and technical race analyst."
+    },
+    "Martin Haven": {
+      "bio": "British motorsport sports broadcaster. Lead commentator for the FIA World Endurance Championship."
+    },
+    "Anthony Davidson": {
+      "bio": "Former F1 driver, 2014 World Endurance Champion. Commentator for Sky Sports F1 and WEC."
     }
   },
-  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_ome2pkome2pkome2.jfif",
+  "commentator_photo": "C:/Users/DANIE/Downloads/Gemini_Generated_Image_8bj2278bj2278bj2.jfif",
   "commentator_disclaimer": null,
   "championship_preset": "RCV Caterham - Season 15"
 }

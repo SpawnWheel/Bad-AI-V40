@@ -97,7 +97,7 @@ DEFAULT_CONFIG = {
         # tower off). Rows shrink to fit above 'bottom', the width shrinks to fit the names (up to 'w');
         # 'cycle' lists the value columns shown in turn (interval, gap, name). 'class_groups' joins classes
         # that race each other: 'all', or 'A + B; C + D' (a group can be named first: 'DTM = A + B').
-        'tower': {'enabled': True, 'x': 24, 'y': 24, 'w': 400, 'row_h': 34, 'bottom': 820, 'rows': 0,
+        'tower': {'enabled': True, 'x': 24, 'y': 24, 'w': 400, 'row_h': 34, 'bottom': 960, 'rows': 0,
                   'cycle': 'interval,gap,name', 'cycle_sec': 15, 'class_groups': ''},
         'logo': {'enabled': True, 'x': 1903, 'y': 14, 'h': 58, 'anchor': 'right'},
         'extra_logos': [],

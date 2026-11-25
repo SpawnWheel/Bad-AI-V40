@@ -856,14 +856,14 @@
                 },
                 {
                     "landmarkName": "the_first_chicane",
-                    "distanceRoundLapStart": 1720,
-                    "distanceRoundLapEnd": 1800,
+                    "distanceRoundLapStart": 1710,
+                    "distanceRoundLapEnd": 1825,
                     "isCommonOvertakingSpot": true
                 },
                 {
                     "landmarkName": "the_second_chicane",
                     "distanceRoundLapStart": 2280,
-                    "distanceRoundLapEnd": 2350,
+                    "distanceRoundLapEnd": 2360,
                     "isCommonOvertakingSpot": true
                 },
                 {
@@ -884,7 +884,8 @@
                     "distanceRoundLapEnd": 3700,
                     "isCommonOvertakingSpot": true
                 }
-            ]
+            ],
+            "raceroomTrackName": "Circuit Zolder - Grand Prix"
         },
         {
             "rf1TrackNames": [
@@ -1213,7 +1214,7 @@
             ]
         },
         {
-            "pcarsTrackName": "N\u00fcrburgring:Grand Prix",
+            "pcarsTrackName": "Nürburgring:Grand Prix",
             "pcars2TrackName": "Nurburgring:GP",
             "raceroomLayoutId": 1691,
             "raceroomRollingStartLapDistance": 4591,
@@ -2551,6 +2552,85 @@
             ],
             "isOval": false,
             "raceroomRollingStartLapDistance": -1.0
+        },
+        {
+            "raceroomTrackName": "Nürburgring - Nordschleife - NLS",
+            "raceroomLayoutId": 4975,
+            "trackLandmarks": [
+                {
+                    "landmarkName": "turn_1",
+                    "distanceRoundLapStart": 212.1,
+                    "distanceRoundLapEnd": 332.1,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "yokohama-s",
+                    "distanceRoundLapStart": 400,
+                    "distanceRoundLapEnd": 600,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "hatzenbach",
+                    "distanceRoundLapStart": 3500,
+                    "distanceRoundLapEnd": 4100,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "flugplatz",
+                    "distanceRoundLapStart": 4900,
+                    "distanceRoundLapEnd": 5100,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "schwedenkreuz",
+                    "distanceRoundLapStart": 5900,
+                    "distanceRoundLapEnd": 6100,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "adenauer_forst",
+                    "distanceRoundLapStart": 7500,
+                    "distanceRoundLapEnd": 7700,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "bergwerk",
+                    "distanceRoundLapStart": 11600,
+                    "distanceRoundLapEnd": 11800,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "caracciola-karussell",
+                    "distanceRoundLapStart": 14500,
+                    "distanceRoundLapEnd": 14700,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "brünnchen",
+                    "distanceRoundLapStart": 16900,
+                    "distanceRoundLapEnd": 17200,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "pflanzgarten",
+                    "distanceRoundLapStart": 17800,
+                    "distanceRoundLapEnd": 18300,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "döttinger_höhe_(straight)",
+                    "distanceRoundLapStart": 19800,
+                    "distanceRoundLapEnd": 21800,
+                    "isCommonOvertakingSpot": false
+                },
+                {
+                    "landmarkName": "start/finish_straight",
+                    "distanceRoundLapStart": 0,
+                    "distanceRoundLapEnd": 350,
+                    "isCommonOvertakingSpot": false
+                }
+            ],
+            "approximateTrackLength": 24321
         }
     ]
 }

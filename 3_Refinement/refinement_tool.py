@@ -12,6 +12,9 @@ from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtCore import Qt, QUrl, QTime, QTimer, QEvent
 from PyQt5.QtGui import QKeySequence, QColor
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import obs_sync  # noqa: E402  The video offset the Camera Director measured through OBS
+
 # --- Helper Functions for Time Conversion ---
 def seconds_to_str(seconds):
     """Converts seconds (float/int) to HH:MM:SS string."""
@@ -42,6 +45,7 @@ class RefinementApp(QMainWindow):
         self.duration = 0
         self.is_auto_scrolling = True 
         self.current_log_file_path = None
+        self.video_path = None
 
         # Main Layout
         central_widget = QWidget()
@@ -199,11 +203,13 @@ class RefinementApp(QMainWindow):
                     print(f"Auto-loading video file: {arg}")
                     self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(arg)))
                     self.play_btn.setEnabled(True)
+                    self.video_path = arg
                 elif ext == '.txt':
                     print(f"Auto-loading log file: {arg}")
                     self.current_log_file_path = arg
                     self.populate_table(arg)
                     self.btn_merge_log.setEnabled(True)
+        self.sync_from_recording()
 
     def handle_space_bar(self):
         """Called when Space is pressed (unless consumed by focused input)."""
@@ -638,7 +644,28 @@ class RefinementApp(QMainWindow):
         if confirm == QMessageBox.Yes:
             self.apply_offset(offset)
 
-    def apply_offset(self, offset_seconds):
+    def sync_from_recording(self):
+        """Lines the AI's events up with the video by the offset the Camera Director measured through OBS
+        while it recorded (02_video_sync.json). The reviewed events were synced when saved, so they're left alone."""
+        folder = os.environ.get("R3E_PROJECT_PATH")
+        log = self.current_log_file_path
+        if not folder or not log or obs_sync.same_video(log, os.environ.get("BADAI_OUTPUT")):
+            return
+        sync = obs_sync.read_video_sync(folder)
+        if not sync:
+            self.statusBar().showMessage("No video offset from the recording: line the video up by hand "
+                                         "(select the green flag row at the green flag, then Sync All to Selected Row).")
+            return
+        if sync.get("video") and self.video_path and not obs_sync.same_video(sync["video"], self.video_path):
+            self.statusBar().showMessage(f"The saved video offset is for {os.path.basename(sync['video'])}, not this "
+                                         "video: line it up by hand with Sync All to Selected Row.")
+            return
+        offset = float(sync["offset"])
+        self.apply_offset(offset, quiet=True)
+        self.statusBar().showMessage(f"Lined up with the video automatically ({offset:+.1f}s, measured through OBS "
+                                     "while recording). Check the green flag; Sync All to Selected Row still adjusts it.")
+
+    def apply_offset(self, offset_seconds, quiet=False):
         self.table.blockSignals(True)
         try:
             for row in range(self.table.rowCount()):
@@ -653,7 +680,8 @@ class RefinementApp(QMainWindow):
         finally:
             self.table.blockSignals(False)
 
-        QMessageBox.information(self, "Synced", "All timestamps have been updated.")
+        if not quiet:
+            QMessageBox.information(self, "Synced", "All timestamps have been updated.")
 
     # --- Color Helpers ---
 

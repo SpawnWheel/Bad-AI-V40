@@ -4,6 +4,9 @@
         "gemini_model": "gemini-4-hydrogen",
         "gemini_max_output_tokens": 65536,
         "gemini_thinking_level": "MEDIUM",
-        "videos_folder": ""
+        "videos_folder": "",
+        "obs_host": "localhost",
+        "obs_port": "",
+        "obs_password": ""
     }
 }

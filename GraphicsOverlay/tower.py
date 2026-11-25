@@ -27,9 +27,13 @@ HEADER_H = 92
 TITLE_H = 28
 FOOTER_H = 30
 CLASS_H = 26
-GAP = 3            # space between rows
+GAP = 2            # space between rows
 MIN_W = 250
-SEE_THROUGH = 0.5  # the rows' panel without a game leaderboard to cover (RaceRoom)
+SEE_THROUGH = 0.78  # the rows' panel without a game leaderboard to cover (RaceRoom): dark enough for the names
+NAME_STYLE = 'bold'  # full-width Bahnschrift: condensed letters blur together at tower sizes
+NAME_SHADOW = (0, 0, 0, 170)
+OUTLIER_RATIO = 1.4  # a name this much wider than the next longest doesn't set the tower's width
+                     # (real long surnames like NIRRENGARTEN run ~1.3x the next one, so they still set it)
 MODE_LABELS = {'interval': 'INTERVAL', 'gap': 'LEADER', 'name': ''}  # 'team' in older configs is skipped
 MAKE_DIR = os.path.join(gcfg.GRAPHICS_DIR, 'Manufacturers')
 YELLOW = rgba('#FFD200')
@@ -43,6 +47,18 @@ def stable_color(text):
     h = int(hashlib.md5(text.encode('utf-8')).hexdigest()[:6], 16)
     r, g, b = colorsys.hls_to_rgb((h % 360) / 360.0, 0.42, 0.65)
     return '#%02X%02X%02X' % (int(r * 255), int(g * 255), int(b * 255))
+
+
+def _names_width(widths):
+    """Width the name column is sized to: the longest name, unless it (or a few) stand far out from the rest, in
+    which case the next longest. One driver with a huge surname then gets cut short (…) instead of stretching the
+    whole tower for everyone."""
+    ws = sorted(widths or [80], reverse=True)
+    drops = max(1, len(ws) // 10)
+    while drops and len(ws) > 1 and ws[0] > ws[1] * OUTLIER_RATIO:
+        ws.pop(0)
+        drops -= 1
+    return ws[0]
 
 
 def initials(make):
@@ -136,8 +152,8 @@ class TimingTower:
         body_h = n * row_h + bars * (CLASS_H + GAP)
         cols = self._columns(row_h - GAP)
         # Only as wide as the longest short name and the value column need
-        f = font(cols['fs'], 'bold_cond')
-        names_w = max([text_w(f, (self.tpl.meta(nm).get('short') or nm).upper()) for nm in names] or [80])
+        f = font(cols['fs'], NAME_STYLE)
+        names_w = _names_width([text_w(f, (self.tpl.meta(nm).get('short') or nm).upper()) for nm in names])
         need = cols['name_x'] + names_w + 10 + cols['val_w'] + 4
         w = int(max(MIN_W, min(self.lay.get('w', 400), need)))
         if self.cover:
@@ -148,7 +164,7 @@ class TimingTower:
     def _columns(self, h):
         """Column offsets for a row of height h."""
         # As big as the row allows, so the names still read on a small screen
-        fs = max(12, int(h * 0.72))
+        fs = max(12, int(h * 0.8))
         pos_w = int(h * 1.25)
         # Wide enough for wordmark logos (VOLVO, HONDA) to read, not just badges
         tile_w = int(h * 2.1)
@@ -473,8 +489,11 @@ class TimingTower:
             label = meta.get('short') or name
         label = label.upper()
         # Full names shrink a little before they are cut short
-        f = fit_font(label, text_right - x, fs, 'bold_cond', max(10, fs - 3))
-        text_vcenter(img, x, cy + 1, ellipsize(label, f, text_right - x), f, th.text)
+        f = fit_font(label, text_right - x, fs, NAME_STYLE, max(10, fs - 3))
+        label = ellipsize(label, f, text_right - x)
+        # A soft drop shadow keeps the name crisp over bright scenery showing through the panel
+        text_vcenter(img, x + 1, cy + 2, label, f, NAME_SHADOW)
+        text_vcenter(img, x, cy + 1, label, f, th.text)
         if val_w:
             vx = w - 4 - val_w
             round_rect(img, (vx, y, w - 4, y + h), 2, (255, 255, 255, 34))
