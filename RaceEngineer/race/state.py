@@ -1232,6 +1232,7 @@ class RaceStateManager:
         self.radar.sample(completed, snapshot, pace, dirty=dirty, sector_ended=max(1, snapshot.num_sectors or 3))
         self.radar.note_laps(snapshot.participants)
         self.radar.sample_field(float(completed), self._cars_behind(snapshot), dirty=dirty)
+        self._update_traffic(snapshot, pace)
         self._radar_sector = 0
         if dirty or snapshot.pit_mode.value > 0 or completed < 2 or self._final_lap_done or self._final_lap_spoken:
             return
@@ -1313,6 +1314,23 @@ class RaceStateManager:
                 out.append((p.name, p.position, g, getattr(p, "last_lap_time", 0.0) or 0.0))
         return out
 
+    TRAFFIC_WINDOW_SEC = 20.0
+
+    def _update_traffic(self, snapshot: TelemetrySnapshot, pace: float):
+        """Cars on another lap near us on the road (coming to lap us / backmarkers ahead)."""
+        me = self.player_participant(snapshot)
+        if me is None:
+            self.radar.set_traffic([], [])
+            return
+        by_key = {p.name.strip().lower(): p for p in snapshot.participants if p.is_active and p.name}
+        skip = {k for k, p in by_key.items() if getattr(p, "pit_mode", 0) > 0 or getattr(p, "race_state", 2) in (4, 5, 6)}
+        lap_pace = reference_pace(self.lap_times) or pace
+        lappers, backs = self.gap_clock.road_traffic(me.name, self.TRAFFIC_WINDOW_SEC, lap_pace, skip=skip)
+
+        def named(items):
+            return [(by_key[k].name, by_key[k].position, g, n) for k, g, n in items if k in by_key]
+        self.radar.set_traffic(named(lappers), named(backs))
+
     def _sector_radar_check(self, snapshot: TelemetrySnapshot):
         """
         At each sector boundary inside the lap: sample the gaps (the line itself is done at lap end), and if a
@@ -1330,6 +1348,7 @@ class RaceStateManager:
         self.radar.sample(completed, snapshot, pace, lap_pos=lap_pos, sector_ended=sec)
         self.radar.note_laps(snapshot.participants)
         self.radar.sample_field(lap_pos, self._cars_behind(snapshot))
+        self._update_traffic(snapshot, pace)
         if not self.mid_lap_threat_calls or completed < 1 or self._final_lap_done or self._final_lap_spoken:
             return
         rd = self.get_race_distance(snapshot)

@@ -104,6 +104,38 @@ class GapClock:
             return None
         return (da[-1] - target) / speed
 
+    def road_traffic(self, me: str, max_sec: float, pace: float, skip=()) -> Tuple[list, list]:
+        """
+        Cars near us ON THE ROAD that are on a different lap.
+        Returns (lappers, backmarkers): lappers are a lap or more up and behind us on the road (coming to lap
+        us); backmarkers are a lap or more down and ahead of us on the road (we're coming to lap them).
+        Each item: (name, road gap in seconds, whole laps between us).
+        """
+        L = self._track_len
+        mine = self.total(me)
+        if mine is None or L <= 0 or not pace or pace <= 20:
+            return [], []
+        speed = L / pace
+        lappers, backmarkers = [], []
+        km = self._key(me)
+        for k, ds in self._d.items():
+            if k == km or not ds or k in skip:
+                continue
+            diff = ds[-1] - mine
+            ahead_m = diff % L                   # distance to him going forwards on the road
+            behind_m = (-diff) % L               # distance to him looking backwards
+            if diff > 0 and behind_m < ahead_m and diff > 0.5 * L:
+                t = behind_m / speed
+                if t <= max_sec:
+                    lappers.append((k, t, int(round((diff + behind_m) / L))))
+            elif diff < 0 and ahead_m < behind_m and -diff > 0.5 * L:
+                t = ahead_m / speed
+                if t <= max_sec:
+                    backmarkers.append((k, t, int(round((-diff + ahead_m) / L))))
+        lappers.sort(key=lambda x: x[1])
+        backmarkers.sort(key=lambda x: x[1])
+        return lappers, backmarkers
+
     def laps_apart(self, ahead: str, behind: str) -> float:
         a, b = self.total(ahead), self.total(behind)
         if a is None or b is None or self._track_len <= 0:

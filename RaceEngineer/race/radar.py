@@ -151,6 +151,9 @@ class RaceRadar:
         self._field: Dict[str, List[Tuple[float, float]]] = {}
         self._field_pos: Dict[str, int] = {}
         self._field_laps: Dict[str, List[float]] = {}     # their recent lap times
+        # cars on another lap near us on the road: (name, position, road gap s, laps between)
+        self.lappers: List[Tuple[str, int, float, int]] = []
+        self.backmarkers: List[Tuple[str, int, float, int]] = []
         self.ahead: Optional[RivalTrend] = None
         self.behind: Optional[RivalTrend] = None
         self._announced: Dict[str, int] = {}
@@ -213,6 +216,31 @@ class RaceRadar:
             if not laps or abs(laps[-1] - last) > 1e-3:
                 laps.append(float(last))
                 del laps[:-6]
+
+    def set_traffic(self, lappers, backmarkers):
+        self.lappers, self.backmarkers = list(lappers or []), list(backmarkers or [])
+
+    def _laps_until(self, name: str, road_gap: float, coming_to_us: bool) -> Optional[float]:
+        """Laps until we meet on the road, from clean-lap pace (None if nobody is closing)."""
+        pd = self._pace_delta(name)          # positive = he's quicker than us
+        if pd is None:
+            return None
+        closing = pd if coming_to_us else -pd
+        if closing < 0.2:
+            return None
+        return road_gap / closing
+
+    def traffic_lines(self) -> List[str]:
+        out = []
+        for name, pos, gap, laps in self.lappers[:2]:
+            meet = self._laps_until(name, gap, True)
+            when = f", with you in ~{max(1, round(meet))} laps" if meet is not None else ""
+            out.append(f"  COMING TO LAP YOU: P{pos} {name} ({laps} lap{'s' if laps > 1 else ''} up) is {gap:.1f}s behind on the road{when}")
+        for name, pos, gap, laps in self.backmarkers[:2]:
+            meet = self._laps_until(name, gap, False)
+            when = f", you'll be on him in ~{max(1, round(meet))} laps" if meet is not None else ""
+            out.append(f"  BACKMARKER AHEAD: P{pos} {name} ({laps} lap{'s' if laps > 1 else ''} down) is {gap:.1f}s up the road{when}")
+        return out
 
     def _pace_delta(self, name: str) -> Optional[float]:
         """How much quicker per lap he is on clean laps (positive = he's quicker), or None if not known."""
@@ -437,6 +465,7 @@ class RaceRadar:
                 continue
             lines.append(f"  FASTER CAR COMING: P{pos} {name} {gap:.1f}s back, about {rate:.1f}s/lap quicker on clean laps"
                          f" -> with you in ~{max(1, round(meet))} laps at this rate")
+        lines.extend(self.traffic_lines())
         if self.pace.text:
             lines.append(f"  PACE PLAN (what the pit wall wants): {self.pace.text}")
         return "\n".join(lines)
@@ -534,6 +563,23 @@ class RaceRadar:
                                        f"You're with P{a.position} {a.name} ahead ({_tenths(a.gap)}): {verdict}{left}"))
         # The pace instruction changed (e.g. fight over -> manage, or fuel saving now skips the stop).
         # PUSH modes ride along with the threat / catch reasons above, so only the calm ones need their own call.
+        # Lapped traffic: a heads-up a couple of laps before it matters, once per car
+        for name, pos, gap, laps in self.lappers[:1]:
+            meet = self._laps_until(name, gap, True)
+            if (meet is not None and meet <= 4.0) or gap <= 6.0:
+                if self._fresh(f"lapper:{name}", lap, 6) and (not laps_to_go or (meet or 0) < laps_to_go):
+                    with_him = [n for n, _, g, _ in self.lappers[1:] if abs(g - gap) <= 1.5]
+                    fight = f", fighting {with_him[0]} as they come" if with_him else ""
+                    when = f"about {max(1, round(meet))} laps away" if meet is not None else "close behind"
+                    out.insert(0, RadarReason(f"lapper:{name}",
+                                              f"Blue flags coming: P{pos} {name} ({laps} lap up) is {gap:.1f}s behind on the road, "
+                                              f"{when}{fight}{left}"))
+        for name, pos, gap, laps in self.backmarkers[:1]:
+            meet = self._laps_until(name, gap, False)
+            if meet is not None and meet <= 4.0 and self._fresh(f"backmarker:{name}", lap, 6):
+                out.append(RadarReason(f"backmarker:{name}",
+                                       f"Backmarker ahead: P{pos} {name} ({laps} lap down) is {gap:.1f}s up the road, "
+                                       f"you'll be on him in ~{max(1, round(meet))} laps{left}"))
         out = out[:2]          # one radio call, two topics at most
         mode = self.pace.mode
         if not include_pace:

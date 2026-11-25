@@ -168,3 +168,22 @@ class TestPitLossLearning(unittest.TestCase):
     def test_partial_lane_passes_dont_shrink_the_loss(self):
         from race.pit_stop_tracker import PitStopTracker
         self.assertAlmostEqual(PitStopTracker._robust_loss([12.4, 3.66, 3.19, 3.71, 12.73]), 12.565, delta=0.01)
+
+
+class TestLappedTraffic(unittest.TestCase):
+    def test_lapper_behind_and_backmarker_ahead_on_the_road(self):
+        L = 2000.0
+        c = GapClock()
+        for i in range(10):
+            t = i * 0.5
+            me = 5 * L + 1000 + 25 * t
+            cars = [_car("Me", 8, int(me // L), me % L),
+                    _car("Leader", 1, int((me + L - 150) // L), (me + L - 150) % L),     # a lap up, 150 m behind on the road
+                    _car("Slow", 15, int((me - L + 200) // L), (me - L + 200) % L),      # a lap down, 200 m ahead on the road
+                    _car("Rival", 7, int((me + 100) // L), (me + 100) % L)]              # same lap, just ahead
+            c.update(types.SimpleNamespace(track_length_m=L, participants=cars), now=t)
+        lappers, backs = c.road_traffic("Me", 20.0, 80.0)
+        self.assertEqual([x[0] for x in lappers], ["leader"])
+        self.assertEqual([x[0] for x in backs], ["slow"])
+        self.assertAlmostEqual(lappers[0][1], 150 / 25.0, delta=0.1)
+        self.assertEqual(lappers[0][2], 1)
