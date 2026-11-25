@@ -211,6 +211,16 @@ def sanitize_filename(name):
     return "".join(c for c in name if c.isalnum() or c in ("_", "-"))
 
 
+def track_file_name(location, variation):
+    """A track's corner file in Corner Names/, e.g. OultonPark_OultonPark_Fosters.json."""
+    return f"{sanitize_filename(location)}_{sanitize_filename(variation)}".strip("_") + ".json"
+
+
+def old_track_file_name(location, variation):
+    """The name the mapper gave track files from September to November 2026, with .json twice."""
+    return f"{sanitize_filename(location)}_{sanitize_filename(variation)}.json".strip("_") + ".json"
+
+
 class CornerMapperApp:
     SIM_NAME = "AMS2"
 
@@ -1320,8 +1330,12 @@ class CornerMapperApp:
         if not self.track_location:
             return
 
-        expected_filename = f"{sanitize_filename(self.track_location)}_{sanitize_filename(self.track_variation)}.json".strip("_") + ".json"
+        expected_filename = track_file_name(self.track_location, self.track_variation)
         full_path = os.path.join(self.corner_names_dir, expected_filename)
+        old_filename = old_track_file_name(self.track_location, self.track_variation)
+        if not os.path.exists(full_path) and os.path.exists(os.path.join(self.corner_names_dir, old_filename)):
+            expected_filename = old_filename # Mapped before the name was fixed
+            full_path = os.path.join(self.corner_names_dir, old_filename)
 
         if os.path.exists(full_path):
             self.track_combo.set(expected_filename)
@@ -1398,7 +1412,7 @@ class CornerMapperApp:
                 messagebox.showwarning("Warning", "Track location name is required.")
                 return
 
-            filename = f"{sanitize_filename(loc)}_{sanitize_filename(var)}.json".strip("_") + ".json"
+            filename = track_file_name(loc, var)
             filepath = os.path.join(self.corner_names_dir, filename)
 
             track_data = {

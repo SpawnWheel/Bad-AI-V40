@@ -410,14 +410,18 @@ class AMS2EventLogger:
 
         # Candidates to look for
         matched_file = None
-        exact_candidate = f"{sanitize_filename(track_location)}_{sanitize_filename(track_variation)}.json".strip("_")
+        exact_stem = f"{sanitize_filename(track_location)}_{sanitize_filename(track_variation)}".strip("_")
         loc_candidate = f"{sanitize_filename(track_location)}.json"
 
-        exact_path = os.path.join(self.corner_names_dir, exact_candidate)
+        exact_path = os.path.join(self.corner_names_dir, exact_stem + ".json")
+        # From September to November 2026 the Corner Mapper named its files with .json twice
+        old_exact_path = os.path.join(self.corner_names_dir, exact_stem + ".json.json")
         loc_path = os.path.join(self.corner_names_dir, loc_candidate)
 
         if os.path.exists(exact_path):
             matched_file = exact_path
+        elif os.path.exists(old_exact_path):
+            matched_file = old_exact_path
         elif os.path.exists(loc_path):
             matched_file = loc_path
         else:
