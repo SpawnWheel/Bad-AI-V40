@@ -138,11 +138,49 @@ class PitStopTracker:
         del lst[:-int(n or self.max_measurements)]
 
     # ------------------------------------------------------------------ queries
+    @staticmethod
+    def _robust_loss(vals: List[float]) -> Optional[float]:
+        """
+        A partial pit-lane pass (leaving the box at the start of a session, clipping the lane) can only make the
+        loss look SHORTER, never longer - so use the cluster near the biggest values (>= 60% of the max).
+        At Oulton the plain median of [12.4, 3.7, 3.2, 3.7, 12.7] said 3.7 s; the real figure is ~12.5 s.
+        """
+        v = [float(x) for x in vals or [] if x and float(x) > 0]
+        if not v:
+            return None
+        top = max(v)
+        return _median([x for x in v if x >= 0.6 * top])
+
     def get_drive_loss(self, track_name: str, track_variation: str = "") -> Tuple[Optional[float], int]:
+        """
+        Time lost driving the stop (everything except standing in the box). Preferred: measured from our in-lap
+        and out-lap times against normal race pace, which includes braking for pit entry and getting back up
+        to speed after the exit. Fallback: pit-lane entry-to-exit time against the reference lap.
+        """
         rec = self._db["tracks"].get(self.get_track_key(track_name, track_variation))
         if not rec:
             return None, 0
-        return _median(rec.get("drive_loss", [])), len(rec.get("drive_loss", []))
+        laps = rec.get("drive_loss_laps", [])
+        if laps:
+            return self._robust_loss(laps), len(laps)
+        return self._robust_loss(rec.get("drive_loss", [])), len(rec.get("drive_loss", []))
+
+    def drive_loss_source(self, track_name: str, track_variation: str = "") -> str:
+        rec = self._db["tracks"].get(self.get_track_key(track_name, track_variation)) or {}
+        return "in/out-lap times" if rec.get("drive_loss_laps") else "pit-lane entry to exit"
+
+    def record_lap_based_loss(self, track_name: str, track_variation: str, total_loss: float, stationary: float):
+        """Our stop's real cost from lap times (in-lap + out-lap minus normal pace); stored without the service time."""
+        drive = float(total_loss) - float(stationary or 0.0)
+        if not (2.0 <= drive <= 120.0):
+            return
+        with self._lock:
+            rec = self._track_rec(self.get_track_key(track_name, track_variation))
+            self._push(rec.setdefault("drive_loss_laps", []), drive)
+            rec["last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        self.save()
+        logger.info(f"[PIT TRACKER] Stop cost from lap times: {total_loss:.1f}s total, {drive:.1f}s of it driving "
+                    f"(in-lap + out-lap vs race pace).")
 
     def get_refuel_rate(self, car: str) -> Tuple[float, bool]:
         rec = self._db["cars"].get(car or "unknown")
@@ -201,7 +239,8 @@ class PitStopTracker:
         if change_tyres:
             what.append("tyres")
         svc = f" + {service:.1f}s service ({', '.join(what)})" if what else ""
-        return total, f"~{total:.1f}s = {drive:.1f}s pit-lane drive-through loss (measured x{n}){svc}", True
+        src = self.drive_loss_source(track_name, track_variation)
+        return total, f"~{total:.1f}s = {drive:.1f}s driving loss (measured from {src}, x{n}){svc}", True
 
     def get_pit_loss_sec(self, track_name: str, track_variation: str = "") -> float:
         """Drive-through loss if learned, else the configured default total loss (legacy API)."""
@@ -303,6 +342,10 @@ class PitStopTracker:
         if not (self.min_valid_pit_sec <= lane <= self.max_valid_pit_sec):
             logger.info(f"[PIT TRACKER] Ignoring pit visit: lane time {lane:.1f}s out of range.")
             return
+        typical = self.typical_ai_lane_time(snap.track_name, snap.track_variation)
+        if typical and lane < 0.5 * typical:
+            logger.info(f"[PIT TRACKER] Ignoring pit visit: {lane:.1f}s is a partial pass (a full lane takes ~{typical:.0f}s).")
+            return
         exit_d = float(getattr(snap, "current_lap_distance", 0.0))
         pace = snap.best_lap_time if snap.best_lap_time > 20 else (snap.last_lap_time if snap.last_lap_time > 20 else 90.0)
         tm = self.track_model
@@ -311,6 +354,10 @@ class PitStopTracker:
         tyres = bool(self._entry_wear) and any(
             (a - b) > 3.0 for a, b in zip(self._entry_wear, snap.tyre_wear_pct)
         )
+        # Near-new tyres (a Caterham at 99%) don't show a wear jump when changed: a long stationary stop with
+        # no fuel going in can only be a tyre change.
+        if not tyres and fuel_added < 1.0 and self._stationary >= 8.0:
+            tyres = True
         stop: Dict[str, Any] = {
             "lap": getattr(self, "_entry_lap", snap.current_lap),
             "lane_time": lane,

@@ -4,6 +4,8 @@ Tracks session transitions, lap history, and triggers race events.
 """
 
 import dataclasses
+import re
+import math
 import time
 from typing import Optional, List, Callable, Dict, Any
 
@@ -21,8 +23,9 @@ from .track_model import track_model as _global_track_model, sector_label
 from .race_distance import compute_race_distance, RaceDistance
 from .car_track_stats import car_track_stats
 from .tires import TireTracker, TireStatus
-from .gaps import GapTracker, GapAnalysis
-from .radar import RaceRadar
+from .gaps import GapTracker, GapAnalysis, GapClock
+from .radar import RaceRadar, RadarReason, reference_pace
+from .virtual_order import order_after_stops, describe_for_driver
 from .standings import timing_board
 from .incidents import incident_tracker, IncidentTracker
 from .pit_stop_tracker import pit_stop_tracker, PitStopTracker
@@ -96,6 +99,7 @@ class RaceStateManager:
         self.tire_tracker = TireTracker()
         self.gap_tracker = GapTracker()
         self.radar = RaceRadar()          # measured gap trends to the cars ahead / behind
+        self.gap_clock = GapClock()       # real time gaps from every car's distance history
         self.incident_tracker = IncidentTracker(
             speed_threshold_kmh=incident_speed_threshold_kmh,
             duration_sec=incident_duration_sec,
@@ -104,6 +108,7 @@ class RaceStateManager:
         )
 
         timing_board.track_model = self.track_model
+        timing_board.gap_clock = self.gap_clock
         timing_board.pit_projector = self._project_competitor_pit
 
         # Specialized session managers
@@ -276,6 +281,10 @@ class RaceStateManager:
         self.tire_tracker.reset()
         self.gap_tracker.reset()
         self.radar.reset()
+        self.gap_clock.reset()
+        self._radar_sector = None
+        self._strategy_calls: set = set()
+        self._lap_time_by_num: Dict[int, float] = {}
         self.incident_tracker.reset()
         self.pit_stop_tracker.reset_tracking()
         self._leader_pit_state.clear()
@@ -316,6 +325,9 @@ class RaceStateManager:
     def on_telemetry(self, snapshot: TelemetrySnapshot):
         """Called whenever a new TelemetrySnapshot arrives."""
         # 1. Front-end menu or exited: mark that session needs reset on next in-game entry
+        if snapshot.car_name and snapshot.track_name and snapshot.game_state not in (GameState.GAME_FRONT_END, GameState.GAME_EXITED):
+            self._last_event = (snapshot.car_name, snapshot.track_name, snapshot.track_variation,
+                                float(snapshot.fuel_capacity_liters or 0.0))
         if snapshot.game_state in (GameState.GAME_FRONT_END, GameState.GAME_EXITED):
             self._session_needs_reset = True
             self._track_greeting_done = False
@@ -348,6 +360,10 @@ class RaceStateManager:
 
         if needs_reset:
             self.reset_session(snapshot.session_state, snapshot)
+
+        # Measured gaps to the cars ahead / behind replace the sim's split times (see GapClock)
+        if session_group == "RACE":
+            snapshot = self._with_measured_gaps(snapshot)
 
         # Pit stop counts for every car need every transition, not just when a context is built
         try:
@@ -492,8 +508,14 @@ class RaceStateManager:
                 lap_time = snapshot.last_lap_time
                 if lap_time > 0:
                     self.lap_times.append(lap_time)
+                    self._lap_time_by_num[self.current_lap] = lap_time
 
                 completed = self.current_lap
+                if session_group in ("RACE", "PRACTICE"):     # a proper practice stop teaches it too
+                    try:
+                        self._learn_stop_cost(snapshot)
+                    except Exception as e:
+                        logger.debug(f"stop cost learning failed: {e}")
                 was_pit = completed in self.pit_laps or (completed + 1) in self.pit_laps
                 self.fuel_ledger.on_lap_completed(completed, snapshot.fuel_liters, pit_lap=was_pit)
                 if session_group == "RACE" and not was_pit and completed >= 2:
@@ -548,6 +570,13 @@ class RaceStateManager:
                     if session_group == "RACE" and snapshot.race_state == RaceState.RACESTATE_RACING:
                         self._lap_end_pit_wall_check(snapshot, completed, was_pit or in_pits_now)
             self._follow_lap_counter(snapshot)
+
+        # 2b. Gaps at every sector boundary (trend within ~2/3 of a lap) + break in for a car closing fast
+        if session_group == "RACE" and snapshot.race_state == RaceState.RACESTATE_RACING:
+            try:
+                self._sector_radar_check(snapshot)
+            except Exception as e:
+                logger.debug(f"sector radar check failed: {e}")
 
         # 3. Position Change
         # Only in RACE (in Practice and Quali, positions change continuously on the timing screen and create chatter)
@@ -1120,6 +1149,45 @@ class RaceStateManager:
 
                 self._competitor_pit_modes[p_key] = curr_p_mode
 
+    def player_participant(self, snapshot: Optional[TelemetrySnapshot]):
+        """Our own entry in the participant list (by name; position only as a fallback)."""
+        if snapshot is None or not snapshot.participants:
+            return None
+        me = (snapshot.player_name or "").strip().lower()
+        if me:
+            for p in snapshot.participants:
+                if p.is_active and p.name.strip().lower() == me:
+                    return p
+        return next((p for p in snapshot.participants if p.is_active and p.position == snapshot.position), None)
+
+    def _with_measured_gaps(self, snapshot: TelemetrySnapshot) -> TelemetrySnapshot:
+        """
+        Feeds the gap clock and returns the snapshot with split_time_ahead / behind measured from it.
+        AMS2's own splits are wrong around pit stops (75 s to a car 1.2 s ahead at Oulton), so for AMS2 the
+        clock wins whenever it has a value; RaceRoom's official deltas are kept unless missing.
+        """
+        try:
+            self.gap_clock.update(snapshot)
+            me = self.player_participant(snapshot)
+            if me is None or me.position <= 0:
+                return snapshot
+            ahead = next((p for p in snapshot.participants if p.is_active and p.position == me.position - 1), None)
+            behind = next((p for p in snapshot.participants if p.is_active and p.position == me.position + 1), None)
+            ga = self.gap_clock.gap(ahead.name, me.name) if ahead else None
+            gb = self.gap_clock.gap(me.name, behind.name) if behind else None
+            is_r3e = str(getattr(snapshot, "sim", "")).upper() == "R3E"
+            new_a, new_b = snapshot.split_time_ahead, snapshot.split_time_behind
+            if ga is not None and (not is_r3e or new_a <= 0):
+                new_a = ga
+            if gb is not None and (not is_r3e or new_b <= 0):
+                new_b = gb
+            if new_a == snapshot.split_time_ahead and new_b == snapshot.split_time_behind:
+                return snapshot
+            return dataclasses.replace(snapshot, split_time_ahead=float(new_a), split_time_behind=float(new_b))
+        except Exception as e:
+            logger.debug(f"gap clock failed: {e}")
+            return snapshot
+
     # Longer than this, a lower lap number is real (the counter was reset), not a glitch
     LAP_BACKSTEP_ACCEPT_SEC = 8.0
 
@@ -1159,7 +1227,12 @@ class RaceStateManager:
         a long quiet spell.
         """
         pace = self.representative_pace(snapshot)
-        self.radar.sample(completed, snapshot, pace, dirty=dirty)
+        clean_laps = [t for n, t in enumerate(self.lap_times, start=1) if n > 1 and n not in self.pit_laps]
+        self.radar.set_my_pace(reference_pace(self.lap_times), clean_laps)
+        self.radar.sample(completed, snapshot, pace, dirty=dirty, sector_ended=max(1, snapshot.num_sectors or 3))
+        self.radar.note_laps(snapshot.participants)
+        self.radar.sample_field(float(completed), self._cars_behind(snapshot), dirty=dirty)
+        self._radar_sector = 0
         if dirty or snapshot.pit_mode.value > 0 or completed < 2 or self._final_lap_done or self._final_lap_spoken:
             return
         rd = self.get_race_distance(snapshot)
@@ -1181,11 +1254,29 @@ class RaceStateManager:
             )
         except Exception as e:
             logger.debug(f"pace plan failed: {e}")
+        # Early strategy call (end of lap 2) and a check at half distance while a stop is still to make
+        if self._maybe_strategy_call(snapshot, completed, laps_to_go):
+            return
         # The box calls own the radio on the lap before and the lap of a planned stop
         if fuel is not None and fuel.needs_pit_stop and fuel.pit_window_lap and \
                 snapshot.current_lap in (fuel.pit_window_lap - 1, fuel.pit_window_lap):
             return
         reasons = self.radar.candidates(completed, laps_to_go)
+        try:
+            served = self.mandatory_served_lap()
+            res = self.position_after_stops(snapshot) if served else None
+            if res and completed > served:
+                order, me, loss = res
+                mine = next((x for x in order if x.name == me), None)
+                key = f"after_stops:{served}"
+                if mine and mine.virtual_pos != mine.road_pos and self.radar._fresh(key, completed, 999):
+                    pending = sum(1 for x in order if x.still_to_stop)
+                    reasons.insert(0, RadarReason(
+                        key, f"Our stop is done: P{mine.road_pos} on the road, about P{mine.virtual_pos} once the "
+                             f"{pending} car{'s' if pending != 1 else ''} still to stop have stopped (estimate)"))
+                    reasons = reasons[:2]
+        except Exception as e:
+            logger.debug(f"after-stops reason failed: {e}")
         texts = [r.text for r in reasons]
         msg = (f"Lap {completed} done, P{snapshot.position}"
                + (f", {laps_to_go} laps to go including this one" if laps_to_go else "") + ". "
@@ -1200,6 +1291,291 @@ class RaceStateManager:
              "urgent": urgent, "laps_to_go": laps_to_go},
             cooldown_seconds=3.0,
         )
+
+    # Break in mid-lap when a car arrives right behind and is closing fast. Off: the driver prefers the early
+    # heads-up ("a faster car is on its way") at the line over a late "he's on you".
+    mid_lap_threat_calls = False
+
+    def _cars_behind(self, snapshot: TelemetrySnapshot):
+        """(name, position, gap s) for the few cars behind us, from the gap clock."""
+        from .radar import INCOMING_DEPTH
+        me = self.player_participant(snapshot)
+        if me is None or me.position <= 0:
+            return []
+        out = []
+        for p in snapshot.participants:
+            if not p.is_active or p.position <= me.position or p.position > me.position + INCOMING_DEPTH:
+                continue
+            if getattr(p, "pit_mode", 0) > 0:
+                continue
+            g = self.gap_clock.gap(me.name, p.name)
+            if g is not None:
+                out.append((p.name, p.position, g, getattr(p, "last_lap_time", 0.0) or 0.0))
+        return out
+
+    def _sector_radar_check(self, snapshot: TelemetrySnapshot):
+        """
+        At each sector boundary inside the lap: sample the gaps (the line itself is done at lap end), and if a
+        car has just come into range behind and is closing fast, call it now rather than at the line.
+        """
+        sec = int(snapshot.current_sector)
+        last = getattr(self, "_radar_sector", None)
+        self._radar_sector = sec
+        if last is None or sec == last or sec <= 0 or snapshot.pit_mode.value > 0:
+            return
+        n = max(1, snapshot.num_sectors or 3)
+        completed = max(0, snapshot.current_lap - 1)
+        pace = self.representative_pace(snapshot)
+        lap_pos = completed + min(sec, n - 1) / n
+        self.radar.sample(completed, snapshot, pace, lap_pos=lap_pos, sector_ended=sec)
+        self.radar.note_laps(snapshot.participants)
+        self.radar.sample_field(lap_pos, self._cars_behind(snapshot))
+        if not self.mid_lap_threat_calls or completed < 1 or self._final_lap_done or self._final_lap_spoken:
+            return
+        rd = self.get_race_distance(snapshot)
+        laps_to_go = rd.laps_incl_current if (rd is not None and rd.mode != "NONE") else None
+        if laps_to_go is not None and laps_to_go <= 1:
+            return
+        reasons = self.radar.urgent_threat(completed, laps_to_go)
+        if not reasons:
+            return
+        try:
+            fuel = self._analyze_fuel(snapshot)
+            self.radar.update_pace_plan(self.lap_times, laps_to_go,
+                                        fuel_avg_burn=fuel.avg_per_lap, fuel_target_burn=fuel.target_consumption,
+                                        needs_pit_stop=bool(fuel.needs_pit_stop))
+            if self.radar.pace.mode.startswith("PUSH"):
+                reasons[0].text += f" | {self.radar.pace.text}"
+        except Exception as e:
+            logger.debug(f"mid-lap pace plan failed: {e}")
+        texts = [r.text for r in reasons]
+        msg = (f"Mid-lap (Sector {sec + 1}), P{snapshot.position}"
+               + (f", {laps_to_go} laps to go including this one" if laps_to_go else "") + ". "
+               + "Worth telling the driver NOW: " + "; ".join(texts) + ".")
+        self._emit_event(
+            EventType.PIT_WALL_UPDATE,
+            EventPriority.HIGH,
+            msg,
+            {"lap": completed, "keys": [r.key for r in reasons], "reasons": texts,
+             "urgent": True, "laps_to_go": laps_to_go, "mid_lap": True},
+            cooldown_seconds=3.0,
+        )
+
+    def _learn_stop_cost(self, snapshot: TelemetrySnapshot):
+        """
+        Once the out-lap is done: what our last stop REALLY cost - in-lap + out-lap against our normal race pace.
+        That includes braking for pit entry, the lane, the service and getting back up to speed, which the
+        pit-lane entry-to-exit timing misses (Oulton: lane-based 38.8 s, lap times say ~41 s).
+        """
+        stops = self.pit_stop_tracker.session_stops
+        if not stops:
+            return
+        st = stops[-1]
+        if st.get("lap_loss") is not None or st.get("_lap_loss_tried"):
+            return
+        n_in = int(st.get("lap") or 0)
+        group = [n_in, n_in + 1]
+        if n_in < 2 or any(n not in self._lap_time_by_num for n in group):
+            return                       # out-lap not finished yet
+        st["_lap_loss_tried"] = True
+        before = [self._lap_time_by_num[n] for n in sorted(self._lap_time_by_num)
+                  if 1 < n < n_in and n not in self.pit_laps]
+        ref = reference_pace(before)
+        if not ref:
+            return
+        excess = sum(self._lap_time_by_num[n] for n in group) - len(group) * ref
+        if not (5.0 < excess < 300.0):
+            return
+        st["lap_loss"] = excess
+        snap = snapshot
+        self.pit_stop_tracker.record_lap_based_loss(snap.track_name, snap.track_variation, excess, st.get("stationary", 0.0))
+
+    def _stop_loss_estimate(self, snap: TelemetrySnapshot) -> float:
+        """What a mandatory stop costs: our own measured stop this race, else the learned estimate (tyres)."""
+        losses = [st["lap_loss"] for st in self.pit_stop_tracker.session_stops if st.get("lap_loss")]
+        losses = losses or [st["loss"] for st in self.pit_stop_tracker.session_stops if st.get("loss")]
+        if losses:
+            return float(sorted(losses)[len(losses) // 2])
+        loss, _, _ = self.pit_stop_tracker.predict_stop_loss(snap.track_name, snap.track_variation, snap.car_name,
+                                                             0.0, change_tyres=True)
+        return float(loss)
+
+    def position_after_stops(self, snapshot: Optional[TelemetrySnapshot] = None):
+        """(order after everyone's mandatory stop, our name, stop loss) or None when it doesn't apply."""
+        from race.strategy import strategy_engine
+        snap = snapshot or self.current_snapshot
+        if snap is None or get_session_group(snap.session_state) != "RACE" or snap.is_race_finished:
+            return None
+        if not self.fuel_ledger.started or snap.pit_mode.value > 0:
+            return None
+        known, _ = strategy_engine.mandatory_source(snap)
+        if known is not True:
+            return None
+        me = self.player_participant(snap)
+        parts = [p for p in snap.participants if p.is_active and p.position > 0 and getattr(p, "race_state", 2) not in (4, 5, 6)]
+        leader = next((p for p in parts if p.position == 1), None)
+        if me is None or leader is None:
+            return None
+        loss = self._stop_loss_estimate(snap)
+        served_me = self.mandatory_served_lap() is not None
+        cars, missing = [], 0
+        for p in parts:
+            gap = 0.0 if p is leader else self.gap_clock.gap(leader.name, p.name)
+            if gap is None:
+                missing += 1
+                continue
+            if p.name == me.name:
+                cars.append({"name": p.name, "position": p.position, "gap_to_leader": gap, "still_to_stop": not served_me})
+                continue
+            stops = timing_board.stops_for(p.name)
+            in_pit = getattr(p, "pit_mode", 0) > 0
+            elapsed = self.pit_stop_tracker.competitor_pit_elapsed(p.name.strip().lower()) if in_pit else None
+            cars.append({"name": p.name, "position": p.position, "gap_to_leader": gap,
+                         "still_to_stop": (stops == 0) and not in_pit,
+                         "pit_elapsed": (elapsed or 0.0) if in_pit else None})
+        if missing > max(2, len(parts) // 5):
+            return None
+        if not any(c["still_to_stop"] or c.get("pit_elapsed") is not None for c in cars):
+            return None          # everyone has stopped: the road order is the real order
+        return order_after_stops(cars, loss), me.name, loss
+
+    def position_after_stops_block(self, snapshot: Optional[TelemetrySnapshot] = None) -> str:
+        res = self.position_after_stops(snapshot)
+        if not res:
+            return ""
+        order, me, loss = res
+        return describe_for_driver(order, me, loss)
+
+    TRAIN_GAP_SEC = 1.2      # cars closer than this nose-to-tail count as one train
+
+    def strategy_options_block(self, snapshot: Optional[TelemetrySnapshot] = None) -> str:
+        """
+        The facts a strategist weighs when a stop is still to come: are we stuck in a train, where would we
+        rejoin if we boxed now (in clean air or in traffic), and who around us still has to stop.
+        Empty when no stop is pending.
+        """
+        snap = snapshot or self.current_snapshot
+        self._strategy_flags = {"held_up": False, "clean_rejoin": False}
+        if snap is None or get_session_group(snap.session_state) != "RACE" or snap.is_race_finished:
+            return ""
+        strat = self.get_current_strategy()
+        fuel = self.get_current_fuel_status()
+        fuel_stop = bool(fuel.needs_pit_stop)
+        if not (strat.mandatory_stop_pending or fuel_stop):
+            return ""
+        me = self.player_participant(snap)
+        if me is None:
+            return ""
+        parts = sorted((p for p in snap.participants if p.is_active and p.position > 0), key=lambda p: p.position)
+        by_pos = {p.position: p for p in parts}
+        rd = self.get_race_distance(snap)
+        laps_to_go = rd.laps_incl_current if (rd is not None and rd.mode != "NONE") else None
+
+        why = []
+        if strat.mandatory_stop_pending:
+            why.append("mandatory stop not served yet")
+        if fuel_stop:
+            why.append(f"fuel: must box by Lap {fuel.latest_safe_pit_lap}" if fuel.latest_safe_pit_lap else "fuel stop needed")
+        lines = ["[PIT STRATEGY OPTIONS — COMPUTED, think like the strategist]",
+                 f"  Stop still to make: {', '.join(why)}" + (f" | {laps_to_go} laps to go incl. this one" if laps_to_go else "")]
+
+        # The train ahead of us
+        chain, cur, span = [], me, 0.0
+        while True:
+            ahead = by_pos.get(cur.position - 1)
+            if ahead is None or getattr(ahead, "pit_mode", 0) > 0:
+                break
+            g = self.gap_clock.gap(ahead.name, cur.name)
+            if g is None or g > self.TRAIN_GAP_SEC:
+                break
+            chain.append(ahead)
+            span += g
+            cur = ahead
+        my_best = min([t for n, t in enumerate(self.lap_times, start=1) if n > 1 and n not in self.pit_laps and t > 20] or [0.0]) \
+            or (snap.best_lap_time if snap.best_lap_time > 20 else 0.0)
+        a = by_pos.get(me.position - 1)
+        if chain:
+            head = chain[-1]
+            their = a.last_lap_time if a is not None and a.last_lap_time > 20 else 0.0
+            pace_txt = ""
+            if their and my_best:
+                d = their - my_best
+                pace_txt = (f"; the car ahead's last lap was {d:.1f}s slower than your best - you're being held up" if d >= 0.3
+                            else "; the train is running about your pace")
+                self._strategy_flags["held_up"] = d >= 0.3
+            lines.append(f"  Traffic: you're in a train of {len(chain) + 1} cars, P{head.position} {head.name} to you, "
+                         f"{span:.1f}s nose to tail{pace_txt}")
+        elif a is not None:
+            ga = self.gap_clock.gap(a.name, me.name)
+            lines.append(f"  Traffic: clear air - P{a.position} {a.name} is {ga:.1f}s ahead" if ga is not None
+                         else "  Traffic: car ahead gap unknown")
+        else:
+            lines.append("  Traffic: you're leading - clean air")
+
+        # Where a stop now puts us
+        if strat.rejoin_summary and "If you pit" in strat.rejoin_summary:
+            gaps = [float(x) for x in re.findall(r"~(\d+(?:\.\d+)?)s\)", strat.rejoin_summary)]
+            clean = bool(gaps) and min(gaps) >= 2.0
+            self._strategy_flags["clean_rejoin"] = clean
+            lines.append(f"  Box this lap -> {strat.rejoin_summary.replace('If you pit: ', '')}"
+                         + (" - CLEAN AIR" if clean else " - into traffic" if gaps else ""))
+
+        # Who still has to stop
+        def not_stopped(ps):
+            out = []
+            for p in ps:
+                n = timing_board.stops_for(p.name)
+                if n is not None and n == 0:
+                    out.append(p)
+            return out
+        ahead_cars = [p for p in parts if p.position < me.position][-6:]
+        behind_cars = [p for p in parts if p.position > me.position][:4]
+        na, nb = not_stopped(ahead_cars), not_stopped(behind_cars)
+        if ahead_cars or behind_cars:
+            lines.append(f"  Still to stop: {len(na)} of the {len(ahead_cars)} cars ahead"
+                         + (f" ({', '.join(p.name for p in na[:4])})" if na else "")
+                         + f" | {len(nb)} of the {len(behind_cars)} behind")
+        if strat.mandatory_stop_pending and not fuel_stop:
+            lines.append("  How to weigh it: held up + clean rejoin favours boxing early (undercut); a quick group or a rejoin "
+                         "in traffic favours staying out and stopping late (overcut).")
+        return "\n".join(lines)
+
+    def _maybe_strategy_call(self, snapshot: TelemetrySnapshot, completed: int, laps_to_go: Optional[int]) -> bool:
+        """
+        Talk strategy when there's a real decision, not on a fixed lap: once the race has settled (4+ laps,
+        ~20% in) and we're stuck behind slower cars with a clean place to rejoin; otherwise at ~40% distance
+        if the stop is still to come; and one nudge at ~65% if we still haven't stopped.
+        """
+        if laps_to_go is None or laps_to_go < 3:
+            return False
+        total = completed + laps_to_go
+        done = completed / max(1, total)
+        if completed < 4 or done < 0.2:
+            return False
+        block = self.strategy_options_block(snapshot)
+        if not block:
+            return False
+        flags = getattr(self, "_strategy_flags", {}) or {}
+        key = None
+        if "plan" not in self._strategy_calls:
+            if flags.get("held_up") and flags.get("clean_rejoin"):
+                key, what = "plan", ("He's stuck behind slower cars and a stop now would put him in clean air - "
+                                     "the moment to talk about boxing early.")
+            elif done >= 0.4:
+                key, what = "plan", "The stop is still to come - talk him through when we'll do it and why."
+        elif "late" not in self._strategy_calls and done >= 0.65:
+            key, what = "late", "We still haven't stopped and the race is running out - firm up when we box."
+        if key is None:
+            return False
+        self._strategy_calls.add(key)
+        self._emit_event(
+            EventType.STRATEGY_PLAN,
+            EventPriority.MEDIUM,
+            f"Lap {completed} done, P{snapshot.position}, {laps_to_go} laps to go including this one. {what}",
+            {"lap": completed, "kind": key},
+            cooldown_seconds=30.0,
+        )
+        return True
 
     def _emit_rival_pitted(self, snapshot: TelemetrySnapshot, p):
         rel = p.position - snapshot.position
@@ -1461,12 +1837,81 @@ class RaceStateManager:
                 cooldown_seconds=30.0,
             )
 
+    # Race lengths the planning table covers (minutes / laps)
+    FUEL_PLAN_MINUTES = (10, 15, 20, 25, 30, 40, 45, 60)
+    FUEL_PLAN_LAPS = (10, 15, 20, 25, 30)
+
+    def fuel_planning_block(self) -> str:
+        """
+        Fuel numbers for planning the race, usable in quali or from the menus between sessions:
+        the burn we measured (this session, else earlier sessions with this car here) and the litres
+        for common race lengths. Pre-computed so the engineer doesn't do arithmetic.
+        """
+        snap = self.current_snapshot
+        ev = getattr(self, "_last_event", None)
+        if snap is not None and snap.car_name and snap.track_name:
+            car, track, var, cap = snap.car_name, snap.track_name, snap.track_variation, float(snap.fuel_capacity_liters or 0.0)
+        elif ev:
+            car, track, var, cap = ev
+        else:
+            return ""
+        burn, src = 0.0, ""
+        try:
+            if self.fuel_tracker.burn_source() == "measured" and self.fuel_tracker.get_avg_consumption() > 0.2:
+                burn = float(self.fuel_tracker.get_avg_consumption())
+                src = "measured this session"
+        except Exception:
+            pass
+        if burn <= 0:
+            try:
+                b = self.stats_store.fuel_burn(car, track, var)
+                if b:
+                    burn, src = float(b), "measured in earlier sessions with this car here"
+            except Exception:
+                pass
+        if burn <= 0:
+            return (f"[RACE FUEL PLANNING] No fuel burn measured yet for the {car} at {track} - "
+                    f"say so and suggest a few laps of practice to measure it; don't guess a number.")
+        pace = 0.0
+        try:
+            pace = float(self.stats_store.race_pace(car, track, var) or 0.0)
+        except Exception:
+            pass
+        if pace <= 20:
+            pace = self.representative_pace(snap) if snap is not None else 0.0
+        cap_str = f" | tank {cap:.0f} L" if cap > 1 else ""
+
+        def litres(laps: int) -> str:
+            need = (laps + 1) * burn
+            over = " (MORE THAN THE TANK - needs a fuel stop)" if cap > 1 and need > cap else ""
+            return f"{need:.1f} L{over}"
+
+        lines = [
+            "[RACE FUEL PLANNING — COMPUTED, for 'how much fuel for the race' questions]",
+            f"  {car} at {track} {var}{cap_str} | burn {burn:.2f} L/lap ({src})"
+            + (f" | race pace ~{int(pace // 60)}:{pace % 60:04.1f}" if pace > 20 else ""),
+        ]
+        if pace > 20:
+            timed = []
+            for m in self.FUEL_PLAN_MINUTES:
+                laps = int(math.ceil(m * 60.0 / pace))      # the leader finishes the lap the clock runs out in
+                timed.append(f"{m} min ~{laps} laps -> {litres(laps)}")
+            lines.append("  Timed races (incl. one spare lap): " + " | ".join(timed))
+        lines.append("  Lap races (incl. one spare lap): " + " | ".join(f"{n} laps -> {litres(n)}" for n in self.FUEL_PLAN_LAPS))
+        lines.append("  A '+1 lap' timed race needs one more lap of fuel. Use the row for the race length in the driver's "
+                     "brief or what he tells you; for other lengths it's laps x burn plus one lap.")
+        return "\n".join(lines)
+
     def get_context_extras(self) -> dict:
         """Extra facts for the LLM context (track position, race distance, fuel ledger, our stops)."""
         snap = self.current_snapshot
         if snap is None:
             return {}
         ex: dict = {"pit_laps": set(self.pit_laps), "start_position": self.start_position}
+        try:
+            ex["fuel_planning"] = self.fuel_planning_block()
+        except Exception as e:
+            logger.debug(f"fuel planning failed: {e}")
         try:
             pace = self.representative_pace(snap)
             ex["track_position"] = self.track_model.describe(snap, pace)
@@ -1475,6 +1920,14 @@ class RaceStateManager:
         grp = get_session_group(snap.session_state)
         if grp == "RACE":
             ex["race_distance"] = self.get_race_distance(snap)
+            try:
+                ex["strategy_options"] = self.strategy_options_block(snap)
+            except Exception as e:
+                logger.debug(f"strategy options failed: {e}")
+            try:
+                ex["after_stops"] = self.position_after_stops_block(snap)
+            except Exception as e:
+                logger.debug(f"position after stops failed: {e}")
             try:
                 ex["radar"] = self.radar.brief(snap)
             except Exception as e:
@@ -1555,7 +2008,11 @@ class RaceStateManager:
         track_var = self.current_snapshot.track_variation if self.current_snapshot else ""
         car = self.current_snapshot.car_name if self.current_snapshot else ""
         refuel = fuel.recommended_refuel_liters if fuel.needs_pit_stop else 0.0
-        pit_loss, breakdown, _ = self.pit_stop_tracker.predict_stop_loss(track_name, track_var, car, refuel)
+        # A mandatory stop still to make is a tyre stop: the rejoin projection must include the tyre change
+        known, _ = strategy_engine.mandatory_source(self.current_snapshot)
+        tyres = bool(known) and self.mandatory_served_lap() is None
+        pit_loss, breakdown, _ = self.pit_stop_tracker.predict_stop_loss(track_name, track_var, car, refuel,
+                                                                         change_tyres=tyres)
         return strategy_engine.compute_strategy(
             self.current_snapshot,
             fuel,
@@ -1563,7 +2020,22 @@ class RaceStateManager:
             estimated_pit_loss_sec=pit_loss,
             pit_loss_breakdown=breakdown,
             track_model=self.track_model,
+            mandatory_served_lap=self.mandatory_served_lap(),
         )
+
+    def mandatory_served_lap(self) -> Optional[int]:
+        """Lap of our first real pit stop in this race (any stop counts - tyre changes on near-new tyres
+        don't show up in the wear data), or None."""
+        snap = self.current_snapshot
+        if snap is None or get_session_group(snap.session_state) != "RACE":
+            return None
+        stops = self.pit_stop_tracker.session_stops
+        if stops:
+            return int(stops[0].get("lap") or 0) or None
+        laps = sorted(l for l in self.pit_laps if l > 1)
+        if laps and self.fuel_ledger.started:
+            return laps[0]
+        return None
 
     def get_current_tire_status(self) -> TireStatus:
         if not self.current_snapshot:

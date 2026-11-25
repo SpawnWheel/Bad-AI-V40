@@ -142,7 +142,10 @@ def build_telemetry_context(
         return "NO TELEMETRY AVAILABLE (no sim running - Automobilista 2 / RaceRoom - or no active session)."
 
     if snapshot.game_state == GameState.GAME_FRONT_END:
-        return "SESSION MODE: FRONT-END / PADDOCK MENU (Standing by to load into track session)."
+        menu = "SESSION MODE: FRONT-END / PADDOCK MENU, between sessions (Standing by to load into track session)."
+        if extras.get("fuel_planning"):
+            menu += "\n" + extras["fuel_planning"]
+        return menu
 
     if strategy is None:
         strategy = strategy_engine.compute_strategy(snapshot, fuel, tires)
@@ -302,6 +305,11 @@ def build_telemetry_context(
                 f"S3 {fmt_time(snapshot.sector3_time)} (best: {fmt_time(snapshot.best_sector3_time)})",
             ])
 
+        burn_txt = (f"burn {fuel.avg_per_lap:.2f} L/lap ({fuel.burn_source}), ~{fuel.laps_remaining_fuel:.1f} laps in the tank"
+                    if (fuel.avg_per_lap > 0.2 and fuel.burn_source != "default") else "burn not measured yet")
+        lines.append(f"[FUEL — don't bring it up yourself; answer if he asks] In the car now: {fuel.current_liters:.1f} L | {burn_txt}")
+        if extras.get("fuel_planning"):
+            lines.append(extras["fuel_planning"])
         lines.extend([
             f"[TIRES FOR FLYING LAP] {tires.compound} | Tread: {tire_temps_str}"
             + (f"\n{tyre_window}" if tyre_window else " (optimal grip window ~80–100°C)"),
@@ -384,6 +392,15 @@ def build_telemetry_context(
             lines.append("[TRACK POSITION]: IN THE PIT LANE")
         if extras.get("radar") and snapshot.race_state != RaceState.RACESTATE_NOT_STARTED:
             lines.append(extras["radar"])
+        try:
+            from utils.names import spoken_names_line
+            near = [p.name for p in sorted(snapshot.participants or (), key=lambda p: p.position)
+                    if p.is_active and p.name and (p.position == 1 or abs(p.position - snapshot.position) <= 5)]
+            sn = spoken_names_line(near)
+            if sn:
+                lines.append(sn)
+        except Exception:
+            pass
         lines.append(timing_board_table)
         if incidents_summary and "Track clear" not in incidents_summary:
             lines.append(incidents_summary)
@@ -403,6 +420,7 @@ def build_telemetry_context(
              if fuel.needs_pit_stop and fuel.pit_window_lap else f"  Short to the flag by: {fuel.fuel_required_liters:.1f}L net"),
             f"  AUTHORITATIVE FUEL STATUS: {strategy.fuel_status_label}",
             f"[PIT STRATEGY — AUTHORITATIVE]",
+            f"  {strategy.mandatory_line}" if strategy.mandatory_line else "",
             f"  Recommended Pit Window: {strategy.combined_pit_window}",
             (f"  Pit calls: heads-up at the start of Lap {fuel.pit_window_lap - 1}, 'box this lap' at the start of Lap {fuel.pit_window_lap}, reminder before pit entry"
              if fuel.needs_pit_stop and fuel.pit_window_lap else "  Pit calls: none planned"),
@@ -411,6 +429,8 @@ def build_telemetry_context(
             f"  Pit loss: {strategy.pit_loss_breakdown}" if strategy.pit_loss_breakdown else f"  {pit_loss_desc}",
             f"  Pit Urgency: {strategy.pit_urgency}",
             f"  Strategy Rationale: {strategy.rationale}",
+            extras.get("strategy_options") or "",
+            extras.get("after_stops") or "",
             f"[TIRE LIFE & HEALTH] {tires.compound} | Temps: {tire_temps_str}{balance_note}",
             f"  Life: {tire_life_str}",
             f"  Condition: {tires.condition_summary}",

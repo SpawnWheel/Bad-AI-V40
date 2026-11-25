@@ -4,6 +4,7 @@ Pre-calculates all fuel, pit stop, mandatory regulation, and tactical targets
 so the LLM race engineer never invents or calculates numbers.
 """
 
+import re
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 from telemetry.collector import TelemetrySnapshot
@@ -51,25 +52,71 @@ class RaceStrategy:
     fuel_at_planned_stop: float = 0.0
     pit_loss_breakdown: str = ""
 
+    # One line for the engineer: is there a mandatory stop, and is it done?
+    mandatory_line: str = ""
+
+
+_MANDATORY_RE = re.compile(r"\b(mandatory|compulsory|enforced|required|obligatory)\b[^.\n]{0,30}\b(pit|stop|tyre|tire)", re.I)
+_MANDATORY_RE2 = re.compile(r"\b(pit|tyre|tire)[- ]?stop\b[^.\n]{0,20}\b(mandatory|compulsory|required)\b", re.I)
+_NO_MANDATORY_RE = re.compile(r"\b(no|not a|without( a)?)\s+(mandatory|compulsory|required)\b[^.\n]{0,20}\b(pit|stop)", re.I)
+
+
+def text_declares_mandatory_stop(text: str) -> Optional[bool]:
+    """True if the text says there is a mandatory stop, False if it says there isn't, None if it doesn't say."""
+    t = text or ""
+    if _NO_MANDATORY_RE.search(t):
+        return False
+    if _MANDATORY_RE.search(t) or _MANDATORY_RE2.search(t):
+        return True
+    return None
+
 
 class RaceStrategyEngine:
     def __init__(self):
-        self.driver_declared_mandatory_stop: bool = False
+        # None = the driver hasn't said; True / False = he told us over the radio
+        self.driver_declared_mandatory_stop: Optional[bool] = None
         self.driver_declared_pit_lap: Optional[int] = None
         self.player_stops_completed: int = 0
         self._last_pit_mode: int = 0
         self._last_announced_strategy: Optional[str] = None
+        # config strategy.mandatory_pit_stop: "auto" (sim data / brief / radio), "yes" or "no"
+        self.config_mandatory: str = "auto"
+        self._declared_track: str = ""
+        self.brief_mandatory: Optional[bool] = None   # from the driver's pre-race brief (persists across sessions)
 
     def reset(self):
-        self.driver_declared_mandatory_stop = False
+        # The driver's word on a mandatory stop is kept across practice -> quali -> race at the same track
+        # (he often says it before the race); mandatory_source() drops it when the track changes.
         self.driver_declared_pit_lap = None
         self.player_stops_completed = 0
         self._last_pit_mode = 0
         self._last_announced_strategy = None
 
-    def on_driver_mandatory_stop_declared(self, enabled: bool = True):
-        """Called when driver informs engineer over radio that a mandatory pit stop is required."""
+    def on_driver_mandatory_stop_declared(self, enabled: bool = True, track: str = ""):
+        """Called when the driver tells us over the radio whether there is a mandatory pit stop."""
         self.driver_declared_mandatory_stop = enabled
+        self._declared_track = track or self._declared_track
+
+    def set_driver_brief(self, brief: str):
+        self.brief_mandatory = text_declares_mandatory_stop(brief)
+
+    def mandatory_source(self, snapshot: Optional[TelemetrySnapshot]) -> Tuple[Optional[bool], str]:
+        """(is there a mandatory stop? True / False / None = unknown, where that comes from)."""
+        cfg = str(self.config_mandatory or "auto").strip().lower()
+        if cfg in ("no", "false", "off", "0"):
+            return False, "config"
+        if cfg in ("yes", "true", "on", "1"):
+            return True, "config"
+        if self.driver_declared_mandatory_stop is not None and snapshot is not None and self._declared_track                 and snapshot.track_name and snapshot.track_name != self._declared_track:
+            self.driver_declared_mandatory_stop = None      # that was another event
+        if self.driver_declared_mandatory_stop is not None:
+            return self.driver_declared_mandatory_stop, "driver on the radio"
+        if self.brief_mandatory is not None:
+            return self.brief_mandatory, "driver's pre-race brief"
+        lap = int(getattr(snapshot, "enforced_pit_stop_lap", -1) or -1) if snapshot is not None else -1
+        if lap > 0:
+            return True, f"sim rules (enforced pit stop lap {lap})"
+        return None, ""
 
     def update_pit_tracking(self, pit_mode_value: int):
         """Tracks when player enters and completes pit stops."""
@@ -86,6 +133,7 @@ class RaceStrategyEngine:
         estimated_pit_loss_sec: float = 45.0,
         pit_loss_breakdown: str = "",
         track_model=None,
+        mandatory_served_lap: Optional[int] = None,
     ) -> RaceStrategy:
         if not snapshot:
             return RaceStrategy(
@@ -117,10 +165,27 @@ class RaceStrategyEngine:
         current_lap = snapshot.current_lap
         sim_enforced_lap = -1
 
-        # 1. Mandatory Pit Stop (Disabled — strategy relies strictly on fuel and tires)
-        mandatory_required = False
-        mandatory_source = "NONE"
-        mandatory_pending = False
+        # 1. Mandatory pit stop: only when the sim rules, the driver's brief, the driver on the radio or the
+        #    config say so. Unknown is said as unknown, so the engineer never tells him "no stop needed" in a
+        #    race that has one (Oulton, Nov 2026: "fuel's safe, no stop needed" in a mandatory-stop race).
+        known, src = self.mandatory_source(snapshot)
+        mandatory_required = bool(known)
+        mandatory_source = src.upper() if src else "NONE"
+        sim_enforced_lap = int(getattr(snapshot, "enforced_pit_stop_lap", -1) or -1)
+        served = mandatory_served_lap is not None
+        mandatory_pending = mandatory_required and not served
+        if known is True:
+            if served:
+                mandatory_line = f"Mandatory stop: REQUIRED ({src}) - SERVED on Lap {mandatory_served_lap}. Nothing more to do for it."
+            else:
+                mandatory_line = (f"Mandatory stop: REQUIRED ({src}) and NOT SERVED YET. Fuel and tyres may be fine, "
+                                  f"but we still have to stop - never say 'no stop needed'.")
+        elif known is False:
+            mandatory_line = f"Mandatory stop: none in this race ({src})."
+        else:
+            mandatory_line = ("Mandatory stop: NOT KNOWN for this race (nothing in the sim data, the driver's brief or "
+                              "on the radio). Don't claim there is or isn't one: say fuel and tyres are good to the flag, "
+                              "not 'no stop needed'.")
 
         # 2. Fuel Metrics
         fuel_deficit = fuel.fuel_deficit_laps
@@ -164,6 +229,13 @@ class RaceStrategyEngine:
             # Check if we are currently inside the recommended window
             if current_lap >= (fuel.earliest_safe_pit_lap or current_lap):
                 pit_urgency = "PIT WINDOW OPEN"
+        elif mandatory_pending:
+            laps_left = fuel.laps_remaining_race
+            if 0 < laps_left <= 2.2:
+                pit_urgency = "BOX THIS LAP (MANDATORY STOP NOT SERVED)"
+            else:
+                pit_urgency = "MANDATORY STOP STILL TO SERVE"
+            rationale_parts.append(f"Mandatory stop not served yet ({src}); fuel safe to the flag (+{fuel_surplus:.1f} laps), so the lap is ours to choose")
         else:
             pit_urgency = "NO PIT REQUIRED"
             if fuel.is_empty_risk and can_finish_fuel:
@@ -176,6 +248,8 @@ class RaceStrategyEngine:
             combined_window = fuel_window_str
             if fuel.pit_window_lap:
                 combined_window += f" | PLANNED: box at the end of Lap {fuel.pit_window_lap}, add ~{fuel.recommended_refuel_liters:.0f} L"
+        elif mandatory_pending:
+            combined_window = "Mandatory stop to serve - any lap before the flag (fuel doesn't force a lap; pick it for traffic / clean air)"
         else:
             combined_window = "No stop scheduled"
 
@@ -287,6 +361,7 @@ class RaceStrategyEngine:
             planned_refuel_liters=fuel.recommended_refuel_liters,
             fuel_at_planned_stop=fuel.fuel_at_planned_stop,
             pit_loss_breakdown=pit_loss_breakdown,
+            mandatory_line=mandatory_line,
         )
 
 

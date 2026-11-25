@@ -57,6 +57,7 @@ class CompetitorTimingBoard:
         self._last_session: SessionState = SessionState.SESSION_INVALID
         self._last_lap: int = -1
         self.track_model = None      # set by RaceStateManager (true time gaps from the reference lap)
+        self.gap_clock = None        # set by RaceStateManager (measured gaps from distance history)
         self.pit_projector = None    # callable(participant, gap_sec) -> str for cars in the pit lane
 
     def reset(self):
@@ -111,6 +112,19 @@ class CompetitorTimingBoard:
             in_p = (snapshot.pit_mode.value > 0) if is_p else (p.pit_mode > 0)
             key = pname if is_p else (p.name.strip().lower() if p.name else f"driver_{p.position}")
             self._update_driver_pit_stops(key, in_p)
+
+    def _clock_gap(self, p, me) -> Optional[float]:
+        """Signed gap from the gap clock: positive = p is ahead of us on the road."""
+        gc = self.gap_clock
+        if gc is None:
+            return None
+        tp, tm = gc.total(p.name), gc.total(me.name)
+        if tp is None or tm is None:
+            return None
+        g = gc.gap(p.name, me.name) if tp >= tm else gc.gap(me.name, p.name)
+        if g is None:
+            return None
+        return g if tp >= tm else -g
 
     def analyze(self, snapshot: TelemetrySnapshot) -> Tuple[List[CompetitorEntry], str]:
         """
@@ -213,6 +227,8 @@ class CompetitorTimingBoard:
                     gap_sec = snapshot.split_time_ahead
                 elif p.position == player_pos + 1 and snapshot.split_time_behind > 0:
                     gap_sec = -snapshot.split_time_behind
+                elif player_p and self._clock_gap(p, player_p) is not None:
+                    gap_sec = self._clock_gap(p, player_p)
                 elif player_p and (player_p.lap > 0 or player_p.lap_distance > 0) and (p.lap > 0 or p.lap_distance > 0):
                     p_dist = p.lap * track_len + p.lap_distance
                     player_dist = player_p.lap * track_len + player_p.lap_distance

@@ -192,7 +192,7 @@ class TestPitStopTracker(unittest.TestCase):
         loss, breakdown, ok = self.tracker.predict_stop_loss("Interlagos", "Grand Prix", "Porsche 911 GT3 R", 30.0)
         self.assertTrue(ok)
         self.assertAlmostEqual(loss, 26.0, places=0)
-        self.assertIn("drive-through", breakdown)
+        self.assertIn("driving loss", breakdown)
         self.assertIn("20.0 L added", self.tracker.last_stop_summary())
 
     def test_telemetry_garage_visit_filtered(self):

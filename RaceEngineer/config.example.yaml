@@ -74,6 +74,9 @@ strategy:
                                # lap(s) after the clock ran out" shows what actually happened.
   predict_leader_pit_stop: true  # Timed races: if the leader hasn't pitted yet and the race can't be done on one
                                # tank, include his stop when working out the final lap (single-class racing).
+  mandatory_pit_stop: auto     # auto = from AMS2's enforced-stop rule, your pre-race brief ("mandatory pit stop")
+                               # or what you tell the engineer on the radio. yes / no forces it. Until it's known
+                               # he says "fuel's good to the flag", never "no stop needed".
 
 engineer:
   # ---- WHO IS YOUR ENGINEER? -------------------------------------------------------------

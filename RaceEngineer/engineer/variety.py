@@ -20,6 +20,8 @@ DEFAULT_CLICHES = [
     "keep your head down", "head down", "bring it home", "looks untouchable", "stay focused",
     "focus on your exits", "hunt him down", "on your gearbox", "keep pushing", "good job",
     "copy that", "nice work", "you're running", "heads up", "authoritative", "no drama",
+    "keep it clean", "including this one", "fuel and tyres are", "gaps are safe", "sweet", "go and get him",
+    "get him done", "mega", "tidy",
 ]
 
 # Event -> (mood delta, tension delta)
@@ -179,7 +181,8 @@ class VarietyTracker:
                              f"pick a different, more specific shade than '{common}'.")
 
         fresh_vocab = [v for v in self.vocabulary if v not in self._used_vocab]
-        if fresh_vocab:
+        # A catchphrase now and then sounds human; offered every call it sounds like a bot. Roughly one call in five.
+        if fresh_vocab and self.rng.random() < 0.2:
             picks = self.rng.sample(fresh_vocab, k=min(2, len(fresh_vocab)))
-            lines.append("- Optional flavour if (and only if) it fits naturally: " + " | ".join(f'"{p}"' for p in picks) + ".")
+            lines.append("- Optional flavour, ONLY for a genuinely good or bad moment (never a routine call): " + " | ".join(f'"{p}"' for p in picks) + ".")
         return "\n".join(lines)

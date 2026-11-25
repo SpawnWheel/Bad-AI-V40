@@ -162,6 +162,9 @@ class GeminiTTS:
                 logger.error(f"Failed to initialize Gemini Client for TTS: {e}")
 
     # ================================================================ session
+    # {name as the model writes it: how to say it} - refreshed by the app from the live field
+    name_map: dict = {}
+
     def reset_session(self):
         """New session: give the primary model another chance after quota fallbacks."""
         if self._exhausted_models:
@@ -337,6 +340,11 @@ class GeminiTTS:
         # Drop a lone trailing event after the last sentence (sounds odd over radio)
         s = re.sub(r"\s*<(short pause|long pause)>\s*$", "", s)
 
+        try:
+            from utils.names import apply_name_map
+            s = apply_name_map(s, self.name_map)
+        except Exception:
+            pass
         s = self._normalise_for_speech(s)
         return s, cues
 

@@ -33,6 +33,7 @@ from .prompts import (
     get_system_prompt,
     PROACTIVE_EVENT_PROMPT,
     PIT_WALL_UPDATE_PROMPT,
+    STRATEGY_PLAN_PROMPT,
     DRIVER_QUESTION_PROMPT,
     DRIVER_AUDIO_DIRECT_PROMPT,
     RACE_UPDATE_PROMPT,
@@ -296,6 +297,19 @@ class RaceEngineerBrain:
             text = item.get("text", "")
             lines.append(f"  * {speaker}: \"{text}\"")
         return "\n".join(lines) + variety
+
+    def _note_mandatory_stop(self, transcript: str):
+        """'There's a mandatory stop' / 'no mandatory stop' on the radio feeds the strategy engine."""
+        try:
+            from race.strategy import strategy_engine, text_declares_mandatory_stop
+            said = text_declares_mandatory_stop(transcript)
+            if said is not None:
+                parts = (self.context_key or "").split("|")
+                track = parts[1] if len(parts) > 1 else ""
+                strategy_engine.on_driver_mandatory_stop_declared(said, track=track)
+                logger.info(f"[STRATEGY] Driver says mandatory stop: {'yes' if said else 'no'}.")
+        except Exception as e:
+            logger.debug(f"mandatory stop note failed: {e}")
 
     def _prompt_extras(self) -> str:
         """Per-call extras: engineer's notebook + variety/mood guidance (history is sent as turns)."""
@@ -758,7 +772,10 @@ class RaceEngineerBrain:
         if not self.client:
             return (None if is_update else event.message), fallback_emotion, fallback_delivery
 
-        template = PIT_WALL_UPDATE_PROMPT if is_update else PROACTIVE_EVENT_PROMPT
+        if event.event_type == EventType.STRATEGY_PLAN:
+            template = STRATEGY_PLAN_PROMPT
+        else:
+            template = PIT_WALL_UPDATE_PROMPT if is_update else PROACTIVE_EVENT_PROMPT
         prompt = template.format(
             event_description=event.message,
             telemetry_context=context_str,
@@ -816,6 +833,7 @@ class RaceEngineerBrain:
             if transcript:
                 logger.info(f"[DRIVER RADIO] 🎙️ \"{transcript}\"")
                 self.history.append({"speaker": "Driver", "text": transcript})
+                self._note_mandatory_stop(transcript)
                 intent = reply.intent
                 if not intent:
                     intent = classify_driver_intent(transcript)[0].value.lower()

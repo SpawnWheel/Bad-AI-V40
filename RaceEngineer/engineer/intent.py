@@ -72,7 +72,7 @@ def classify_driver_intent(transcript: str) -> Tuple[DriverIntent, bool, Optiona
         return (
             DriverIntent.SITREP_QUERY,
             True,
-            "The driver is asking for a Situation Report (SitRep). Deliver a rich, punchy 3 to 4 sentence update covering BOTH: (1) Your essential race status (position, gaps & pace vs immediate rivals ahead/behind, and fuel/tyre status), AND (2) The wider race picture (analyze [COMPETITOR TIMING & PACE BOARD] to state who is leading and who looks likely to take the win based on pace/gaps/stops, plus any notable earlier spins/incidents from [RACE STORYLINES & INCIDENT RECOVERY LOG] and how those drivers are doing now)."
+            "The driver is asking for a Situation Report (SitRep). About 35 words of clipped radio: position and laps to go, then the cars ahead and behind from [WHAT MATTERS NOW] (gaps, closing or not, a faster car coming), then only what needs action (the pit plan). The wider race only if he asks for it."
         )
 
     # 4. Driver declaration of intent / action
@@ -113,7 +113,7 @@ def classify_driver_intent(transcript: str) -> Tuple[DriverIntent, bool, Optiona
         return (
             DriverIntent.FUEL_QUERY,
             True,
-            "The driver is asking about FUEL, RANGE, or FINISHING THE RACE. Check [FUEL STATUS — COMPUTED] and Fuel Urgency. If the driver will finish before running out (SURPLUS / NOT URGENT), reassure them that they are fine to the finish and do not need to pit. If there is a DEFICIT / URGENT risk, state the deficit and necessary action."
+            "The driver is asking about FUEL. In a race: check [FUEL STATUS — COMPUTED] and Fuel Urgency - if he will finish (SURPLUS / NOT URGENT) say fuel is good to the flag (if a mandatory stop is still to serve, say the stop is still on even though fuel is fine); if there is a DEFICIT, state it and the action. In qualifying, practice or between sessions: answer from [FUEL] / [RACE FUEL PLANNING] (what's in the car, burn per lap, litres for the race length). Never say you can't talk about fuel."
         )
 
     # 8. Pit strategy & competitor pit stop queries
@@ -125,7 +125,7 @@ def classify_driver_intent(transcript: str) -> Tuple[DriverIntent, bool, Optiona
         return (
             DriverIntent.PIT_STRATEGY_QUERY,
             True,
-            "The driver is asking about PIT STRATEGY or COMPETITOR PIT STOPS. For the driver's own strategy, quote [PIT STRATEGY — AUTHORITATIVE] based purely on fuel and tyres (never claim a mandatory pit stop). If asking whether the field or rivals have pitted, report from 'Cars Pitted' in [GRID SUMMARY] and the 'Stops' column in [COMPETITOR TIMING & PACE BOARD]."
+            "The driver is asking about PIT STRATEGY or COMPETITOR PIT STOPS. For his own strategy use [PIT STRATEGY — AUTHORITATIVE] (fuel, tyres and its 'Mandatory stop' line) and [PIT STRATEGY OPTIONS], and give a recommendation. If asking whether the field or rivals have pitted, report from 'Cars Pitted' in [GRID SUMMARY] and the 'Stops' column in [COMPETITOR TIMING & PACE BOARD]."
         )
 
     # 9. Gaps & Rivals queries

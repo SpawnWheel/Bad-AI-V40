@@ -51,6 +51,7 @@ ESSENTIAL_ALERTS = {
 
 # Nice-to-have calls: spoken in silent mode too, but only while the daily voice budget has room
 OPTIONAL_ALERTS = {
+    EventType.STRATEGY_PLAN,
     EventType.QUALI_LAP_COMPLETED,      # (a new PB is treated as essential)
     EventType.LEADER_PITTED,            # (only when we're fighting for the lead)
     EventType.RIVAL_PITTED,
@@ -190,6 +191,10 @@ class RaceEngineerApp:
             box_reminder_sec=float(strategy_cfg.get("box_reminder_before_pit_entry_sec", 20)),
             timed_race_extra_laps=strategy_cfg.get("timed_race_extra_laps", "auto"),
         )
+        # Mandatory pit stop: "auto" = from the sim's rules, the pre-race brief or what the driver says on the radio
+        from race.strategy import strategy_engine
+        strategy_engine.config_mandatory = str(strategy_cfg.get("mandatory_pit_stop", "auto"))
+        strategy_engine.set_driver_brief(os.environ.get("RACE_ENGINEER_DRIVER_BRIEF", ""))
 
         invert_bias = bool(telem_cfg.get("brake_bias_is_rear_share", False))
         self.brake_bias_note = "" if telem_cfg.get("brake_bias_verified", False) else (
@@ -268,6 +273,12 @@ class RaceEngineerApp:
 
     def _get_current_context_string(self) -> str:
         snap = self.collector.latest
+        try:
+            if snap is not None and snap.participants:
+                from utils.names import build_name_map
+                self.tts.name_map = build_name_map(p.name for p in snap.participants if p.name)
+        except Exception as e:
+            logger.debug(f"name map failed: {e}")
         fuel = self.state_manager.get_current_fuel_status()
         tires = self.state_manager.get_current_tire_status()
         gaps = self.state_manager.get_current_gap_analysis()
@@ -391,10 +402,16 @@ class RaceEngineerApp:
         d = event.details or {}
         lap = int(d.get("lap", 0) or 0)
         keys = list(d.get("keys") or [])
-        if self._proactive_calls >= self.proactive_max_per_race:
+        threat = any(str(k).startswith("threat:") for k in keys)
+        # A car closing in from behind is always worth the radio; it doesn't use up the per-race allowance
+        if self._proactive_calls >= self.proactive_max_per_race and not threat:
             return False
         since_radio = time.time() - self._last_radio_time
-        if keys:
+        if d.get("mid_lap"):
+            # Breaking in mid-lap for a fast-closing car: only needs a moment of quiet on the radio
+            if since_radio < 15.0:
+                return False
+        elif keys:
             min_gap = 1 if d.get("urgent") else self.proactive_min_laps_between
             if lap - self._last_proactive_lap < min_gap or since_radio < 20.0:
                 return False

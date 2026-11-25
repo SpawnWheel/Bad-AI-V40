@@ -56,6 +56,7 @@ class EventType:
     BATTLE_ENTERED = "battle_entered"
     RIVAL_PITTED = "rival_pitted"        # a car within two places of us went into the pits
     PIT_WALL_UPDATE = "pit_wall_update"  # lap-end update: a car closing / being caught, or a long quiet spell
+    STRATEGY_PLAN = "strategy_plan"      # early in the race (and at half distance): the pit-stop options and our call
     LEADER_PITTED = "leader_pitted"
     TIRE_OVERHEAT = "tire_overheat"
     SESSION_CHANGED = "session_changed"

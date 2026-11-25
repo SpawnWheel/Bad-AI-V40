@@ -1,3 +1,4 @@
+import dataclasses
 """
 Unit tests for Strategy Engine and Intent Classifier.
 """
@@ -53,9 +54,9 @@ class TestStrategyAndIntent(unittest.TestCase):
         self.assertEqual(intent, DriverIntent.ACKNOWLEDGEMENT)
         self.assertFalse(telem)
 
-    def test_mandatory_stop_ignored_when_fuel_and_tires_safe(self):
-        # Even if enforced_pit_stop_lap is set or driver_declared_mandatory_stop is called,
-        # mandatory stop logic is disabled and strategy relies purely on fuel and tyres.
+    def test_mandatory_stop_kept_when_fuel_and_tires_safe(self):
+        # A declared mandatory stop must not turn into "no stop needed" just because fuel and tyres would last
+        # (Oulton, Nov 2026). Once a race stop has happened it is served.
         self.engine.on_driver_mandatory_stop_declared(True)
 
         fuel = FuelStatus(
@@ -158,10 +159,28 @@ class TestStrategyAndIntent(unittest.TestCase):
 
         strat = self.engine.compute_strategy(snap, fuel, tires)
 
-        self.assertFalse(strat.mandatory_stop_required)
-        self.assertEqual(strat.mandatory_stop_source, "NONE")
-        self.assertFalse(strat.mandatory_stop_pending)
-        self.assertEqual(strat.pit_urgency, "NO PIT REQUIRED")
+        self.assertTrue(strat.mandatory_stop_required)
+        self.assertEqual(strat.mandatory_stop_source, "DRIVER ON THE RADIO")
+        self.assertTrue(strat.mandatory_stop_pending)
+        self.assertEqual(strat.pit_urgency, "MANDATORY STOP STILL TO SERVE")
+        self.assertIn("NOT SERVED", strat.mandatory_line)
+
+        served = self.engine.compute_strategy(snap, fuel, tires, mandatory_served_lap=4)
+        self.assertFalse(served.mandatory_stop_pending)
+        self.assertEqual(served.pit_urgency, "NO PIT REQUIRED")
+        self.assertIn("SERVED on Lap 4", served.mandatory_line)
+
+        # Nobody said anything: the sim's enforced lap is the only source; with none it's unknown, never "no stop"
+        fresh = RaceStrategyEngine()
+        sim_only = fresh.compute_strategy(snap, fuel, tires)
+        self.assertTrue(sim_only.mandatory_stop_pending)
+        unknown = fresh.compute_strategy(dataclasses.replace(snap, enforced_pit_stop_lap=-1), fuel, tires)
+        self.assertFalse(unknown.mandatory_stop_required)
+        self.assertIn("NOT KNOWN", unknown.mandatory_line)
+
+        # "No mandatory stop" on the radio overrides the sim
+        fresh.on_driver_mandatory_stop_declared(False)
+        self.assertFalse(fresh.compute_strategy(snap, fuel, tires).mandatory_stop_required)
 
     def test_fuel_intent_phrases(self):
         for phrase in [

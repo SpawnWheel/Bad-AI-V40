@@ -236,7 +236,9 @@ class TestSpeakGate(unittest.TestCase):
         app._last_radio_time = 0.0
         self.assertTrue(app._should_speak(upd(8, ["threat:A2"], urgent=True)))  # urgent: one lap is enough
         app._last_radio_time = 0.0
-        self.assertFalse(app._should_speak(upd(12, ["threat:C"])))            # cap of 3 reached
+        self.assertFalse(app._should_speak(upd(12, ["catch:C"])))             # cap of 3 reached
+        app._last_radio_time = 0.0
+        self.assertTrue(app._should_speak(upd(14, ["threat:C"])))             # a car closing in still gets through
 
     def test_routine_update_needs_a_long_quiet_spell(self):
         app = self.make_app()

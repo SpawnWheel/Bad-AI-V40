@@ -206,6 +206,12 @@ class TelemetryCollector:
         self.active_sim: Optional[str] = None
         self._last_liveness_check = 0.0
         self._r3e_layout_checked = False
+        # AMS2: which participant is OUR car. mViewedParticipantIndex follows the camera, which can sit on
+        # another car (seen at the end of races: the engineer called thommo's P8 as our finish).
+        self._player_lock_name: str = ""
+        self._player_lock_track: str = ""
+        self._player_candidate: str = ""
+        self._player_candidate_hits = 0
 
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -300,6 +306,47 @@ class TelemetryCollector:
         self.reader.disconnect()
         logger.info("Telemetry collector stopped.")
 
+    # Ticks in a row the viewed car must match our own car's speed before it is taken as us
+    PLAYER_CONFIRM_TICKS = 3
+
+    def _resolve_player_index(self, raw, viewed_idx: int, dec) -> int:
+        """
+        The participant that is really OUR car. AMS2 only publishes the camera's car
+        (mViewedParticipantIndex); our own speed (mSpeed) is always the local car. When the viewed car
+        moves at exactly our speed for a few ticks it is us and its name is locked; if the camera later
+        moves to another car, we keep following the locked name.
+        """
+        n = min(int(raw.mNumParticipants), 64)
+        track = dec(raw.mTrackLocation) + "|" + dec(raw.mTrackVariation)
+        if track != self._player_lock_track:
+            self._player_lock_track = track
+            self._player_lock_name = ""
+            self._player_candidate, self._player_candidate_hits = "", 0
+        try:
+            vp = raw.mParticipantInfo[viewed_idx]
+            viewed_name = dec(vp.mName) if vp.mIsActive else ""
+            own_speed = float(raw.mSpeed)
+            viewed_speed = float(raw.mSpeeds[viewed_idx])
+        except Exception:
+            return viewed_idx
+        if viewed_name and own_speed > 8.0 and abs(viewed_speed - own_speed) < 1.0:
+            if viewed_name == self._player_candidate:
+                self._player_candidate_hits += 1
+            else:
+                self._player_candidate, self._player_candidate_hits = viewed_name, 1
+            if self._player_candidate_hits >= self.PLAYER_CONFIRM_TICKS and viewed_name != self._player_lock_name:
+                if self._player_lock_name:
+                    logger.info(f"[PLAYER] Our car is now '{viewed_name}' (was '{self._player_lock_name}').")
+                self._player_lock_name = viewed_name
+        lock = self._player_lock_name
+        if not lock or viewed_name == lock:
+            return viewed_idx
+        for i in range(n):
+            p = raw.mParticipantInfo[i]
+            if p.mIsActive and dec(p.mName) == lock:
+                return i
+        return viewed_idx
+
     def _convert_snapshot(self, raw: AMS2SharedMemory) -> TelemetrySnapshot:
         """Converts raw ctypes struct into an immutable TelemetrySnapshot dataclass."""
         dec = self.reader.decode_str
@@ -332,6 +379,7 @@ class TelemetryCollector:
                     flag_colour=int(raw.mHighestFlagColours[i]) if hasattr(raw, "mHighestFlagColours") else 0
                 ))
 
+        viewed_idx = self._resolve_player_index(raw, viewed_idx, dec)
         player_p = raw.mParticipantInfo[viewed_idx]
         player_name = dec(player_p.mName) if player_p.mIsActive else "Driver"
 
