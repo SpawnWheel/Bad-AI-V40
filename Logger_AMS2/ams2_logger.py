@@ -288,6 +288,42 @@ FASTEST_LAP_MIN_RACE_LAPS = 2
 POLL_INTERVAL = 0.5
 MAX_PLAYBACK_SPEED = 20.0  # caps the rate when a replay jumps to another point in the race
 
+
+def time_past_line(dist, speed, track_length):
+    """Seconds since a car that has just started a lap crossed the line, from how far into the lap it is.
+    The game is only read every half second, and two cars that close cross between the same two reads."""
+    if dist < 0 or dist > track_length / 2:  # lap count turned over before the distance did
+        return 0.0
+    return dist / max(speed, 1.0)
+
+
+def finish_places(finishers, finish_laps, running_laps):
+    """[(name, place)] for the cars that took the flag in one read of the game.
+
+    The game's own position can't be trusted at that moment: once the winner has the flag AMS2's
+    positions wobble, and at Oulton Park it had Neworder P3 and Jaavib P4 although Jaavib crossed 0.2 s
+    ahead. Two cars that close also cross between the same two reads. So the place is worked out here:
+    a car is behind everyone who finished with at least as many laps (they crossed earlier), and behind
+    every car still racing that has already completed as many laps (it will finish a lap further on).
+    Cars that crossed in the same read go in the order they crossed, from how far past the line each
+    one is.
+
+    finishers: [{"name", "laps", "dist", "speed", "track_length"}]
+    finish_laps: {name: laps} of the cars that already took the flag (updated here)
+    running_laps: {name: laps completed} of the cars still racing (not finished, not retired)
+    """
+    def since_line(f):
+        return time_past_line(f["dist"], f["speed"], f["track_length"])
+
+    out = []
+    for f in sorted(finishers, key=lambda f: (-f["laps"], -since_line(f))):
+        ahead = sum(1 for laps in finish_laps.values() if laps >= f["laps"])
+        ahead += sum(1 for laps in running_laps.values() if laps >= f["laps"])
+        finish_laps[f["name"]] = f["laps"]
+        out.append((f["name"], ahead + 1))
+    return out
+
+
 class AMS2EventLogger:
     def __init__(self):
         self.shm = None
@@ -334,6 +370,7 @@ class AMS2EventLogger:
         self.lead_laps = 0 # Most laps any car has completed
         self.safety_car_laps = set() # Lap counts the leader completed behind the safety car
         self.finish_lines_logged = 0 # [FINISH] lines written this race
+        self.finish_laps = {} # name -> laps completed when the car took the flag
         self.replay_ticks = 0 # Reads of this race taken from a replay ...
         self.live_ticks = 0 # ... and from a live race
         self.signals_key = None # What the game last said about the session (see note_signals)
@@ -483,6 +520,17 @@ class AMS2EventLogger:
         if self.recording:
             self.recording.finish()
             self.recording = None
+
+    def log_finishers(self, finishers, laps_completed):
+        """Writes a [FINISH] line for each car that took the flag in this read, in its finishing place."""
+        running = {n: laps for n, laps in laps_completed.items() if n not in self.finished_participants}
+        for name, place in finish_places(finishers, self.finish_laps, running):
+            if place == 1:
+                self.log("FINISH", f"Checkered Flag! {name} took P1!", sim_time=self.get_session_time())
+            else:
+                self.log("FINISH", f"Checkered Flag! {name} comes past the line to take P{place}.",
+                         sim_time=self.get_session_time())
+            self.finish_lines_logged += 1
 
     def write_replay_finish(self):
         """A replay never flags the end of the race, so when the recording of one ends without a finish
@@ -694,6 +742,7 @@ class AMS2EventLogger:
             self.lead_laps = 0
             self.safety_car_laps.clear()
             self.finish_lines_logged = 0
+            self.finish_laps.clear()
             self.replay_ticks = 0
             self.live_ticks = 0
             self.signals_key = None
@@ -878,6 +927,7 @@ class AMS2EventLogger:
         new_lap_distances = {}
         new_laps_completed = {}
         new_laps = {}
+        finishers_now = [] # cars that took the flag in this read
         for i in range(self.data.mNumParticipants):
             p = self.data.mParticipantInfo[i]
             if p.mIsActive:
@@ -931,11 +981,14 @@ class AMS2EventLogger:
                 
                 crossed_line = (laps_completed > old_laps) or (lap > old_lap)
 
-                # Every completed lap is kept, to work out the finish of a replay (see write_replay_finish)
+                # Every completed lap is kept, to work out the finish of a replay (see write_replay_finish).
+                # Stamped with when the car crossed, not when it was read: at Oulton Park Jaavib and Neworder
+                # crossed 0.2 s apart in one read, tied, and the finish put Neworder ahead.
                 if self.recording and self.green_flag_fired and sim_now >= self.race_clock_high:
                     crossings = self.line_crossings.setdefault(name, [])
                     if laps_completed > old_laps and (not crossings or laps_completed > crossings[-1][1]):
-                        crossings.append((sim_now, laps_completed, pos, total_dist))
+                        crossed_at = sim_now - time_past_line(dist, speed, track_length)
+                        crossings.append((crossed_at, laps_completed, pos, total_dist))
                         if laps_completed > self.lead_laps:
                             self.lead_laps = laps_completed
                             if sc_on_track_now:
@@ -947,13 +1000,10 @@ class AMS2EventLogger:
                         is_finished = True
 
                 if is_finished and name not in self.finished_participants:
-                    if pos == 1:
-                        self.log("FINISH", f"Checkered Flag! {name} took P1!", sim_time=self.get_session_time())
-                        self.checkered_flag_shown = True
-                    else:
-                        self.log("FINISH", f"Checkered Flag! {name} comes past the line to take P{pos}.", sim_time=self.get_session_time())
+                    # Placed and logged once every car in this read is known (see log_finishers)
+                    finishers_now.append({"name": name, "laps": laps_completed, "dist": dist, "speed": speed,
+                                          "track_length": track_length})
                     self.finished_participants.add(name)
-                    self.finish_lines_logged += 1
                 
                 # Other terminal states
                 if race_state != old_race_state and name not in self.finished_participants:
@@ -1010,6 +1060,9 @@ class AMS2EventLogger:
                     "lap": lap, 
                     "pit": pit_mode
                 })
+
+        if finishers_now:
+            self.log_finishers(finishers_now, new_laps_completed)
 
         # Check for disconnected players
         if self.last_positions and self.data.mSessionState == 5: # Only in Race

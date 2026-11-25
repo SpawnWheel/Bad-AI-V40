@@ -86,11 +86,18 @@ You only need to do this once per track layout. If you start a session on a trac
 
 ## Set up OBS recording (once)
 
-The Camera Director can run OBS for you. When you press **Play Sequence** it switches OBS to the right scene for the sim, starts the recording, and notes exactly where in the video the race starts. Then:
+The Camera Director can start and stop the OBS recording for you. This is what the **Record with OBS** tick in its **Recording (OBS)** box switches on.
 
-- you don't press record or stop in OBS,
-- the finished recording becomes the race's replay video by itself,
-- **Review & sync the events** opens with the events already lined up with the video, so you don't have to scrub to the green flag.
+| | Ticked | Not ticked |
+| --- | --- | --- |
+| **Opening OBS** | You open OBS yourself, before **Play Sequence**. The app never opens it. | You open OBS yourself. |
+| **Scene** | **Play Sequence** switches OBS to the scene you picked for this sim. | You pick it in OBS. |
+| **Record** | **Play Sequence** presses record in OBS. If OBS is already recording, it carries on with that recording. | You press record in OBS. |
+| **Pause** | **Space** pauses the replay, the camera plan and the recording together. | You pause OBS yourself. |
+| **Stop** | **Stop Recording** in the Camera Director stops OBS, and the video becomes the race's replay video by itself. | You stop OBS, then pick the video with **Use this** on the race screen. |
+| **Lining up the video** | The Camera Director measures where the race sits in the video, so **Review & sync the events** opens already lined up. | You scrub to the green flag in Review & sync. |
+
+The tick changes nothing in the sim: you set up the replay the same way either way (see [1. Film the replay](#1-film-the-replay)). Each sim's Camera Director remembers its own tick and scene.
 
 You need **OBS 28 or newer**, which has the WebSocket server built in (check in OBS under *Help* → *About*). Do this once:
 
@@ -104,7 +111,7 @@ You need **OBS 28 or newer**, which has the WebSocket server built in (check in 
    - Leave it on **(current scene)** if you'd rather switch scenes in OBS yourself.
 4. **Check the recording format.** In OBS under **Settings** → **Output** → **Recording**, record straight to **MP4** (or *Hybrid MP4*), as now. If OBS records MKV and remuxes it to MP4 afterwards, the race is given the MKV, so pick the MP4 yourself with **Use this**.
 
-While filming, don't pause or stop the recording in OBS. Press **Space** to pause (it pauses the replay, the camera plan and the recording together) and **Stop Recording** in the Camera Director to finish. That keeps the video lined up with the log.
+While filming, don't pause the recording in OBS. Press **Space** to pause and **Stop Recording** in the Camera Director to finish. That keeps the video lined up with the log.
 
 Don't want OBS controlled? Untick **Record with OBS** in the Camera Director. Then you record yourself, as before, and line the video up by hand in Review & sync.
 
@@ -153,7 +160,7 @@ At a glance:
 | Step | What you do |
 | --- | --- |
 | **Race notes** | Type a few notes about the race (optional). |
-| **1. Film the replay** | Camera Director: **Generate (Gemini)**, then **Play Sequence**. It starts the OBS recording on the sim's scene. **Stop Recording** when the replay ends. |
+| **1. Film the replay** | Open OBS. Camera Director: **Generate (Gemini)**, then **Play Sequence**. It starts the OBS recording on the sim's scene. **Stop Recording** when the replay ends. |
 | **2. Build the event list** | **Run** the merge, **Run** the event picker, then check the events in **Review & sync the events**. They open already lined up with the video. |
 | **3. Write the commentary** | Starting grid and qualifying times (optional), then **Run** spice, line lengths and commentary. |
 | **4. Voice it** | Record the voices in the browser, then **Run** the stitcher. |
@@ -176,16 +183,33 @@ This step makes the pictures for your video: the sim plays the replay, the **Cam
 
 1. On the **Camera Director** step, press **Open**. The Camera Director opens in its own window.
 2. Press **Generate (Gemini)**. The race log is sent to Gemini, which plans the camera shots. Wait until it's done (this enables **Play Sequence**).
-3. Open **OBS** and load the race replay in the sim. In the Camera Director's **Recording (OBS)** box, check that **Record with OBS** is ticked and your scene for this sim is picked.
+3. **Open OBS yourself** (the app never opens it) and load the race replay in the sim. In the Camera Director's **Recording (OBS)** box, check that **Record with OBS** is ticked and your scene for this sim is picked.
 4. **Sync the log time to the sim time** in the **Sync Tools** box:
    - **Log Green Flag** is filled in for you from the green flag line in the race log.
-   - **AMS2:** nothing else to do. The Camera Director assumes the lights go green 6 seconds into the replay, then corrects itself from the replay's own clock once the race is under way.
+   - **AMS2:** nothing else to do. The Camera Director assumes the lights go green 6 seconds into the replay, then corrects itself from the replay's own clock once the race is under way (see step 6).
    - **RaceRoom:** in the sim, scrub the replay to the moment the lights go green and read the replay time. Type it into **Sim Green Flag** (for example `1:12`; `0:01:12` and `72` work too). **Time Offset** updates by itself, with no button to press.
-5. Go back to the very start of the replay (time zero) in the sim. In AMS2, press the replay's play button and quickly pause it again, so the button is highlighted and ready.
-6. In the Camera Director, press **Play Sequence**. It switches OBS to your scene and starts the recording (if OBS is already recording, it carries on with that recording), then starts the replay in the sim and the camera plan together, so they stay in sync. You don't press record in OBS.
-7. Close the sim's replay bar before the green flag so it isn't in the video, then leave it alone. The Camera Director switches cameras for you.
-8. Need to pause? Press **Space**. It pauses the replay, the camera plan and the OBS recording together, and **Space** again resumes all three. Don't pause in OBS itself.
+5. **Get the sim ready.** Set up anything you want on screen now, such as AMS2's track map: the Camera Director only switches cars and cameras.
+   - **AMS2:** go back to the very start of the replay (time zero). Open the replay bar and get the red play button highlighted: press it and quickly pause again. Leave the bar open.
+   - **RaceRoom:** go back to the very start of the replay (time zero). The Camera Director presses play in RaceRoom itself.
+6. In the Camera Director, press **Play Sequence**:
+   - With **Record with OBS** ticked, OBS switches to your scene and starts recording. You don't press record in OBS.
+   - **AMS2:** the countdown under the timer counts down about 6 seconds to the first camera cut. That cut presses **Enter** in AMS2, and with the play button highlighted, that **Enter** is what starts the replay. Once the race is under way, the Camera Director reads AMS2's replay clock (the same clock the race log was timed with) and lines the camera plan up with it. The Activity Log then says *Synced to the AMS2 replay clock*. So the countdown doesn't need to be exact.
+   - **RaceRoom:** the Camera Director presses play in RaceRoom and starts the camera plan at the same moment.
+7. Close the sim's replay bar once the replay is playing (before the green flag) so it isn't in the video. Then leave the sim alone: don't rewind or skip, because the camera plan won't follow. The Camera Director switches cameras for you.
+8. Need to pause? Press **Space**. It pauses the replay, the camera plan and the OBS recording together, and **Space** again resumes all three. Don't pause in OBS or in the sim.
 9. When the replay ends, press **Stop Recording** in the Camera Director's **Recording (OBS)** box. OBS saves the video, and it becomes this race's **Replay video** by itself.
+
+#### Made a mistake? Start again
+
+If something's wrong once you've pressed **Play Sequence** (the replay bar is still showing, the track map isn't up, the wrong camera), start again. There's no need to stop OBS.
+
+1. Press **Stop Sequence** (the same button). The camera plan stops. RaceRoom's replay pauses; AMS2's keeps playing. The OBS recording keeps going.
+2. Fix what was wrong, then go back to the very start of the replay in the sim, as in step 5 (AMS2: play button highlighted again).
+3. Press **Play Sequence**. It carries on with the same OBS recording, measures the video again, starts the camera notes afresh (the previous ones are kept in the race's `history` folder), and syncs to the replay clock again.
+
+The false start stays at the beginning of the video, but nothing uses it: the export starts just before the first commentary. If you'd rather have a clean file, also press **Stop Recording** before step 3, and **Play Sequence** starts a new recording.
+
+> **Reset the sim first, then press Play Sequence.** AMS2: the Camera Director syncs to the replay clock once, the first time it sees the race running. If the replay is still sitting mid-race (even paused) when you press **Play Sequence**, it syncs to that point and the cameras are off for the whole run. If that happens, start again.
 
 The Camera Director saves where the race sits in the video as `02_video_sync.json` in the race folder. The next step uses it to line the events up with the video. Its Activity Log shows the measurement, for example *Video offset +14.32s*.
 

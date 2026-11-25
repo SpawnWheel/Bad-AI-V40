@@ -1,0 +1,42 @@
+{
+  "track_location": "OultonPark",
+  "track_variation": "OultonPark_Fosters",
+  "track_length": 2661.0,
+  "corners": [
+    {
+      "name": "Turn 1",
+      "start": 205.2,
+      "end": 345.2
+    },
+    {
+      "name": "The Avenue",
+      "start": 372.5,
+      "end": 567.5
+    },
+    {
+      "name": "Lodge Corner",
+      "start": 2251.1,
+      "end": 2401.1
+    },
+    {
+      "name": "Druids Corner",
+      "start": 1722.7,
+      "end": 1857.7
+    },
+    {
+      "name": "Knickerbrook",
+      "start": 1051.6,
+      "end": 1171.6
+    },
+    {
+      "name": "Clay Hill",
+      "start": 1237.7,
+      "end": 1452.7
+    },
+    {
+      "name": "Cascades",
+      "start": 690.1,
+      "end": 810.1
+    }
+  ]
+}

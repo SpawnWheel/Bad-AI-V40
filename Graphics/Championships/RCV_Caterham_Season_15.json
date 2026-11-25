@@ -9,11 +9,11 @@
     "name": "Caterham Academy",
     "short_name": "RCV",
     "season": "Season 15",
-    "round": "Round 5",
-    "event_name": "Cascavel",
+    "round": "Round 7",
+    "event_name": "Oulton Park",
     "logo": "Graphics/Logos/RCVWhite.png",
     "logo_tint_white": false,
-    "event_flag": "Graphics/Flags/BRA.png"
+    "event_flag": "Graphics/Flags/GBR.png"
   },
   "theme": {
     "accent": "#E10600",
@@ -36,7 +36,7 @@
       "footer": true
     },
     "map": {
-      "enabled": true,
+      "enabled": false,
       "x": 1597,
       "y": 113,
       "w": 306,
@@ -295,11 +295,11 @@
       "display": "Bill",
       "short": "BILL",
       "number": "5",
-      "country": "SCT",
+      "country": "GBR",
       "team": "Thistle Racing",
       "make": "Caterham",
       "color": "#d909b5",
-      "car_image": "",
+      "car_image": "Graphics/CarPreviews/Bill.dds",
       "logo": "Graphics/Logos/ThistleRacing.png"
     },
     "[RCV]RayFin": {
@@ -388,13 +388,24 @@
       "car_image": ""
     },
     "NonnyRat_[TRE]": {
-      "display": "NonnyRat_",
-      "short": "NONNYRAT_",
+      "display": "NonnyRat",
+      "short": "NONNYRAT",
       "number": "52",
       "country": "GBR",
       "team": "Caterham UK",
       "make": "Caterham",
       "color": "#ffffff",
+      "car_image": "",
+      "logo": "Graphics/Logos/CaterhamWhite.png"
+    },
+    "SSRacing_UK": {
+      "display": "SSRacing_UK",
+      "short": "SSRACING_UK",
+      "number": "99",
+      "country": "GBR",
+      "team": "Caterham",
+      "make": "Caterham",
+      "color": "",
       "car_image": "",
       "logo": "Graphics/Logos/CaterhamWhite.png"
     }
