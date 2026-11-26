@@ -10,6 +10,12 @@ from .drawing import (add_shadow, cover_image, ease_out, ellipsize, fit_font, fi
 from .race_data import fmt_clock
 
 LABEL_H = 30
+TAG_SLANT = 12   # the slanted end of a card's title tag
+CHEV_W = 24      # the chevrons at the start of a title tag
+GRAIN_ALPHA = 3  # the faint diagonal grain on the cards' near-black bar
+CHEVRON_ALPHA = 20  # the big chevrons fading in from the left of the bar
+CAR_SINK = 26    # how far a car standing on a card comes down into it
+MAX_TEXT_W = 580  # widest a text card's lines run; longer text adds lines instead
 SPONSOR_TAB_H = 58  # sponsor tab on the top right of a card: taller than the label so the logo reads
 MAX_PASSED = 4  # most passed drivers one position-change card stacks
 # How the gaps card fits its space, tried in turn: marker radius, links (shortest, growth per root second,
@@ -36,6 +42,11 @@ class Theme:
         self.panel = rgba(t['panel'], t.get('panel_alpha', 0.9))
         self.panel_solid = rgba(t['panel'])
         self.panel_hi = rgba('#1B2130', t.get('panel_alpha', 0.9))
+        # The near-black bar the pop-up cards are drawn on (the battle card's look): nearly opaque whatever the
+        # panel opacity, so the text never fights the picture behind
+        self.bar = rgba(t['panel'], 238 / 255)
+        # Paragraph text on the bar: near-white, so sentences read at a glance (muted grey is for short labels)
+        self.body = (228, 232, 240, 255)
         self.text = rgba(t['text'])
         self.muted = rgba(t['muted'])
         self.dark_text = rgba('#0B0E14')
@@ -124,17 +135,6 @@ class Templates:
         h = int(h)
         return fit_image(logo, int(h * 1.5), h)
 
-    def card_badge(self, name, panel_h, max_h=88):
-        """Badge for the right-hand end of a card, or None."""
-        return self.badge(name, min(max_h, panel_h - 24)) if name else None
-
-    @staticmethod
-    def place_badge(img, badge, top, panel_h, right_pad=12):
-        """Puts a badge at the right-hand end of the panel, centred vertically."""
-        if badge is not None:
-            img.alpha_composite(badge, (int(img.width - badge.width - right_pad),
-                                        int(top + (panel_h - badge.height) / 2)))
-
     @staticmethod
     def badge_w(badge):
         """Room the badge takes at the right-hand end of a card; a car image goes to the left of it."""
@@ -172,29 +172,159 @@ class Templates:
             polygon(img, [(x, cy - tri * 0.45), (x + tri, cy - tri * 0.45), (x + tri / 2, cy + tri * 0.45)], col)
         text_vcenter(img, x + tri + gap, cy, txt, f, col)
 
-    def label_tab(self, img, x, y, label, bg=None, fg=None):
-        bg = bg or self.th.accent
-        f = font(18, 'bold_cond')
-        w = int(text_w(f, label) + 28)
-        round_rect(img, (x, y, x + w, y + LABEL_H), 5, bg, corners=(True, True, False, False))
-        text_vcenter(img, x + 14, y + LABEL_H / 2 + 1, label, f, fg or contrast_text(bg))
+    @staticmethod
+    def tag_w(label):
+        """Width label_tab() takes for this label."""
+        return int(11 + CHEV_W + 10 + text_w(font(17, 'bold_cond'), label) + 14 + TAG_SLANT)
+
+    def label_tab(self, img, x, y, label, chevron=None):
+        """Title tab (LABEL_H tall from y) joined to the top left of a card's bar, in the bar's near-black with a
+        slanted end: chevrons (white, or the chevron colour: green for a position change, amber for race
+        control) and the label in white."""
+        w = self.tag_w(label)
+        polygon(img, [(x, y + 2), (x + w, y + 2), (x + w - TAG_SLANT, y + LABEL_H), (x, y + LABEL_H)], self.th.bar)
+        self.grain(img, (x, y + 2, x + w, y + LABEL_H))
+        cy = y + LABEL_H / 2 + 1
+        self.chevrons(img, x + 11, cy, 14, chevron or self.th.text)
+        text_vcenter(img, x + 11 + CHEV_W + 10, cy + 1, label, font(17, 'bold_cond'), self.th.text)
         return w
 
-    def card_canvas(self, w, panel_h, label, top_extra=0, label_bg=None, label_fg=None, stripe=None, sponsor=None):
-        """Blank card: label tab on top, dark panel below, and the `sponsor` kind's logo in a tab on the top
-        right when that sponsor is set. Returns (img, panel_top)."""
+    def card_canvas(self, w, panel_h, label, top_extra=0, chevron=None, wash=None, sponsor=None, chevrons='l'):
+        """Blank card: the near-black bar with square top corners, washed from the left in the `wash` colour, the
+        label in a title tab joined to its top left, and the `sponsor` kind's logo in a tab on the top right when
+        that sponsor is set. chevrons=None leaves the big chevrons out, for cards that are mostly paragraphs.
+        Returns (img, panel_top)."""
         tab = self.sponsor_tab(sponsor) if sponsor else None
-        top = max(LABEL_H, top_extra, tab.height if tab else 0)
+        top = max(LABEL_H if label else 0, top_extra, tab.height if tab else 0)
         img = Image.new('RGBA', (int(w), int(top + panel_h)), (0, 0, 0, 0))
-        round_rect(img, (0, top, w, top + panel_h), 6, self.th.panel,
-                   corners=(not label, tab is None, True, True))
-        if stripe:
-            round_rect(img, (0, top, 6, top + panel_h), 0, stripe)
+        self.bar(img, (0, top, w, top + panel_h), chevrons=chevrons)
+        if wash:
+            self.colour_wash(img, 0, top, w, panel_h, wash)
         if label:
-            self.label_tab(img, 0, top - LABEL_H, label, label_bg, label_fg)
+            self.label_tab(img, 0, top - LABEL_H, label, chevron)
         if tab:
             img.alpha_composite(tab, (int(w - tab.width), int(top - tab.height)))
         return img, top
+
+    def bar(self, img, box, corners=(False, False, True, True), chevrons='l'):
+        """The cards' near-black bar over box, with its faint grain and big faint chevrons fading in from the left
+        (`chevrons` 'l'; 'both' also from the right, pointing back; None for none). Drawn first, so the texture
+        stays under the text."""
+        round_rect(img, box, 3, self.th.bar, corners=corners)
+        self.grain(img, box)
+        if chevrons:
+            self.chevron_underlay(img, box, chevrons)
+
+    @staticmethod
+    def chevron_underlay(img, box, side='l', alpha=CHEVRON_ALPHA):
+        """Big right-pointing chevrons across the left of box, fading out by its middle like the colour wash, only
+        where img is drawn. side 'both' adds a mirrored set coming in from the right."""
+        x0, y0, x1, y1 = (int(round(v)) for v in box)
+        w, h = x1 - x0, y1 - y0
+        if w < 2 or h < 2:
+            return
+        ss = 3  # drawn larger and scaled down for smooth edges
+        size = min(h, 150)                 # tall cards keep chevrons of a bar's size, repeated down the card
+        t = max(9.0, size * 0.2)           # stroke thickness
+        depth = size * 0.32                # how far each point sticks out
+        step = t * 2.3
+        reach = min(w * 0.6, 420)          # they fade out by here
+        mask = Image.new('L', (w * ss, h * ss), 0)
+        d = ImageDraw.Draw(mask)
+        rows = max(1, int(round(h / size)))
+        for r in range(rows):
+            top = h * r / rows
+            cy, half = top + h / rows / 2, h / rows / 2 * 1.15
+            x = -depth
+            while x < reach:
+                pts = [(x, cy - half), (x + t, cy - half), (x + t + depth, cy), (x + t, cy + half), (x, cy + half),
+                       (x + depth, cy)]
+                d.polygon([(px * ss, py * ss) for px, py in pts], fill=255)
+                x += step
+        mask = mask.resize((w, h), Image.LANCZOS)
+        fade = Image.new('L', (w, h), 0)
+        ramp = Image.linear_gradient('L').rotate(-90).resize((int(reach), h))  # 255 at the left -> 0
+        fade.paste(ramp, (0, 0))
+        mask = ImageChops.multiply(mask, fade)
+        if side == 'both':
+            mask = ImageChops.lighter(mask, mask.transpose(Image.FLIP_LEFT_RIGHT))
+        mask = mask.point(lambda v: v * alpha // 255)
+        mask = ImageChops.multiply(mask, img.crop((x0, y0, x1, y1)).getchannel('A'))
+        layer = Image.new('RGBA', (w, h), (255, 255, 255, 255))
+        layer.putalpha(mask)
+        img.alpha_composite(layer, (x0, y0))
+
+    @staticmethod
+    def grain(img, box, alpha=GRAIN_ALPHA, step=8):
+        """A faint diagonal grain over box, only where img is already drawn."""
+        x0, y0, x1, y1 = (int(round(v)) for v in box)
+        w, h = x1 - x0, y1 - y0
+        if w < 1 or h < 1:
+            return
+        layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        d = ImageDraw.Draw(layer)
+        for x in range(-h, w, step):
+            d.line((x, h, x + h, 0), fill=(255, 255, 255, alpha), width=1)
+        layer.putalpha(ImageChops.multiply(layer.getchannel('A'), img.crop((x0, y0, x1, y1)).getchannel('A')))
+        img.alpha_composite(layer, (x0, y0))
+
+    @staticmethod
+    def chevrons(img, x, cy, h, col, n=3):
+        """n chevrons pointing right from x, h tall, fading up from the first. Returns their width."""
+        k = h / 24
+        for i in range(n):
+            px = x + i * 13 * k
+            a = int(col[3] * (110 + 70 * i) / 250) if len(col) > 3 else 110 + 70 * i
+            polygon(img, [(px, cy - 12 * k), (px + 6 * k, cy - 12 * k), (px + 15 * k, cy), (px + 6 * k, cy + 12 * k),
+                          (px, cy + 12 * k), (px + 9 * k, cy)], col[:3] + (min(255, a),))
+        return int((13 * (n - 1) + 15) * k)
+
+    @staticmethod
+    def car_on_top(img, car, cx, floor):
+        """Draws a car image centred on cx with its wheels at y=floor, on a soft contact shadow (the shadow only
+        where the card is)."""
+        shadow = Image.new('L', img.size, 0)
+        ImageDraw.Draw(shadow).ellipse((cx - car.width * 0.42, floor - 9, cx + car.width * 0.42, floor + 5), fill=150)
+        shadow = ImageChops.multiply(shadow.filter(ImageFilter.GaussianBlur(7)), img.getchannel('A'))
+        dark = Image.new('RGBA', img.size, (0, 0, 0, 255))
+        dark.putalpha(shadow)
+        img.alpha_composite(dark)
+        img.alpha_composite(car, (int(cx - car.width / 2), int(floor - car.height)))
+
+    @staticmethod
+    def team_block(img, x, y, w, h, col, slant=16, side='l'):
+        """Solid colour block (a position or value) with a slanted inner edge, '/' like the cards' other cuts.
+        side 'l': the block's left edge is at x and its right edge slants; 'r': its right edge is at x and its left
+        edge slants. Very dark colours are lifted to slate so the block shows. Returns the ink colour for it."""
+        blk = col if sum(col[:3]) > 90 else (58, 64, 78, 255)
+        if side == 'l':
+            pts = [(x, y), (x + w + slant, y), (x + w, y + h), (x, y + h)]
+        else:
+            pts = [(x - w, y), (x, y), (x, y + h), (x - w - slant, y + h)]
+        polygon(img, pts, blk)
+        return contrast_text(blk)
+
+    @staticmethod
+    def colour_wash(img, x, y, w, h, col, flip=False):
+        """A soft wash of col fading out to the right (to the left with flip)."""
+        if w < 1 or h < 1:
+            return
+        # h_gradient puts its first colour on the right
+        wash = h_gradient(int(w), int(h), col[:3] + (0,), col[:3] + (50,))
+        if flip:
+            wash = wash.transpose(Image.FLIP_LEFT_RIGHT)
+        img.alpha_composite(wash, (int(x), int(y)))
+
+    @staticmethod
+    def logo_column(img, badge, x, w, y, h, low=False, divider='l'):
+        """The team logo as it is, centred in a w-wide column from x with a thin slanted divider on its `divider`
+        side. low puts it at the bottom of the column, clear of a car standing above."""
+        dx = x if divider == 'l' else x + w - 10
+        polygon(img, [(dx + 8, y + 14), (dx + 10, y + 14), (dx + 2, y + h - 14), (dx, y + h - 14)], (255, 255, 255, 60))
+        if badge is not None:
+            ly = y + h - 12 - badge.height if low else y + (h - badge.height) / 2
+            off = 2 if divider == 'l' else -2
+            img.alpha_composite(badge, (int(x + (w - badge.width) / 2 + off), int(ly)))
 
     def sponsor_plate(self, kind, w, h, corners=None):
         """w x h panel with the sponsor's logo (or name) fitted inside, or None. The panel is white behind a
@@ -228,8 +358,8 @@ class Templates:
             w = int(text_w(font(int(h * 0.55), 'bold_cond'), name.upper()) + 32)
         return self.sponsor_plate(kind, w, h, corners=(True, True, False, False))
 
-    def name_block(self, img, x, y, name, max_w, big=40, small=24):
-        """First name light above an uppercase bold surname."""
+    def name_block(self, img, x, y, name, max_w, big=40, small=24, color=None):
+        """First name light above an uppercase bold surname (in color, white by default)."""
         display = self.meta(name)['display']
         parts = display.split()
         first, last = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', display)
@@ -238,7 +368,7 @@ class Templates:
             ImageDraw.Draw(img).text((x, y), first, font=f1, fill=self.th.text)
             y += small + 2
         f2 = fit_font(last.upper(), max_w, big, 'bold')
-        ImageDraw.Draw(img).text((x, y), last.upper(), font=f2, fill=self.th.text)
+        ImageDraw.Draw(img).text((x, y), last.upper(), font=f2, fill=color or self.th.text)
         return y + big
 
     def name_block_w(self, name, max_w, big=40, small=24):
@@ -320,6 +450,13 @@ class Templates:
             x0 += flag.width + 10
         text_vcenter(img, x0, cy, label, f, color or self.th.text)
         return w
+
+    @staticmethod
+    def text_card_w(title_w, text_w_, minimum):
+        """Line width for a text card: the title's, or the text on one line when it fits in MAX_TEXT_W, else on
+        about two, never past MAX_TEXT_W (longer text adds lines)."""
+        body = text_w_ if text_w_ <= MAX_TEXT_W else text_w_ / 2 + 60
+        return int(min(MAX_TEXT_W, max(title_w, body, minimum)))
 
     @staticmethod
     def lines_w(lines, f):
@@ -628,100 +765,174 @@ class Templates:
         return fit_image(load_image(os.path.join(gcfg.CAR_PREVIEW_DIR, f)), max_w, max_h) if f else None
 
     def card_driver_card(self, g):
-        """F1-style driver card: big bare position number, colour bar, first name over SURNAME, then the
-        number, flag and team on one line and at most one line of text. Wide and low."""
+        """Compact driver ID card in the style of current F1/WEC packages. The car stands on a team-colour line
+        along the top edge, with the title in a slanted tag to its left. Below that: a team-colour position block
+        with a slanted cut, first name over SURNAME with the number, flag and team, and the team logo in its own
+        column under the car. The caption wraps in a strip underneath, so the card grows down rather than out."""
         th = self.th
         name = g['driver']
         d = g.get('data', {})
-        car = self.car(name, 280, 120)
+        col = self.driver_color(name)
+        body_h, slant, sink = 118, 16, CAR_SINK
+        car = self.car(name, 280, 118)
+        # The logo sits low in its column, clear of the car's wheels
+        badge = self.badge(name, body_h - (sink if car else 0) - 20 if car else body_h - 30)
+        tag = (g.get('title') or 'DRIVER').upper()
+        tag_w = self.tag_w(tag)
+        # Position block, then the name, then the logo column (as wide as the logo, at least as wide as the
+        # car standing on it so the car sits over its own logo)
+        pos_w = 98
+        x0 = pos_w + slant + 14
+        name_w = max(self.name_block_w(name, 330, 44, 22), self.meta_row_w(name, 330), 150)
+        # Without a logo the car still gets a column of its own, so its wheels never land on the text
+        logo_col = badge.width + 40 if badge is not None else int(car.width * 0.6) if car else 0
+        W = x0 + int(name_w) + 24 + logo_col
+        # The tag and the car share the top edge without touching
+        W = max(W, tag_w + 24 + (car.width + 16 if car else 0), 440)
         f_text = font(20, 'regular')
         text = ' '.join((g.get('text') or '').split())
-        # One line, as wide as it needs (two only for a long caption), so the card stays low
-        lines = (wrap(text, f_text, 900, 1) if text_w(f_text, text) <= 900 else wrap(text, f_text, 720, 2)) if text else []
-        panel_h = 112 + (8 + 26 * len(lines) if lines else 0)
-        badge = self.card_badge(name, 112, 84)
-        num_w = 96
-        x0 = num_w + 18
-        used = max(self.name_block_w(name, 520, 42, 22), self.meta_row_w(name, 520), self.lines_w(lines, f_text), 240)
-        W = x0 + int(used) + 28 + (car.width + 10 if car else 0) + self.badge_w(badge)
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'DRIVER').upper(),
-                                    top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0))
-        col = self.driver_color(name)
-        self.pos_number(img, num_w / 2 + 4, top + 50, d.get('pos'), 66)
-        if d.get('gained') not in (None, 0):
-            self.delta(img, num_w / 2 + 4, top + 96, d['gained'], 16)
-        round_rect(img, (num_w, top + 14, num_w + 5, top + 98), 2, col)
-        y = self.name_block(img, x0, top + 8, name, 520, 42, 22)
-        self.meta_row(img, x0, min(y + 14, top + 92), name, 520)
+        # A short caption widens the card a little to stay on one line; a long one to keep to two
+        if text and text_w(f_text, text) + 40 <= 640:
+            W = max(W, int(text_w(f_text, text)) + 44)
+        elif text:
+            W = max(W, min(640, int(text_w(f_text, text) / 2) + 80))
+        lines = wrap(text, f_text, W - 40, 99) if text else []
+        cap_h = 18 + 26 * len(lines) if lines else 0
+        top = max(LABEL_H, (car.height - sink) if car else 0)
+        H = top + body_h + cap_h
+        img = Image.new('RGBA', (int(W), int(H)), (0, 0, 0, 0))
+        by = top  # body top
+        # The bar, with a soft wash of the team colour from the left and a darker caption strip below
+        self.bar(img, (0, by, W, by + body_h + cap_h))
+        self.colour_wash(img, 0, by, W, body_h, col)
         if lines:
-            round_rect(img, (14, top + 110, W - 14, top + 111), 0, (255, 255, 255, 28))
+            round_rect(img, (0, by + body_h, W, by + body_h + cap_h), 3, (0, 0, 0, 90),
+                       corners=(False, False, True, True))
             for i, ln in enumerate(lines):
-                text_vcenter(img, 18, top + 127 + 26 * i, ln, f_text, th.muted)
+                text_vcenter(img, 20, by + body_h + 22 + 26 * i, ln, f_text, (235, 238, 244, 255))
+        # The title tab above the bar's left end
+        self.label_tab(img, 0, top - LABEL_H, tag)
+        # Position block: solid team colour with a slanted right edge
+        ink = self.team_block(img, 0, by, pos_w, body_h, col, slant)
+        gained = d.get('gained') not in (None, 0)
+        self.pos_number(img, pos_w / 2 + 2, by + (44 if gained else body_h / 2), d.get('pos'), 64, ink)
+        if gained:
+            round_rect(img, (pos_w / 2 - 26, by + 78, pos_w / 2 + 30, by + 100), 3, (11, 14, 20, 210))
+            self.delta(img, pos_w / 2 + 2, by + 89, d['gained'], 16)
+        # First name over SURNAME, then number, flag and team
+        has_first = len(self.meta(name)['display'].split()) > 1
+        y = self.name_block(img, x0, by + (12 if has_first else 20), name, 330, 44, 22, self._bright(col))
+        self.meta_row(img, x0, min(y + 16, by + body_h - 18), name, 330)
+        # Logo column: a slanted divider, then the logo as it is, under the car
+        if logo_col:
+            self.logo_column(img, badge, W - logo_col, logo_col, by, body_h, low=car is not None)
         if car:
-            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + 112 - car.height + 6)))
-        self.place_badge(img, badge, top, 112)
+            # Centred over the logo column, wheels down in the card on a soft contact shadow
+            cx = W - logo_col / 2 if logo_col >= car.width * 0.6 else W - 12 - car.width / 2
+            cx = min(W - car.width / 2 - 4, max(tag_w + 16 + car.width / 2, cx))
+            self.car_on_top(img, car, cx, by + sink)
         return img
 
+    BATTLE_CARS = True  # cars standing on the battle card's ends
+
+    @staticmethod
+    def ordinal(n):
+        """1 -> '1ST', 2 -> '2ND', 11 -> '11TH'."""
+        n = int(n)
+        suffix = 'TH' if 10 <= n % 100 <= 20 else {1: 'ST', 2: 'ND', 3: 'RD'}.get(n % 10, 'TH')
+        return f"{n}{suffix}"
+
     def card_battle(self, g):
+        """Battle for a position, F1 style: one slim dark bar, mirrored. The car ahead on the left, the car behind
+        on the right, each as first name over SURNAME in their team colour with the team logo and name under it;
+        in the middle, chevrons, BATTLE / FOR 5TH and the interval. With BATTLE_CARS each car stands on its end
+        of the bar, the two facing each other."""
         th = self.th
         a, b = g['driver'], g.get('driver2')
         if not b:
             return None
         d = g.get('data', {})
-        car_a = self.car(a, 190, 92) or self.badge(a, 76)
-        car_b = self.car(b, 190, 92) or self.badge(b, 76)
-        W = 900
-        f_text = font(19, 'regular')
-        lines = []  # the title says it; no explainer under a battle
-        panel_h = 112
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or f"BATTLE FOR P{d.get('pos', '')}").upper())
-        cx = W / 2
-        cy = top + 56
-        for side, name, pos, car in ((0, a, d.get('pos'), car_a), (1, b, d.get('pos2'), car_b)):
-            col = self.driver_color(name)
-            if side == 0:
-                round_rect(img, (0, top, 6, top + panel_h), 0, col)
-            else:
-                round_rect(img, (W - 6, top, W, top + panel_h), 0, col, corners=(False, True, True, False))
+        H, pad = 72, 22
+        names = (a, b)
+        cols = [self._bright(self.driver_color(n)) for n in names]
+        f_first, f_last, f_team = font(16, 'semibold_cond'), font(32, 'bold_cond'), font(15, 'semibold_cond')
+        logos = [self.badge(n, 21) for n in names]
+        sides = []
+        for name, logo in zip(names, logos):
             m = self.meta(name)
-            short = m['short'].upper()
-            label = f"P{pos}" if pos else ''
-            fchip = font(22, 'bold_cond')
-            wchip = int(text_w(fchip, label) + 16)
-            # Text starts just inside the car/logo and the name shrinks to stay clear of the interval box
-            inset = max(144, 16 + (car.width if car else 0) + 18)
-            fname = fit_font(short, cx - 82 - (inset + wchip + 10), 36, 'bold_cond')
-            if side == 0:
-                if car:
-                    img.alpha_composite(car, (16, int(cy - car.height / 2)))
-                x = inset
-                self.chip(img, x, cy - 14, label, col, size=22, h=32)
-                text_vcenter(img, x + wchip + 10, cy - 14, short, fname, th.text)
-                if m.get('team'):
-                    f = font(17, 'semibold_cond')
-                    text_vcenter(img, x, cy + 22, ellipsize(m['team'], f, cx - 90 - x), f, th.muted)
-            else:
-                if car:
-                    if not self.logo_path(name):  # car previews face the middle; logos stay readable
-                        car = car.transpose(Image.FLIP_LEFT_RIGHT)
-                    img.alpha_composite(car, (int(W - 16 - car.width), int(cy - car.height / 2)))
-                x = W - inset
-                self.chip(img, x - wchip, cy - 14, label, col, size=22, h=32)
-                text_vcenter(img, x - wchip - 10, cy - 14, short, fname, th.text, 'r')
-                if m.get('team'):
-                    f = font(17, 'semibold_cond')
-                    text_vcenter(img, x, cy + 22, ellipsize(m['team'], f, x - cx - 90), f, th.muted, 'r')
-        # centre gap badge
-        gap = d.get('gap')
-        round_rect(img, (cx - 72, cy - 36, cx + 72, cy + 36), 8, th.panel_hi)
-        if gap:
-            text_vcenter(img, cx, cy - 16, 'INTERVAL', font(15, 'semibold_cond'), th.muted, 'm')
-            text_vcenter(img, cx, cy + 12, gap, fit_font(gap, 128, 30, 'bold'), th.accent2, 'm')
+            parts = m['display'].split()
+            first, last = (' '.join(parts[:-1]), parts[-1]) if len(parts) > 1 else ('', m['display'])
+            team = (m.get('team') or '').upper()
+            team_w = (logo.width + 7 if logo is not None else 0) + min(220, text_w(f_team, team))
+            sides.append((first.upper(), last.upper(), team, max(text_w(f_first, first.upper()), text_w(f_last, last.upper()), team_w)))
+        cars = [self.car(n, 180, 80) if self.BATTLE_CARS else None for n in names]
+        side_w = int(max([s[3] for s in sides] + [c.width for c in cars if c is not None]) + pad + 26)
+        # The middle: chevrons, the title on two lines and the interval
+        title = (g.get('title') or '').upper()
+        if title and ' FOR ' in title:
+            t1, t2 = title.split(' FOR ', 1)
+            t2 = 'FOR ' + t2
+        elif title:
+            t1, t2 = title, ''
         else:
-            text_vcenter(img, cx, cy, 'VS', font(36, 'bold'), th.accent2, 'm')
-        if lines:
-            round_rect(img, (6, top + 108, W - 6, top + 109), 0, (255, 255, 255, 30))
-            self.text_lines(img, cx, top + 116, lines, f_text, th.muted, 24, 'ma')
+            t1, t2 = 'BATTLE', f"FOR {self.ordinal(d['pos'])}" if d.get('pos') else ''
+        f_title = font(24, 'bold_cond')
+        title_w = max(text_w(f_title, t1), text_w(f_title, t2))
+        gap = d.get('gap')
+        f_gap = font(26, 'bold')
+        gap_w = max(text_w(f_gap, gap), text_w(font(13, 'semibold_cond'), 'INTERVAL')) if gap else 0
+        chev_w = 44
+        centre_w = int(chev_w + 16 + title_w + (34 + gap_w if gap else 0) + 56)
+        W = 2 * side_w + centre_w
+        top = max([c.height - 2 for c in cars if c is not None] + [0])
+        img = Image.new('RGBA', (W, int(top + H)), (0, 0, 0, 0))
+        # The bar: near-black with a faint diagonal grain, each end washed in its team colour
+        bar = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+        self.bar(bar, (0, 0, W, H), corners=None, chevrons='both')
+        self.colour_wash(bar, 0, 0, side_w * 1.3, H, cols[0])
+        self.colour_wash(bar, W - side_w * 1.3, 0, side_w * 1.3, H, cols[1], flip=True)
+        # The middle panel, a shade lighter, with slanted sides
+        s = 14
+        polygon(bar, [(side_w + s, 0), (W - side_w + s, 0), (W - side_w - s, H), (side_w - s, H)], (255, 255, 255, 12))
+        bar.putalpha(ImageChops.multiply(bar.getchannel('A'), Image.new('L', (W, H), 255)))
+        img.alpha_composite(bar, (0, int(top)))
+        y0 = top
+        for side, ((first, last, team, _), logo, col) in enumerate(zip(sides, logos, cols)):
+            x, anchor = (pad, 'l') if side == 0 else (W - pad, 'r')
+            if first:
+                text_vcenter(img, x, y0 + 15, first, f_first, th.text, anchor)
+            ly, ty = (y0 + 38, y0 + 60) if first else (y0 + 30, y0 + 56)
+            text_vcenter(img, x, ly, last, fit_font(last, side_w - pad - 20, 32, 'bold_cond'), col, anchor)
+            # Team logo as it is, then the team name
+            tx = x if side == 0 else x - (logo.width + 7 if logo is not None else 0) - min(220, text_w(f_team, team))
+            if logo is not None:
+                img.alpha_composite(logo, (int(tx), int(ty - logo.height / 2)))
+                tx += logo.width + 7
+            if team:
+                text_vcenter(img, tx, ty, ellipsize(team, f_team, 220), f_team, (255, 255, 255, 200))
+        # Chevrons into the title, then the interval, as one group centred in the middle
+        group = chev_w + 16 + title_w + (34 + gap_w if gap else 0)
+        cx0 = side_w + (centre_w - group) / 2
+        cy = y0 + H / 2
+        self.chevrons(img, cx0, cy, 24, th.text)
+        tx = cx0 + chev_w + 16
+        if t2:
+            text_vcenter(img, tx, cy - 13, t1, f_title, th.text)
+            text_vcenter(img, tx, cy + 13, t2, f_title, th.text)
+        else:
+            text_vcenter(img, tx, cy, t1, f_title, th.text)
+        if gap:
+            gx = tx + title_w + 18
+            round_rect(img, (gx, cy - 20, gx + 2, cy + 20), 0, (255, 255, 255, 50))
+            text_vcenter(img, gx + 16, cy - 13, 'INTERVAL', font(13, 'semibold_cond'), th.muted)
+            text_vcenter(img, gx + 16, cy + 11, gap, f_gap, th.accent2)
+        for side, car in enumerate(cars):
+            if car is None:
+                continue
+            if side == 1:  # the car behind faces back towards the car ahead
+                car = car.transpose(Image.FLIP_LEFT_RIGHT)
+            ccx = pad + car.width / 2 - 6 if side == 0 else W - pad - car.width / 2 + 6
+            self.car_on_top(img, car, ccx, top + 3)
         return img
 
     @staticmethod
@@ -733,24 +944,10 @@ class Templates:
             victims = [g.get('driver2') or d.get('victim')]
         return victims[:MAX_PASSED]
 
-    def f1_header(self, img, x, y, label, accent, h=30):
-        """F1-style header strip: an accent block with an up chevron, then the label on a near-black strip
-        with a slanted end. Returns its width."""
-        f = font(19, 'bold_cond')
-        block, slant = h, 12
-        w = int(block + 12 + text_w(f, label) + 16 + slant)
-        black = (11, 14, 20, 245)
-        polygon(img, [(x, y), (x + w, y), (x + w - slant, y + h), (x, y + h)], black)
-        round_rect(img, (x, y, x + block, y + h), 0, accent)
-        cx, cy = x + block / 2, y + h / 2
-        polygon(img, [(cx - 7, cy + 4), (cx, cy - 4), (cx + 7, cy + 4), (cx + 7, cy + 7.5), (cx, cy - 0.5),
-                      (cx - 7, cy + 7.5)], contrast_text(accent))
-        text_vcenter(img, x + block + 12, cy + 1, label, f, (255, 255, 255, 255))
-        return w
-
     def card_overtake(self, g, swap=1.0):
         """F1-style position change: boxed position numbers, and the overtaker's white row slides up over
-        each passed driver's dark row in turn. Gains and losses show in coloured chips at the end of the rows.
+        each passed driver's dark row in turn. Gains and losses show in coloured chips at the end of the rows, and
+        each driver's team logo rides just right of their row, on the dark panel.
 
         swap 0..1 = before..after the pass (the renderer animates it)."""
         th = self.th
@@ -762,19 +959,19 @@ class Templates:
         n = len(victims)
         smooth = lambda p: p * p * (3 - 2 * p)
         e = smooth(swap)
-        car = self.car(name, 260, 110)
         row_w, row_h, gap, pad, num_w = 440, (54 if n <= 2 else 46), 5, 10, 56
-        head_h = 30
+        head_h = LABEL_H
         rows_h = row_h * (n + 1) + gap * n
         panel_h = pad * 2 + rows_h
-        badge = self.card_badge(name, panel_h, 96)
+        zone = self.row_logo_zone([name] + victims, row_h - 14)
         x0 = pad + num_w + 8
+        title = (g.get('title') or 'POSITION CHANGE').upper()
         # 20 leaves room for the row lifting out
-        W = x0 + row_w + 20 + (car.width + 10 if car else 0) + self.badge_w(badge)
-        top = head_h + (max(0, car.height - panel_h + 10) if car else 0)
+        W = int(max(x0 + row_w + zone + 20, self.tag_w(title) + 24))
+        top = head_h
         img = Image.new('RGBA', (int(W), int(top + panel_h)), (0, 0, 0, 0))
-        round_rect(img, (0, top, W, top + panel_h), 4, th.panel, corners=(False, True, True, True))
-        self.f1_header(img, 0, top - head_h, (g.get('title') or 'POSITION CHANGE').upper(), th.green, head_h)
+        self.bar(img, (0, top, W, top + panel_h))
+        self.label_tab(img, 0, top - head_h, title, th.green)
         slot_y = lambda s: top + pad + s * (row_h + gap)
         # Boxed position slots; the top one fills green as the overtaker arrives
         arrive = smooth(max(0.0, min(1.0, 1 - n * (1 - e))))
@@ -796,21 +993,30 @@ class Templates:
         ov_slot = n * (1 - e)
         for i, victim in enumerate(victims):
             drop = smooth(max(0.0, min(1.0, i + 1 - ov_slot)))
-            row = self._overtake_row(victim, row_w, row_h, False, -1, chips)
+            row = self._overtake_row(victim, row_w, row_h, False, -1, chips, zone)
             img.alpha_composite(row, (x0, int(round(slot_y(i + drop)))))
         lift = int(round(16 * min(1.0, 4 * e * (1 - e) * 1.5)))
-        ovr = self._overtake_row(name, row_w, row_h, True, n, chips)
+        ovr = self._overtake_row(name, row_w, row_h, True, n, chips, zone)
         img.alpha_composite(ovr, (x0 + lift, int(round(slot_y(ov_slot)))))
-        if car:
-            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + panel_h - car.height + 4)))
-        self.place_badge(img, badge, top, panel_h)
         return img
 
-    def _overtake_row(self, name, w, h, highlight, delta, chip_alpha):
+    def row_logo_zone(self, names, logo_h):
+        """Room for a logo column right of a stack of driver rows: the widest of their logos plus a gap (0 when
+        none has one), so the logos line up."""
+        widths = [b.width for b in (self.badge(n, logo_h) for n in names) if b is not None]
+        return max(widths) + 14 if widths else 0
+
+    def _overtake_row(self, name, w, h, highlight, delta, chip_alpha, zone=0):
         """One driver's row: white with dark text for the overtaker, dark for the cars passed. Team colour on
-        the left edge, flag, first name and SURNAME, and a green/red chip with the places gained or lost."""
+        the left edge, flag, first name and SURNAME, and a green/red chip with the places gained or lost. With a
+        zone, the team logo sits in that much room right of the row (on the card's dark panel, so a white logo
+        still shows), moving with the row."""
         th = self.th
-        row = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+        row = Image.new('RGBA', (w + zone, h), (0, 0, 0, 0))
+        if zone:
+            logo = self.badge(name, h - 14)
+            if logo is not None:
+                row.alpha_composite(logo, (int(w + 14 + (zone - 14 - logo.width) / 2), int((h - logo.height) / 2)))
         if highlight:
             bg, fg, fg_first = (244, 246, 249, 255), th.dark_text, (70, 76, 90, 255)
         else:
@@ -844,32 +1050,46 @@ class Templates:
         return row
 
     def _overtake_single(self, g):
+        """Position change without the cars it passed: the same green header and line as the full card, the new
+        position in a green block with an up chevron, the driver's name with their team logo beside it, and
+        who/where they passed."""
         th = self.th
         name, d = g['driver'], g.get('data', {})
         victim = g.get('driver2') or d.get('victim')
-        car = self.car(name, 280, 120)
         sub = []
         if victim:
             sub.append(f"PASSES {self.meta(victim)['short'].upper()}")
         if d.get('corner'):
             sub.append(d['corner'].upper())
         f = font(19, 'semibold_cond')
-        lines = wrap(g.get('text') or '  ·  '.join(sub), f, 430, 3)
-        panel_h = 112 + 24 * max(0, len(lines) - 1)
-        badge = self.card_badge(name, panel_h)
-        used = max(self.name_block_w(name, 420, 36, 20), self.lines_w(lines, f), 200)
-        W = 110 + int(used) + 24 + (car.width + 10 if car else 0) + self.badge_w(badge)
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'POSITION CHANGE').upper(),
-                                    top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
-                                    stripe=self.driver_color(name))
-        round_rect(img, (14, top + 14, 96, top + 98), 6, th.green)
-        polygon(img, [(55, top + 22), (75, top + 42), (35, top + 42)], th.dark_text)
-        text_vcenter(img, 55, top + 70, f"P{d.get('pos', '')}", font(32, 'bold'), th.dark_text, 'm')
-        self.name_block(img, 110, top + 10, name, 420, 36, 20)
-        self.text_lines(img, 110, top + 80, lines, f, th.muted, 24)
-        if car:
-            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + panel_h - car.height + 4)))
-        self.place_badge(img, badge, top, panel_h)
+        lines = wrap(g.get('text') or '  ·  '.join(sub), f, 400, 99)
+        head_h, blk_w, slant = LABEL_H, 84, 14
+        panel_h = 108 + 24 * max(0, len(lines) - 1)
+        has_first = len(self.meta(name)['display'].split()) > 1
+        badge = self.badge(name, 54 if has_first else 44)
+        title = (g.get('title') or 'POSITION CHANGE').upper()
+        x0 = blk_w + slant + 16
+        name_w = self.name_block_w(name, 400, 36, 20)
+        used = max(name_w + (badge.width + 18 if badge is not None else 0), self.lines_w(lines, f), 180)
+        W = int(max(x0 + used + 24, self.tag_w(title) + 24))
+        top = head_h
+        img = Image.new('RGBA', (W, int(top + panel_h)), (0, 0, 0, 0))
+        self.bar(img, (0, top, W, top + panel_h))
+        by, bh = top, panel_h
+        self.colour_wash(img, 0, by, W, bh, self.driver_color(name))
+        self.label_tab(img, 0, top - head_h, title, th.green)
+        ink = self.team_block(img, 0, by, blk_w, bh, th.green, slant)
+        cx, cy = blk_w / 2 + 2, by + bh / 2
+        pos = f"P{d['pos']}" if d.get('pos') else ''
+        if pos:
+            polygon(img, [(cx - 11, cy - 16), (cx, cy - 27), (cx + 11, cy - 16)], ink)
+            text_vcenter(img, cx, cy + 8, pos, fit_font(pos, blk_w - 10, 34, 'bold'), ink, 'm')
+        else:  # no position known: just a bigger chevron
+            polygon(img, [(cx - 20, cy + 10), (cx, cy - 12), (cx + 20, cy + 10)], ink)
+        y = self.name_block(img, x0, by + 10, name, 400, 36, 20, self._bright(self.driver_color(name)))
+        if badge is not None:  # beside the name, centred on it
+            img.alpha_composite(badge, (int(x0 + name_w + 18), int((by + 10 + y) / 2 - badge.height / 2)))
+        self.text_lines(img, x0, y + 8, lines, f, th.muted, 24)
         return img
 
     def card_new_leader(self, g, shine=1.0):
@@ -924,75 +1144,103 @@ class Templates:
         return img
 
     def card_race_control(self, g):
+        """Race control message, FIA style: amber tag and line, the flag as a solid block down the left (chequered
+        for the chequered flag, split for double yellow), the message in bold capitals and the detail under it, and
+        the race time in a small tab on the top right. Long messages wrap rather than widen the card."""
         th = self.th
         d = g.get('data', {})
         msg = (g.get('title') or 'RACE CONTROL MESSAGE').upper()
-        sub = g.get('text', '')
-        fmsg = font(26, 'bold_cond')
-        W = 760
-        lines = wrap(msg, fmsg, W - 120, 3)
-        fsub = font(19, 'regular')
-        sub_lines = wrap(sub, fsub, W - 120, 3)
-        panel_h = 30 + len(lines) * 32 + (len(sub_lines) * 24 + 6 if sub_lines else 0) + 10
+        sub = ' '.join((g.get('text') or '').split())
+        fmsg, fsub = font(26, 'bold_cond'), font(19, 'regular')
+        max_text = 540
+        lines = wrap(msg, fmsg, max_text, 99)
+        sub_lines = wrap(sub, fsub, max_text, 99) if sub else []
+        flag_w, slant = 58, 14
+        x0 = flag_w + slant + 18
         amber = rgba('#FFC400')
-        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'RACE CONTROL').upper(), label_bg=amber,
-                                    label_fg=th.dark_text,
-                                    stripe=amber)
+        label = (g.get('label') or 'RACE CONTROL').upper()
+        race_time = d.get('race_time') or ''
+        f_time = font(17, 'bold_cond')
+        time_w = int(text_w(f_time, race_time) + 24) if race_time else 0
+        W = int(max(x0 + max(self.lines_w(lines, fmsg), self.lines_w(sub_lines, fsub), 220) + 28,
+                    self.tag_w(label) + time_w + 30))
+        content_h = len(lines) * 32 + (6 + len(sub_lines) * 24 if sub_lines else 0)
+        panel_h = max(88, content_h + 34)
+        img, top = self.card_canvas(W, panel_h, label, chevron=amber)
+        by, bh = top, panel_h
+        # The flag block
         flag = d.get('flag', 'yellow')
         fcol = rgba(FLAG_COLORS.get(flag, '#FFD200'))
+        shape = [(0, by), (flag_w + slant, by), (flag_w, by + bh), (0, by + bh)]
         if flag == 'chequered':
-            self._checker(img, 22, top + 22, 56, 40, 8)
+            layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+            self._checker(layer, 0, int(by), flag_w + slant + 1, int(bh) + 1, 12)
+            mask = Image.new('RGBA', img.size, (0, 0, 0, 0))
+            polygon(mask, shape, (255, 255, 255, 255))
+            layer.putalpha(ImageChops.multiply(layer.getchannel('A'), mask.getchannel('A')))
+            img.alpha_composite(layer)
         else:
-            round_rect(img, (22, top + 22, 78, top + 62), 3, fcol)
-            if flag == 'double yellow':
-                round_rect(img, (30, top + 30, 86, top + 70), 3, fcol)
-                round_outline(img, (30, top + 30, 86, top + 70), 3, th.panel_solid, 2)
-        y = top + 18
+            polygon(img, shape, fcol)
+            if flag == 'double yellow':  # two flags: a dark cut across the middle
+                m = by + bh / 2
+                polygon(img, [(0, m - 2), (flag_w + slant / 2 + 2, m - 2), (flag_w + slant / 2 + 1, m + 2), (0, m + 2)],
+                        th.panel_solid)
+        # The message, centred down the card
+        y = by + (bh - content_h) / 2 - 2
         for ln in lines:
-            ImageDraw.Draw(img).text((104, y), ln, font=fmsg, fill=th.text)
+            ImageDraw.Draw(img).text((x0, y), ln, font=fmsg, fill=th.text)
             y += 32
-        self.text_lines(img, 104, y + 2, sub_lines, fsub, th.muted, 24)
-        if d.get('race_time'):
-            text_vcenter(img, W - 14, top - LABEL_H / 2, d['race_time'], font(16, 'semibold_cond'), th.text, 'r')
+        self.text_lines(img, x0, y + 6, sub_lines, fsub, th.body, 24)
+        if race_time:
+            round_rect(img, (W - time_w, top - 24, W, top), 3, th.panel_solid, corners=(True, True, False, False))
+            text_vcenter(img, W - time_w / 2, top - 11, race_time, f_time, th.text, 'm')
         return img
 
     def card_stat(self, g):
+        """One big number in a colour block (the driver's colour, or gold for a race stat), who it belongs to and
+        a two- or three-word caption. A driver's car stands on the card over their team logo. Nothing to read."""
         th = self.th
         d = g.get('data', {})
-        """One big number, who it belongs to and a two- or three-word caption. Nothing to read."""
         value = str(d.get('value', ''))
         name = g.get('driver')
         caption = (d.get('short') or d.get('label') or '').upper()
-        panel_h = 104
-        car = self.car(name, 220, 95) if name else None
-        fval = fit_font(value, 240, 76, 'bold')
-        vw = int(text_w(fval, value)) + 48
-        f_cap = fit_font(caption, 420, 22, 'semibold_cond')
+        body_h, slant = 104, 16
+        col = self.driver_color(name) if name else th.accent2
+        car = self.car(name, 260, 110) if name else None
+        badge = self.badge(name, body_h - CAR_SINK - 20 if car else body_h - 30) if name else None
+        fval = fit_font(value, 200, 70, 'bold')
+        val_w = max(92, int(text_w(fval, value)) + 40)
+        x0 = val_w + slant + 18
         if name:
             head = self.meta(name)['short'].upper()
-            f_head = fit_font(head, 420, 46, 'bold_cond')
+            f_head = fit_font(head, 380, 44, 'bold_cond')
             flag = self.flag_img(self.meta(name).get('country'), 24)
         else:
             head, flag = (g.get('title') or '').upper(), None
-            f_head = fit_font(head, 520, 34, 'bold_cond')
+            f_head = fit_font(head, 420, 38, 'bold_cond')
+        f_cap = fit_font(caption, 420, 22, 'semibold_cond')
         head_w = text_w(f_head, head) + (flag.width + 12 if flag else 0)
-        badge = self.card_badge(name, panel_h)
-        used = max(head_w, text_w(f_cap, caption), 160)
-        W = vw + 20 + int(used) + 28 + (car.width + 10 if car else 0) + self.badge_w(badge)
-        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'RACE STATS').upper(),
-                                    top_extra=LABEL_H + (max(0, car.height - panel_h + 10) if car else 0),
-                                    stripe=self.driver_color(name) if name else th.accent2)
-        text_vcenter(img, 14 + vw / 2, top + panel_h / 2, value, fval, th.accent2, 'm')
-        round_rect(img, (vw + 4, top + 18, vw + 6, top + panel_h - 18), 0, (255, 255, 255, 50))
-        x = vw + 20
+        logo_col = badge.width + 40 if badge is not None else int(car.width * 0.6) if car else 0
+        label = (g.get('label') or 'RACE STATS').upper()
+        W = x0 + int(max(head_w, text_w(f_cap, caption), 140)) + 24 + logo_col
+        W = int(max(W, self.tag_w(label) + 24 + (car.width + 16 if car else 0)))
+        img, top = self.card_canvas(W, body_h, label, top_extra=(car.height - CAR_SINK) if car else 0)
+        by, bh = top, body_h
+        self.colour_wash(img, 0, by, W, bh, col)
+        ink = self.team_block(img, 0, by, val_w, bh, col, slant)
+        text_vcenter(img, val_w / 2 + 2, by + bh / 2, value, fval, ink, 'm')
         if head:
             if flag:
-                img.alpha_composite(flag, (int(x), int(top + 40 - flag.height / 2)))
-            text_vcenter(img, x + (flag.width + 12 if flag else 0), top + 40, head, f_head, th.text)
-        text_vcenter(img, x, top + (78 if head else panel_h / 2), caption, f_cap, th.muted)
+                img.alpha_composite(flag, (int(x0), int(by + 36 - flag.height / 2)))
+            text_vcenter(img, x0 + (flag.width + 12 if flag else 0), by + 36, head, f_head,
+                         self._bright(col) if name else th.text)
+        text_vcenter(img, x0, by + (74 if head else bh / 2), caption, f_cap, th.muted)
+        if logo_col:
+            self.logo_column(img, badge, W - logo_col, logo_col, by, bh, low=car is not None)
         if car:
-            img.alpha_composite(car, (int(W - self.badge_w(badge) - car.width - 6), int(top + panel_h - car.height + 4)))
-        self.place_badge(img, badge, top, panel_h)
+            cx = W - logo_col / 2 if logo_col >= car.width * 0.6 else W - 12 - car.width / 2
+            cx = min(W - car.width / 2 - 4, max(self.tag_w(label) + 16 + car.width / 2, cx))
+            self.car_on_top(img, car, cx, by + CAR_SINK)
         return img
 
     def card_movers(self, g):
@@ -1016,7 +1264,7 @@ class Templates:
             self.pos_number(img, pad + 32, cy + 1, now, 34)
             round_rect(img, (pad + 64, y + 8, pad + 68, y + row_h - 8), 0, self.driver_color(name))
             x = pad + 82
-            x += self.name_with_flag(img, x, cy + 1, name, 28) + 24
+            x += self.name_with_flag(img, x, cy + 1, name, 28, self._bright(self.driver_color(name))) + 24
             text_vcenter(img, x, cy + 1, f"FROM P{start}", f_from, th.muted)
             round_rect(img, (W - pad - 84, y + 9, W - pad - 10, y + row_h - 9), 4, col)
             self.delta(img, W - pad - 47, cy, delta, 22, contrast_text(col))
@@ -1024,21 +1272,25 @@ class Templates:
         return img
 
     def card_headline(self, g):
+        """A news line in bold capitals and a sentence or two under it, at most MAX_TEXT_W of text wide: longer
+        text adds lines rather than width."""
         th = self.th
-        W = 820
         fh = font(30, 'bold_cond')
         fb = font(21, 'regular')
-        head = wrap((g.get('title') or '').upper(), fh, W - 50, 3)
-        body = wrap(g.get('text', ''), fb, W - 50, 5)
+        title, text = (g.get('title') or '').upper(), ' '.join((g.get('text') or '').split())
+        W = self.text_card_w(text_w(fh, title), text_w(fb, text), 300) + 50
+        head = wrap(title, fh, W - 50, 99)
+        body = wrap(text, fb, W - 50, 99)
         panel_h = 22 + len(head) * 34 + (8 + len(body) * 26 if body else 0) + 14
-        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'PADDOCK NEWS').upper(), stripe=th.accent2)
+        img, top = self.card_canvas(W, panel_h, (g.get('label') or 'PADDOCK NEWS').upper(), wash=th.accent2,
+                                    chevrons=None)
         y = top + 16
         for ln in head:
             ImageDraw.Draw(img).text((24, y), ln, font=fh, fill=th.text)
             y += 34
         y += 8
         for ln in body:
-            ImageDraw.Draw(img).text((24, y), ln, font=fb, fill=th.muted)
+            ImageDraw.Draw(img).text((24, y), ln, font=fb, fill=th.body)
             y += 26
         return img
 
@@ -1328,13 +1580,14 @@ class Templates:
         note = wrap(self.COMM_INFO_NOTE, f_note, W - pad * 2, 2)
         panel_h = (14 + (22 * len(names) + 8 if names else 0) + 26 * len(lines) + 12 + 1 + 10
                    + 19 * len(note) + 12)
-        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'THE COMMENTARY TEAM').upper(), stripe=th.accent)
+        img, top = self.card_canvas(W, panel_h, (g.get('title') or 'THE COMMENTARY TEAM').upper(), wash=th.accent,
+                                    chevrons=None)
         y = top + 14
         if names:
             y = self.text_lines(img, pad, y, names, f_names, th.accent2, 22) + 8
         y = self.text_lines(img, pad, y, lines, f_text, th.text, 26) + 12
         round_rect(img, (pad, y, W - pad, y + 1), 0, (255, 255, 255, 30))
-        self.text_lines(img, pad, y + 10, note, f_note, th.muted, 19)
+        self.text_lines(img, pad, y + 10, note, f_note, (196, 202, 214, 255), 19)
         return img
 
     def card_start_movers(self, g):
@@ -1352,7 +1605,7 @@ class Templates:
         if tab:
             # Room for the label and the partner's tab side by side
             W = max(W, int(text_w(font(18, 'bold_cond'), title) + 28 + 16 + tab.width))
-        img, top = self.card_canvas(W, panel_h, title, stripe=th.accent, sponsor='partner')
+        img, top = self.card_canvas(W, panel_h, title, sponsor='partner')
         for i, (key, r) in enumerate(cols):
             x = 8 + i * col_w
             if i:
@@ -1367,7 +1620,8 @@ class Templates:
             name = r['driver']
             round_rect(img, (x + 120, top + 46, x + 123, top + 106), 0, self.driver_color(name))
             f = fit_font(self.meta(name)['short'].upper(), col_w - 150, 32, 'bold_cond')
-            text_vcenter(img, x + 134, top + 62, self.meta(name)['short'].upper(), f, th.text)
+            text_vcenter(img, x + 134, top + 62, self.meta(name)['short'].upper(), f,
+                         self._bright(self.driver_color(name)))
             text_vcenter(img, x + 134, top + 94, f"P{r['grid']} › P{r['pos']}", font(22, 'semibold_cond'), th.muted)
         return img
 
@@ -1412,6 +1666,16 @@ class Templates:
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, W - 1, H - 1), radius=4, fill=255)
         img.putalpha(ImageChops.multiply(img.getchannel('A'), mask))
         return img
+
+    @staticmethod
+    def _bright(color):
+        """A livery colour lifted until it reads as text on the near-black bar (dark blues go light blue)."""
+        r, g, b = Templates._readable(color)[:3]
+        lum = 0.299 * r + 0.587 * g + 0.114 * b
+        if lum < 150:
+            k = (150 - lum) / (255 - lum)
+            r, g, b = (int(c + (255 - c) * k) for c in (r, g, b))
+        return (r, g, b, 255)
 
     @staticmethod
     def _readable(color):
@@ -1842,14 +2106,14 @@ class Templates:
                 round_rect(img, (l0, cy - 1, l1, cy + 1), 1, line)
                 if link_w[i] >= link_max:
                     for bx in (l0 + (l1 - l0) * 0.22, l1 - (l1 - l0) * 0.22):
-                        round_rect(img, (bx - 7, cy - 4, bx + 7, cy + 4), 0, th.panel)
+                        round_rect(img, (bx - 7, cy - 4, bx + 7, cy + 4), 0, th.bar[:3] + (255,))
                         for off in (-4, 3):
                             polygon(img, [(bx + off - 3, cy + 9), (bx + off, cy + 9), (bx + off + 4, cy - 9),
                                           (bx + off + 1, cy - 9)], (255, 255, 255, 150))
                 chip = f"+{links[i]:.1f}s"
                 cw = text_w(f_chip, chip) + 18
                 mx = (l0 + l1) / 2
-                round_rect(img, (mx - cw / 2, cy - 14, mx + cw / 2, cy + 14), 14, th.panel)
+                round_rect(img, (mx - cw / 2, cy - 14, mx + cw / 2, cy + 14), 14, th.bar[:3] + (255,))
                 round_outline(img, (mx - cw / 2, cy - 14, mx + cw / 2, cy + 14), 14, (255, 255, 255, 90), 1)
                 text_vcenter(img, mx, cy + 1, chip, f_chip, th.text, 'm')
             # The pack: a soft capsule behind its markers, the lead pack outlined in the accent
@@ -1896,15 +2160,17 @@ class Templates:
         title = (g.get('title') or '').upper()
         text = ' '.join((g.get('text') or '').split())
         f_title, f_text = font(32, 'bold_cond'), font(20, 'regular')
-        max_w = 780 if circuit else 860
+        # As wide as the title, or enough for the text on about two lines, never past MAX_TEXT_W: more text
+        # adds lines
+        max_w = self.text_card_w(text_w(f_title, title), text_w(f_text, text), 260)
         title = wrap(title, f_title, max_w, 1)[0] if title else ''
-        lines = wrap(text, f_text, max_w, 3 if circuit else 2) if text else []
+        lines = wrap(text, f_text, max_w, 99) if text else []
         panel_h = 22 + 36 + (len(lines) * 26 + 6 if lines else 0) + 14
         flag = (load_image(gcfg.resolve_path(self.cfg['championship'].get('event_flag')), autocrop=False)
                 if circuit else None)
         flag_w = 160 if flag is not None else 0
         W = int(48 + max(text_w(f_title, title), self.lines_w(lines, f_text), 260) + flag_w)
-        img, top = self.card_canvas(W, panel_h, label, stripe=th.accent2)
+        img, top = self.card_canvas(W, panel_h, label, wash=th.accent2, chevrons=None)
         if flag is not None:
             fw = flag_w + 60
             art = cover_image(flag, fw, int(panel_h))
@@ -1917,7 +2183,7 @@ class Templates:
             layer.putalpha(ImageChops.multiply(layer.getchannel('A'), shape))
             img.alpha_composite(layer)
         ImageDraw.Draw(img).text((26, top + 18), title, font=f_title, fill=th.text)
-        self.text_lines(img, 26, top + 62, lines, f_text, th.muted, 26)
+        self.text_lines(img, 26, top + 62, lines, f_text, th.body, 26)
         return img
 
 def _is_light(logo):
