@@ -8,6 +8,7 @@ from pydub import AudioSegment
 from faster_qwen3_tts import FasterQwen3TTS
 import voice_lookup
 from radio_fx import apply_radio
+from caps_text import seen_forms, soften_caps
 import argparse
 import sys
 import threading
@@ -92,6 +93,8 @@ def main():
         if parsed:
             all_parsed[i] = parsed
     lines_to_process = list(all_parsed.items())
+    # How the whole script writes each word in normal case, so a shouted "PAYNE'S" comes back as "Payne's"
+    caps_forms = seen_forms(p[2] for p in all_parsed.values())
 
     if args.start_line > 0:
         lines_to_process = [l for l in lines_to_process if l[0] >= args.start_line]
@@ -261,9 +264,14 @@ def main():
         torch.manual_seed(line_seed)
 
         print(f"{label} Line {orig_idx}: {timecode} - {speaker} (seed {line_seed})")
+        # Shouted ALL-CAPS words are read in normal case: the model stumbles over "OH!" and the like
+        spoken = soften_caps(text, caps_forms)
+        if spoken != text:
+            enc = sys.stdout.encoding or "utf-8"
+            print(f"  spoken as: {spoken}".encode(enc, "replace").decode(enc))
         try:
             audio_list, sr = model.generate_voice_clone(
-                text=text,
+                text=spoken,
                 language=args.language,
                 ref_audio=ref_audio,
                 ref_text=ref_text,

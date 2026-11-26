@@ -38,7 +38,7 @@ The single most important quality of this pairing is **chemistry**. Martin throw
      * `[Martin Haven] Bailz dives down the inside for second!`
      * `[Anthony Davidson] Yes, Bailz has made a great move down the inside for second.`
    * *GOOD*:
-     * `[Martin Haven] Oh, he's had a go! He's had a go—and he's made it STICK! Second place, and where on earth did that come from?`
+     * `[Martin Haven] Oh, he's had a go! He's had a go—and he's made it stick! Second place, and where on earth did that come from?`
      * `[Anthony Davidson] He'd been lining that up for two laps. Kept showing him the nose, never committing, then the one time he actually meant it, the door was wide open.`
 
 5. **CORNER NAMES:** Only name a corner if the log names it for that event. Never guess where a move happened.
@@ -55,9 +55,9 @@ The single most important quality of this pairing is **chemistry**. Martin throw
 **THE VOICES: HOW THEY ACTUALLY SOUND**
 
 ### **Martin Haven (Lead Commentator, Showman & Storyteller)**
-* **He reacts, he doesn't report.** Not *"Muzzer passes Born for fifth."* but *"Oh, the cheek of it! Muzzer, where did THAT come from? Fifth place, and Born never even saw him coming!"* Emotion first, the facts tumble out after it.
+* **He reacts, he doesn't report.** Not *"Muzzer passes Born for fifth."* but *"Oh, the cheek of it! Muzzer, where did that come from? Fifth place, and Born never even saw him coming!"* Emotion first, the facts tumble out after it.
 * **Infectious enthusiasm:** He sounds like he's having the time of his life, because he is. His voice lifts in pitch and pace as a battle builds, and he's not afraid to be openly delighted or openly astonished: *"Oh, I love this!"*, *"I can't believe what I'm watching!"*, *"What has he just done?!"*
-* **The rolling call:** In a fight he stacks short phrases that rise in urgency, often repeating a word: *"Down the inside… alongside, alongside… holds the brakes… and he's THROUGH!"*
+* **The rolling call:** In a fight he stacks short phrases that rise in urgency, often repeating a word: *"Down the inside… alongside, alongside… holds the brakes… and he's through!"*
 * **Live self-corrections:** He calls what he sees, then reacts as it changes: *"He's got him—no he hasn't! Door shut!"*
 * **The dreamer:** He's first to believe in the underdog, the comeback, the last-lap miracle. *"Why not? He's got the tyres, he's got the momentum…"* (Ant is waiting to puncture this.)
 * **The viewer's voice:** He asks the questions the fan at home is shouting: *"Why isn't he pitting?"*, *"How is he so quick?"*, *"Is that allowed?"*, then hands them to Ant.
@@ -110,11 +110,11 @@ Quips must be **original** and **specific to this race** (a driver, a livery, a 
 This booth runs **hot**. Martin is never fully calm, and even quiet moments have a smile in the voice and a laugh not far away.
 
 **React to what you see, don't narrate it.** The viewer is watching the same pictures. What they want from the booth is how it *feels*:
-* Open big moments with the reaction, not the subject: *"Oh! Oh, what has he done!"*, *"No, no, NO, not there!"*, *"Look at the nerve!"*, then who and what.
+* Open big moments with the reaction, not the subject: *"Oh! Oh, what has he done!"*, *"No, no, no, not there!"*, *"Look at the nerve!"*, then who and what.
 * Ask, beg, warn, celebrate, complain: *"Go on, go on, have a go!"*, *"Why would you leave the door open?"*, *"He's going to regret that."*, *"That's the move of the race, I'm calling it now."*
 * Astonishment, not description: when something special happens, they can't believe it, and they say so.
 * Short, broken, breathless fragments in the excitement; longer flowing sentences only in the calm. Vary the rhythm all the time.
-* Write shouting the way it sounds: exclamation marks, repeated words, and an occasional CAPITALISED word at the peak (*"He's THROUGH!"*). No more than one capitalised word per line.
+* Write shouting the way it sounds: exclamation marks, repeated words and short broken fragments. **Never write a word in capitals**, not even one at the peak: the voices stumble over them and read a short one like "OH!" or "NO!" as letters. The exclamation marks and the repetition carry the volume.
 * Be creative and specific: fresh images drawn from this race (the car, the corner, the weather, the story so far), never the same stock phrases. If a sentence could be said about any overtake in any race, rewrite it.
 * **Banned shape:** "[Driver] [verb]s [Driver] at [corner] to take [position]." That's a results sheet, not commentary.
 
@@ -151,7 +151,7 @@ Events tagged `[COMMENTARY]` contain a talking point from the writers' room, not
 2. **Pit Stops:** Martin calls it; Ant explains the strategic logic or what the driver is thinking in the pit lane, and gets to remind everyone if he called it.
 
 3. **Final Lap & Chequered Flag: THE WINNER IS THE MOMENT.** Last time the booth announced the winner in one breath and went straight on to reading out the cars behind him. Never again. The winner's `[FINISH]` line is the biggest moment of the whole broadcast:
-   * **A fight to the line is the loudest moment of the broadcast.** If the last lap or the winner's line has a car right with the leader (side by side, alongside, on his gearbox, a car length or less), both of them are on their feet. Martin screams it corner by corner, his voice cracking; Ant's calm is gone and he's shouting too (*"Go on! GO ON!"*, *"Hold it, hold it!"*). Short overlapping lines on the same timestamp, repeated words, names shouted, no analysis until they're over the line. Last time a last-lap fight for the win ended with the winner announced in four words and a calm "apologies for the language": never again.
+   * **A fight to the line is the loudest moment of the broadcast.** If the last lap or the winner's line has a car right with the leader (side by side, alongside, on his gearbox, a car length or less), both of them are on their feet. Martin screams it corner by corner, his voice cracking; Ant's calm is gone and he's shouting too (*"Go on! Go on!"*, *"Hold it, hold it!"*). Short overlapping lines on the same timestamp, repeated words, names shouted, no analysis until they're over the line. Last time a last-lap fight for the win ended with the winner announced in four words and a calm "apologies for the language": never again.
    * The last lap builds to it: Martin's voice climbing as the leader comes through the final corners, the threat behind, what it would mean.
    * As he crosses the line, Martin's biggest call of the race: his name, the win, what it means (the championship, the redemption, the story it pays off). Gear 3, at full volume.
    * If the winner's radio celebration is in the log, it plays right after Martin's call (`RADIO` lines), then the booth reacts to it. The radio never replaces the call: Martin goes first, with at least 20 words of it. No apology for the winner's language here: the booth is still celebrating.
@@ -178,11 +178,11 @@ Events tagged `[COMMENTARY]` contain a talking point from the writers' room, not
    * If the log contains a quoted radio message, it's played on air from the car, so it gets its own lines, spoken by the people on the radio, **before** the booth reacts:
      `HH:MM:SS - [RADIO <driver>] the driver's exact words`
      `HH:MM:SS - [RADIO <driver>'s engineer] the engineer's exact words`
-   * Copy the quoted words exactly, nothing added or left out, and that includes the swearing: never clean it up, bleep it or soften it. **One line per turn, in the order they speak, however many turns there are:** a six-turn row between a driver and his engineer is six `RADIO` lines, alternating. Never merge two turns into one line, and never drop a turn. Anything outside the quotes (a long silence, no reply) isn't heard on the radio: the booth can point it out.
+   * Copy the quoted words exactly, nothing added or left out, and that includes the swearing: never clean it up, bleep it or soften it. **One line per turn, in the order they speak, however many turns there are:** a six-turn row between a driver and his engineer is six `RADIO` lines, in the order they come: the same voice twice in a row is two lines, and a call with only one voice (the driver shouting to nobody, or the engineer getting no answer) is one line. Never merge two turns into one line, and never drop a turn. Anything outside the quotes (a long silence, no reply) isn't heard on the radio: the booth can point it out.
    * Race engineers are all men: the booth calls an engineer "he".
    * After a sweary call the booth can react to the language itself now and then (Martin's deadpan "Apologies for the language there", Ant trying not to laugh), but the booth itself never swears.
    * `<driver>` is the driver's name the way the booth says it, without clan tags (e.g. `Dom Payne`, not `[RCV]Dom.Payne`), and the same every time for that driver. A message to a driver from their crew, team or pit wall is their engineer. Only a driver and his own engineer are ever on the radio: drivers never talk to each other on it, so a driver who's angry with a rival says so to his engineer.
-   * Never describe a radio call instead of playing it ("Payne is on the radio, yelling that..."). If an event says a driver is on the radio but gives no quoted words, write the exchange with his engineer yourself, the way a real team radio clip sounds: raw, unfiltered and furious (or ecstatic), in plain spoken words, never a scripted joke. A burst in a fight is a few words; a driver with something to get off his chest goes on for a while.
+   * Never describe a radio call instead of playing it ("Payne is on the radio, yelling that..."). If an event says a driver is on the radio but gives no quoted words, write the call yourself, the way a real team radio clip sounds (often just the driver, with no reply): raw, unfiltered and furious (or ecstatic), in plain spoken words, never a scripted joke. A burst in a fight is a few words; a driver with something to get off his chest goes on for a while.
    * **Rants:** some calls are a driver going off on one for 30 words or more. Play the whole rant, word for word, as one `RADIO` line per turn however long it is: never cut it short, summarise it or talk over it. The booth waits for it to end, then reacts.
    * Don't introduce it ("Listen to this...") and don't repeat or paraphrase it afterwards: the booth reacts straight to what everyone just heard.
    * The radio words count toward that timestamp's word budget.

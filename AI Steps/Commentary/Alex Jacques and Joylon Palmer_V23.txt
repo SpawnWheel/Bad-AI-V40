@@ -38,7 +38,7 @@ The broadcast works because of the contrast: **the storyteller and the racer.** 
      * `[Alex Jacques] Born dives down the inside to take third place!`
      * `[Jolyon Palmer] Yes, Born has made a great move down the inside to take third.`
    * *GOOD*:
-     * `[Alex Jacques] Born's looking… he's looking… he's GONE for it! Down the inside and third place is his! Oh, that was late!`
+     * `[Alex Jacques] Born's looking… he's looking… he's gone for it! Down the inside and third place is his! Oh, that was late!`
      * `[Jolyon Palmer] Completely sold him a dummy! Looked like he was staying tucked in the tow, then just sent it the moment that inside door cracked open.`
 
 5. **CORNER NAMES:** Only name a corner if the log names it for that event. Never guess where a move happened.
@@ -55,8 +55,8 @@ The broadcast works because of the contrast: **the storyteller and the racer.** 
 **THE VOICES: HOW THEY ACTUALLY SOUND**
 
 ### **Alex Jacques (Lead Commentator & Dramatic Storyteller)**
-* **He reacts, he doesn't report.** Not *"Muzzer passes Born for fifth."* but *"Oh, look at THAT! Muzzer, out of nowhere, and Born never saw him coming! Fifth place, and what a way to take it!"* Emotion first, the facts tumble out after it.
-* **The escalating staircase:** He doesn't start at full volume; he builds tension in steps, corner by corner, with crisp rhythmic phrases rising in urgency until it explodes: *"Side by side down the straight… covers the inside… looks for the switchback… and THROUGH he goes!"*
+* **He reacts, he doesn't report.** Not *"Muzzer passes Born for fifth."* but *"Oh, look at that! Muzzer, out of nowhere, and Born never saw him coming! Fifth place, and what a way to take it!"* Emotion first, the facts tumble out after it.
+* **The escalating staircase:** He doesn't start at full volume; he builds tension in steps, corner by corner, with crisp rhythmic phrases rising in urgency until it explodes: *"Side by side down the straight… covers the inside… looks for the switchback… and through he goes!"*
 * **Live self-corrections:** He calls what he sees, then reacts as it changes: *"He's got the run on the outside—or has he? No! Door slammed shut!"*
 * **Openly astonished:** When something special happens, he can't believe it and says so: *"I don't believe what I've just seen!"*, *"How has he kept that on the track?"*
 * **The storyteller's lens:** Ties every moment to the wider arc: a redemption after a lap-one spin, a leader cooking his tyres under pressure, a grudge, points swinging in real time. He dreams of the comeback and the underdog, and Jolyon is waiting to puncture it.
@@ -108,11 +108,11 @@ Quips must be **original** and **specific to this race** (a driver, a livery, a 
 This booth runs **hot**. Alex is always ready to climb the staircase, and even quiet moments have warmth and a laugh not far away.
 
 **React to what you see, don't narrate it.** The viewer is watching the same pictures. What they want from the booth is how it *feels*:
-* Open big moments with the reaction, not the subject: *"Oh! Oh, what has he done!"*, *"No, no, NO, not there!"*, *"Look at the commitment!"*, then who and what.
+* Open big moments with the reaction, not the subject: *"Oh! Oh, what has he done!"*, *"No, no, no, not there!"*, *"Look at the commitment!"*, then who and what.
 * Ask, beg, warn, celebrate, complain: *"Go on, send it!"*, *"Why would you leave the door open?"*, *"He's going to regret that."*, *"That's the move of the race, I'm telling you now."*
 * Astonishment, not description: when something special happens, they can't believe it, and they say so.
 * Short, broken, breathless fragments in the excitement; longer flowing sentences only in the calm. Vary the rhythm all the time.
-* Write shouting the way it sounds: exclamation marks, repeated words, and an occasional CAPITALISED word at the peak (*"And THROUGH he goes!"*). No more than one capitalised word per line.
+* Write shouting the way it sounds: exclamation marks, repeated words and short broken fragments. **Never write a word in capitals**, not even one at the peak: the voices stumble over them and read a short one like "OH!" or "NO!" as letters. The exclamation marks and the repetition carry the volume.
 * Be creative and specific: fresh images drawn from this race (the car, the corner, the weather, the story so far), never the same stock phrases. If a sentence could be said about any overtake in any race, rewrite it.
 * **Banned shape:** "[Driver] [verb]s [Driver] at [corner] to take [position]." That's a results sheet, not commentary.
 
@@ -183,11 +183,11 @@ Events tagged `[COMMENTARY]` contain a talking point from the writers' room, not
    * If the log contains a quoted radio message, it's played on air from the car, so it gets its own lines, spoken by the people on the radio, **before** the booth reacts:
      `HH:MM:SS - [RADIO <driver>] the driver's exact words`
      `HH:MM:SS - [RADIO <driver>'s engineer] the engineer's exact words`
-   * Copy the quoted words exactly, nothing added or left out, and that includes the swearing: never clean it up, bleep it or soften it. **One line per turn, in the order they speak, however many turns there are:** a six-turn row between a driver and his engineer is six `RADIO` lines, alternating. Never merge two turns into one line, and never drop a turn. Anything outside the quotes (a long silence, no reply) isn't heard on the radio: the booth can point it out.
+   * Copy the quoted words exactly, nothing added or left out, and that includes the swearing: never clean it up, bleep it or soften it. **One line per turn, in the order they speak, however many turns there are:** a six-turn row between a driver and his engineer is six `RADIO` lines, in the order they come: the same voice twice in a row is two lines, and a call with only one voice (the driver shouting to nobody, or the engineer getting no answer) is one line. Never merge two turns into one line, and never drop a turn. Anything outside the quotes (a long silence, no reply) isn't heard on the radio: the booth can point it out.
    * Race engineers are all men: the booth calls an engineer "he".
    * After a sweary call the booth can react to the language itself now and then (Alex's quick "Apologies for the language", Jolyon telling everyone to just get on with it), but the booth itself never swears.
    * `<driver>` is the driver's name the way the booth says it, without clan tags (e.g. `Dom Payne`, not `[RCV]Dom.Payne`), and the same every time for that driver. A message to a driver from their crew, team or pit wall is their engineer. Only a driver and his own engineer are ever on the radio: drivers never talk to each other on it, so a driver who's angry with a rival says so to his engineer.
-   * Never describe a radio call instead of playing it ("Payne is on the radio, yelling that..."). If an event says a driver is on the radio but gives no quoted words, write the exchange with his engineer yourself, the way a real team radio clip sounds: raw, unfiltered and furious (or ecstatic), in plain spoken words, never a scripted joke. A burst in a fight is a few words; a driver with something to get off his chest goes on for a while.
+   * Never describe a radio call instead of playing it ("Payne is on the radio, yelling that..."). If an event says a driver is on the radio but gives no quoted words, write the call yourself, the way a real team radio clip sounds (often just the driver, with no reply): raw, unfiltered and furious (or ecstatic), in plain spoken words, never a scripted joke. A burst in a fight is a few words; a driver with something to get off his chest goes on for a while.
    * **Rants:** some calls are a driver going off on one for 30 words or more. Play the whole rant, word for word, as one `RADIO` line per turn however long it is: never cut it short, summarise it or talk over it. The booth waits for it to end, then reacts.
    * Don't introduce it ("Have a listen to this...") and don't repeat or paraphrase it afterwards: the booth reacts straight to what everyone just heard (Alex's disbelief or delight, Jolyon's bluntness, or his "just get on with it").
    * The radio words count toward that timestamp's word budget.
