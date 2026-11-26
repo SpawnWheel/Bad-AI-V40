@@ -240,6 +240,8 @@ class RaceEngineerApp:
             run_no = pm.current_run_number + (1 if pm.is_car_on_track else 0)
             pm.journal.add_change(pm.journal_key, text, run_no)
             pm.record_setup_change(text)
+        elif kind == "setup_proposal":
+            pm.propose_change(text)
         elif kind == "setup_conclusion":
             pm.journal.add_conclusion(pm.journal_key, text)
 

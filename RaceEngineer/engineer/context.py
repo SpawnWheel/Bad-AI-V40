@@ -8,6 +8,7 @@ from race.gaps import GapAnalysis
 from race.standings import timing_board
 from race.strategy import RaceStrategy, strategy_engine
 from race.pit_stop_tracker import pit_stop_tracker
+from practice.handling import judge_pressure_profile
 
 
 def _tyre_window_line(snapshot) -> str:
@@ -231,19 +232,14 @@ def build_telemetry_context(
         for i, c in enumerate(corners):
             spread = inn[i] - out[i] if len(inn) > i and len(out) > i else 0.0
             mid_diff = cen[i] - ((inn[i] + out[i]) / 2.0) if len(cen) > i else 0.0
-            min_io = min(inn[i], out[i]) if len(inn) > i and len(out) > i else 0.0
-            max_io = max(inn[i], out[i]) if len(inn) > i and len(out) > i else 0.0
 
             if i < 2:
                 spread_eval = "camber optimal (target ~7°C)" if 5.0 <= spread <= 9.0 else ("too much neg camber (>9°C)" if spread > 9.0 else "insufficient camber (<5°C)")
             else:
                 spread_eval = "camber optimal (rear target ~4°C)" if 2.0 <= spread <= 6.0 else ("too much neg camber (>6°C)" if spread > 6.0 else "insufficient camber (<2°C)")
-            if cen[i] > max_io or mid_diff > 2.0:
-                press_eval = "over-inflated / bulging out"
-            elif cen[i] < min_io or mid_diff < -2.0:
-                press_eval = "under-inflated / bulging in"
-            else:
-                press_eval = "pressure optimal (no bulging)"
+            prof, _ = judge_pressure_profile(inn[i], cen[i], out[i]) if len(cen) > i and len(inn) > i and len(out) > i else ("COLD", 0.0)
+            press_eval = {"HIGH": "middle hot - pressure high", "LOW": "middle cool - pressure low",
+                          "COLD": "too cold to read pressure", "OK": "flat - no pressure signal (±3°C)"}[prof]
 
             three_point_lines.append(
                 f"  {c}: Inner {inn[i]:.0f}°C | Mid {cen[i]:.0f}°C | Outer {out[i]:.0f}°C (Spread: {spread:+.1f}°C [{spread_eval}], Mid: {mid_diff:+.1f}°C [{press_eval}])"

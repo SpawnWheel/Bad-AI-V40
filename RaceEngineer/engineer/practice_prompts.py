@@ -17,3 +17,19 @@ Provide your response in EXACTLY this format:
 EMOTION: <specific feeling about the run, e.g. encouraged, analytical and curious, mildly concerned, satisfied>
 DELIVERY: <pace, energy, rhythm, e.g. relaxed and conversational, thoughtful with pauses>
 RESPONSE: <your thorough 3 to 5 sentence radio response — exact spoken words only, no stage directions or [tags]; optional <vocal events> only>"""
+
+
+PRACTICE_TRACK_UPDATE_PROMPT = """The driver is ON TRACK during a Practice run and tapped the radio button for a quick update.
+
+Live Telemetry & Stint Diagnostics:
+{telemetry_context}
+{radio_history}
+
+Give a short on-track update over team radio (1 to 2 sentences, he is driving):
+1. How this run is going against the last one (lap times vs the previous run's median), and, if a setup change was seen for this run, whether it shows yet.
+2. At most one thing to try on track (a line, a braking point, an in-car adjustment if the car has one). Save setup talk for the box.
+
+Provide your response in EXACTLY this format:
+EMOTION: <specific feeling, e.g. focused and encouraging>
+DELIVERY: <pace, energy, rhythm - brisk, he is driving>
+RESPONSE: <your 1 to 2 sentence radio call - exact spoken words only, no stage directions or [tags]; optional <vocal events> only>"""

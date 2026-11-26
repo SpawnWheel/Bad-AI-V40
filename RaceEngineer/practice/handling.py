@@ -27,6 +27,37 @@ from typing import Dict, List, Optional, Tuple
 
 G = 9.81
 CORNERS = ("FL", "FR", "RL", "RR")
+ATM_BAR = 1.01325
+REF_AIR_K = 293.15            # cold-equivalent pressures are quoted at 20°C internal air temperature
+
+
+def cold_equivalent_bar(p_hot_bar: float, air_temp_c: float) -> Optional[float]:
+    """Gauge pressure the tyre would read at 20°C air temperature (ideal gas, constant volume).
+
+    Lets us compare the SET (cold) pressures of two runs from on-track readings, whatever the tyres'
+    temperature: if the cold-equivalent moved, the driver changed the pressures in the garage."""
+    if p_hot_bar <= 0.3 or air_temp_c <= -30.0 or air_temp_c > 250.0:
+        return None
+    return (p_hot_bar + ATM_BAR) * REF_AIR_K / (air_temp_c + 273.15) - ATM_BAR
+
+
+def judge_pressure_profile(inner: float, mid: float, outer: float, cold_below_c: float = 45.0) -> Tuple[str, float]:
+    """Pressure read from the tread temperature profile.
+
+    The middle is compared with the average of the shoulders. Sims report these temps in whole degrees and
+    camber, toe and suspension move them too, so only a clear difference (> 3°C) counts. Returns
+    (status, mid_minus_avg) where status is COLD / OK / HIGH (middle hot: too much pressure) / LOW."""
+    d = mid - (inner + outer) / 2.0
+    if min(inner, mid, outer) < cold_below_c:
+        return "COLD", d
+    if d > PRESSURE_DEADBAND_C:
+        return "HIGH", d
+    if d < -PRESSURE_DEADBAND_C:
+        return "LOW", d
+    return "OK", d
+
+
+PRESSURE_DEADBAND_C = 3.0
 
 
 def _med(v):
@@ -57,6 +88,7 @@ class LapHandling:
     tyre_imo: Dict[str, Tuple[float, float, float]] = field(default_factory=dict)
     carcass: Dict[str, float] = field(default_factory=dict)
     pressures_bar: Dict[str, float] = field(default_factory=dict)
+    cold_eq_bar: Dict[str, float] = field(default_factory=dict)
     brake_peak: Dict[str, float] = field(default_factory=dict)
     ride_min_cm: Dict[str, float] = field(default_factory=dict)
     ride_min_where: Dict[str, str] = field(default_factory=dict)
@@ -66,6 +98,7 @@ class LapHandling:
     corner_time: Dict[int, float] = field(default_factory=dict)
     top_speed: float = 0.0
     limiter_sec: float = 0.0
+    seq: int = 0              # increasing counter over the session (lap numbers can jump after garage visits)
 
 
 class HandlingAnalyzer:
@@ -77,7 +110,11 @@ class HandlingAnalyzer:
         self._dt_n = 0
         self._steer_yaw_sign_sum = 0.0
         self._r0_samples: List[float] = []
+        # drivetrain from wheel speeds: rear/front RPS ratio under hard acceleration vs while cruising
+        self._rps_acc: List[float] = []
+        self._rps_cruise: List[float] = []
         self.laps: List[LapHandling] = []
+        self._seq = 0
         self._reset_lap(0)
 
     @property
@@ -91,6 +128,11 @@ class HandlingAnalyzer:
     def reset(self):
         self.laps = []
         self._r0_samples = []
+        self._rps_acc = []
+        self._rps_cruise = []
+        self._dt_front = self._dt_rear = 0.0
+        self._dt_n = 0
+        self.drivetrain = "unknown"
         self._reset_lap(0)
 
     def _reset_lap(self, lap: int):
@@ -110,6 +152,7 @@ class HandlingAnalyzer:
         self._temp = defaultdict(lambda: [0.0, 0.0, 0.0, 0])
         self._carc = defaultdict(list)
         self._press = defaultdict(list)
+        self._cold_eq = defaultdict(list)
         self._brake_peak = defaultdict(float)
         self._ride_min = {}
         self._ride_where = {}
@@ -156,7 +199,10 @@ class HandlingAnalyzer:
             return
         lap = int(snap.current_lap)
         if lap != self._lap:
-            if self._lap > 0 and lap == self._lap + 1:
+            if self._lap > 0 and lap > self._lap:
+                # a jump of more than one lap (garage visit, reset) mixes laps: keep the data, mark it invalid
+                if lap != self._lap + 1:
+                    self._valid = False
                 self._finish_lap(float(snap.last_lap_time))
             self._reset_lap(lap)
         if snap.pit_mode.value > 0:
@@ -190,13 +236,16 @@ class HandlingAnalyzer:
         rel = 1.0 if self._steer_yaw_sign_sum >= 0 else -1.0
 
         # --- balance: curvature per steering
-        if abs(steer) > 0.03 and abs(yaw) > 0.02 and v > 10 and steer * yaw * rel > 0:
+        # Neutral reference R0 comes from gentle, low-g cornering at any throttle. (It used to need partial
+        # throttle and 3% steering at <0.35 g, which a light car with quick steering almost never does, so
+        # the understeer index never appeared in AMS2.)
+        if abs(steer) > 0.01 and abs(yaw) > 0.02 and v > 10 and steer * yaw * rel > 0:
             r = (abs(yaw) / v) / abs(steer)
-            if lat_g < 0.35 and snap.brake < 0.05 and 0.1 < snap.throttle < 0.9:
+            if 0.08 < lat_g < 0.45 and snap.brake < 0.05:
                 self._r0_samples.append(r)
                 if len(self._r0_samples) > 4000:
                     self._r0_samples = self._r0_samples[-3000:]
-            elif lat_g >= 0.6:
+            elif lat_g >= 0.6 and abs(steer) > 0.03:
                 ph = self._phase(snap)
                 self._r[f"{ph}|{band}"].append(r)
                 self._r[ph].append(r)
@@ -213,19 +262,28 @@ class HandlingAnalyzer:
                 self._last_cs_t = t
                 self._cs_events.append(f"{self._where(d)} ({self._phase(snap)}, {snap.speed_kmh:.0f} km/h)")
 
-        # --- drivetrain detection (straight-line hard acceleration)
-        if snap.throttle > 0.85 and snap.brake < 0.02 and abs(steer) < 0.05 and 30 < snap.speed_kmh < 160 and snap.gear in (1, 2, 3):
+        # --- drivetrain detection
+        # Wheel speeds: under hard acceleration the driven wheels turn a little faster than the free ones.
+        # Comparing the rear/front RPS ratio under power with the same ratio while cruising cancels out
+        # different tyre sizes front and rear. Works for low-power cars that never spin their wheels
+        # (slip speed alone called every light RWD car "AWD/unclear").
+        straight = abs(steer) < 0.05 and lat_g < 0.15 and snap.brake < 0.02 and 30 < snap.speed_kmh < 200
+        f_rps = (abs(rps[0]) + abs(rps[1])) / 2.0
+        r_rps = (abs(rps[2]) + abs(rps[3])) / 2.0
+        if straight and f_rps > 1.0 and r_rps > 1.0:
+            ratio = r_rps / f_rps
+            if snap.throttle > 0.85 and snap.gear in (1, 2, 3):
+                self._rps_acc.append(ratio)
+            elif snap.throttle < 0.25:
+                self._rps_cruise.append(ratio)
+            for lst in (self._rps_acc, self._rps_cruise):
+                if len(lst) > 1500:
+                    del lst[:500]
+        if snap.throttle > 0.85 and straight and snap.gear in (1, 2, 3):
             self._dt_front += abs(slip[0]) + abs(slip[1])
             self._dt_rear += abs(slip[2]) + abs(slip[3])
             self._dt_n += 1
-            if self._dt_n >= 30:
-                f, rr = self._dt_front, self._dt_rear
-                if f > 1.6 * rr:
-                    self.drivetrain = "FWD"
-                elif rr > 1.6 * f:
-                    self.drivetrain = "RWD"
-                else:
-                    self.drivetrain = "AWD/unclear"
+        self._update_drivetrain()
 
         # --- lock-ups
         if snap.brake > 0.3 and snap.speed_kmh > 40 and all(x != 0 for x in rps):
@@ -263,6 +321,11 @@ class HandlingAnalyzer:
                     self._carc[c].append(snap.tyre_carcass_temps_c[i])
                 if snap.tyre_pressures_bar[i] > 0.3:
                     self._press[c].append(snap.tyre_pressures_bar[i])
+                    air = getattr(snap, "tyre_air_temps_c", ()) or ()
+                    if len(air) > i and air[i] > 0:
+                        ce = cold_equivalent_bar(snap.tyre_pressures_bar[i], air[i])
+                        if ce is not None:
+                            self._cold_eq[c].append(ce)
         for i, c in enumerate(CORNERS):
             self._brake_peak[c] = max(self._brake_peak[c], snap.brake_temps_c[i])
             self._travel_max[c] = max(self._travel_max[c], snap.suspension_travel_mm[i])
@@ -317,6 +380,25 @@ class HandlingAnalyzer:
             else:
                 self._corner_time[cid] = t - self._corner_entry_t[cid]
 
+    def _update_drivetrain(self):
+        if len(self._rps_acc) >= 30 and len(self._rps_cruise) >= 30:
+            k = median(self._rps_acc) / median(self._rps_cruise)
+            if k > 1.008:
+                self.drivetrain = "RWD"
+            elif k < 0.992:
+                self.drivetrain = "FWD"
+            else:
+                self.drivetrain = "AWD/unclear"
+            return
+        if self._dt_n >= 30:
+            f, rr = self._dt_front, self._dt_rear
+            if f > 1.6 * rr:
+                self.drivetrain = "FWD"
+            elif rr > 1.6 * f:
+                self.drivetrain = "RWD"
+            elif self.drivetrain == "unknown":
+                self.drivetrain = "AWD/unclear"
+
     # ------------------------------------------------------------------ lap / run reports
     def _r0(self) -> Optional[float]:
         return _med(self._r0_samples[-2000:]) if len(self._r0_samples) >= 30 else None
@@ -345,6 +427,7 @@ class HandlingAnalyzer:
                 lh.tyre_imo[c] = (a / n, b / n, cc / n)
         lh.carcass = {c: sum(v) / len(v) for c, v in self._carc.items() if v}
         lh.pressures_bar = {c: sum(v) / len(v) for c, v in self._press.items() if v}
+        lh.cold_eq_bar = {c: median(v) for c, v in self._cold_eq.items() if len(v) >= 10}
         lh.brake_peak = dict(self._brake_peak)
         lh.ride_min_cm = dict(self._ride_min)
         lh.ride_min_where = dict(self._ride_where)
@@ -364,12 +447,32 @@ class HandlingAnalyzer:
         lh.corner_time = {k: round(v, 2) for k, v in self._corner_time.items()}
         lh.top_speed = self._top
         lh.limiter_sec = round(self._limiter, 1)
+        self._seq += 1
+        lh.seq = self._seq
         self.laps.append(lh)
         if len(self.laps) > 60:
             self.laps = self.laps[-60:]
 
     def laps_since(self, lap_from: int) -> List[LapHandling]:
         return [l for l in self.laps if l.lap >= lap_from]
+
+    @property
+    def seq(self) -> int:
+        """Counter of finished laps; a run remembers it at pit exit and takes the laps after it."""
+        return self._seq
+
+    def laps_after_seq(self, seq: int) -> List[LapHandling]:
+        return [l for l in self.laps if l.seq > seq]
+
+    def live_cold_eq(self) -> Dict[str, Tuple[float, float, int]]:
+        """Cold-equivalent pressures on the lap in progress: corner -> (median, spread, samples)."""
+        out = {}
+        for c, v in self._cold_eq.items():
+            if len(v) >= 10:
+                s = sorted(v)
+                q1, q3 = s[len(s) // 4], s[(3 * len(s)) // 4]
+                out[c] = (median(v), q3 - q1, len(v))
+        return out
 
 
 def aggregate(laps: List[LapHandling]) -> Dict:
@@ -412,6 +515,7 @@ def aggregate(laps: List[LapHandling]) -> Dict:
     out["tyre_imo"] = temps
     out["carcass"] = {c: round(median([l.carcass[c] for l in laps if c in l.carcass]), 1) for c in CORNERS if any(c in l.carcass for l in laps)}
     out["pressures_bar"] = {c: round(median([l.pressures_bar[c] for l in laps if c in l.pressures_bar]), 3) for c in CORNERS if any(c in l.pressures_bar for l in laps)}
+    out["cold_eq_bar"] = {c: round(median([l.cold_eq_bar[c] for l in laps if c in l.cold_eq_bar]), 3) for c in CORNERS if any(c in l.cold_eq_bar for l in laps)}
     out["brake_peak"] = {c: round(median([l.brake_peak[c] for l in laps if c in l.brake_peak]), 0) for c in CORNERS if any(c in l.brake_peak for l in laps)}
     rm = {}
     for axle in ("front", "rear"):
@@ -436,6 +540,14 @@ def aggregate(laps: List[LapHandling]) -> Dict:
     out["top_speed"] = round(max(l.top_speed for l in laps), 1)
     out["limiter_sec_per_lap"] = round(sum(l.limiter_sec for l in laps) / len(laps), 1)
     return out
+
+
+_PROFILE_WORD = {
+    "OK": "flat - no pressure signal",
+    "HIGH": "middle hot - pressure high",
+    "LOW": "middle cool - pressure low",
+    "COLD": "too cold to read",
+}
 
 
 def _ui_word(v: float) -> str:
@@ -474,15 +586,23 @@ def format_run(agg: Dict, drivetrain: str = "unknown") -> List[str]:
     t = agg.get("tyre_imo", {})
     if t:
         segs = []
+        verdicts = []
         for c in CORNERS:
             if c in t:
                 i, m, o = t[c]
-                segs.append(f"{c} {i:.0f}/{m:.0f}/{o:.0f} (I-O {i - o:+.1f}, mid vs avg {m - (i + o) / 2:+.1f})")
+                status, d = judge_pressure_profile(i, m, o)
+                segs.append(f"{c} {i:.0f}/{m:.0f}/{o:.0f} (I-O {i - o:+.1f}, mid vs avg {d:+.1f})")
+                verdicts.append(f"{c} {_PROFILE_WORD[status]}")
         L.append("  Tyre tread temps at speed, lap-averaged, Inner/Mid/Outer °C: " + " | ".join(segs))
+        L.append(f"  Pressure read from the temperature profile (only > ±{PRESSURE_DEADBAND_C:.0f}°C mid vs avg counts; "
+                 "temps are whole degrees): " + " | ".join(verdicts))
     if agg.get("carcass"):
         L.append("  Carcass temps: " + " | ".join(f"{c} {v:.0f}°C" for c, v in agg["carcass"].items()))
     if agg.get("pressures_bar"):
         L.append("  HOT pressures (on track): " + " | ".join(f"{c} {v:.2f} bar ({v * 14.5038:.1f} psi)" for c, v in agg["pressures_bar"].items()))
+    if agg.get("cold_eq_bar"):
+        L.append("  Set (cold) pressures, measured from hot pressure + tyre air temp, at 20°C: "
+                 + " | ".join(f"{c} {v:.2f} bar" for c, v in agg["cold_eq_bar"].items()))
     if agg.get("brake_peak"):
         L.append("  Brake peak temps per lap: " + " | ".join(f"{c} {v:.0f}°C" for c, v in agg["brake_peak"].items()))
     rm = agg.get("ride_min_cm", {})

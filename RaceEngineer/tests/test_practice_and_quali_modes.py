@@ -1,3 +1,4 @@
+import dataclasses
 """
 Unit tests for specialized Practice and Qualifying engineer modes.
 Verifies:
@@ -230,6 +231,8 @@ class TestPracticeAndQualiModes(unittest.TestCase):
         # 2. Exits pits (Run 1 starts)
         snap_out = self.make_snapshot(pit_mode=PitMode.PIT_MODE_NONE, lap=1, fuel=40.0)
         manager.on_telemetry(snap_out)
+        self.assertFalse(manager.is_car_on_track, "a run only starts once the car is properly out (debounced)")
+        manager.on_telemetry(dataclasses.replace(snap_out, timestamp=snap_out.timestamp + 5.0))
         self.assertTrue(manager.is_car_on_track)
         self.assertEqual(manager.current_run_number, 1)
 
@@ -248,6 +251,7 @@ class TestPracticeAndQualiModes(unittest.TestCase):
         # 5. Second run with faster laps
         snap_out2 = self.make_snapshot(pit_mode=PitMode.PIT_MODE_NONE, lap=5, fuel=30.0)
         manager.on_telemetry(snap_out2)
+        manager.on_telemetry(dataclasses.replace(snap_out2, timestamp=snap_out2.timestamp + 5.0))
         for lap_num in range(6, 9):
             snap_lap2 = self.make_snapshot(pit_mode=PitMode.PIT_MODE_NONE, lap=lap_num, last_lap=97.2, fuel=30.0 - (lap_num - 5) * 2.8)
             manager.on_telemetry(snap_lap2)

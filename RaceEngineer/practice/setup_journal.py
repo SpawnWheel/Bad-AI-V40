@@ -77,6 +77,8 @@ class SetupJournal:
         if dt and dt != "unknown":
             with self._lock:
                 rec = self._car(car)
+                if dt == "AWD/unclear" and rec.get("drivetrain") in ("FWD", "RWD"):
+                    return          # an unclear reading never overwrites a definite one
                 if rec.get("drivetrain") != dt:
                     rec["drivetrain"] = dt
                     self._save()

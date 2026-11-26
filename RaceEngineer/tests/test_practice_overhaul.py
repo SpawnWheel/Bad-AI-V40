@@ -281,7 +281,7 @@ class TestPracticeOverhaul(unittest.TestCase):
         context = build_telemetry_context(snap_pits, fuel, tires, gaps)
         self.assertIn("last on-track reading retained in pits", context)
         self.assertIn("camber optimal (target ~7°C)", context)
-        self.assertIn("pressure optimal (no bulging)", context)
+        self.assertIn("flat - no pressure signal", context)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ brake temperature windows, and in-car settings during practice runs.
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 from telemetry.collector import TelemetrySnapshot
+from .handling import judge_pressure_profile
 
 
 @dataclass
@@ -270,24 +271,24 @@ class PracticeTelemetryMonitor:
                     c_status = "OPTIMAL"
                     c_advice = f"{c_name} camber window optimal ({spread:.1f}°C spread, target {tgt:.0f}°C)."
 
-                # Pressure evaluation (Tyre bulging):
-                # - Optimal: Contact patch is flat; middle temp sits between inner and outer temps.
-                # - Bulging out (Over-inflated): Middle temp runs hotter than gradient / above both (cen > max_io or center_diff > 2.0°C).
-                # - Bulging in (Under-inflated): Middle temp runs cooler than gradient / below both (cen < min_io or center_diff < -2.0°C).
-                if cen < 45.0:
+                # Pressure from the profile: middle vs the average of the shoulders, with a ±3°C dead band.
+                # Temps arrive in whole degrees and camber/toe move them too, so a 1-2°C cooler middle is noise,
+                # not a reason to add air (that rule pumped the tyres up run after run).
+                prof, _d = judge_pressure_profile(inn, cen, out)
+                if prof == "COLD":
                     p_status = "COLD"
-                    p_advice = "Cold pressures."
-                elif cen > max_io or center_diff > 2.0:
+                    p_advice = "Tyres too cold to read pressure from the temperature profile."
+                elif prof == "HIGH":
                     p_status = "OVER_INFLATED"
-                    p_advice = f"{c_name} tyre bulging out / over-inflated (middle {cen:.1f}°C, +{center_diff:.1f}°C above profile). Lower tyre pressure."
-                    pressure_notes.append(f"{c_name} bulging out / over-inflated (+{center_diff:.1f}°C mid)")
-                elif cen < min_io or center_diff < -2.0:
+                    p_advice = f"{c_name} middle {center_diff:+.1f}°C vs shoulders - pressure high. Lower tyre pressure."
+                    pressure_notes.append(f"{c_name} middle hot ({center_diff:+.1f}°C) - pressure high")
+                elif prof == "LOW":
                     p_status = "UNDER_INFLATED"
-                    p_advice = f"{c_name} tyre bulging in / under-inflated (middle {cen:.1f}°C, {center_diff:.1f}°C below profile). Raise tyre pressure."
-                    pressure_notes.append(f"{c_name} bulging in / under-inflated ({center_diff:.1f}°C mid)")
+                    p_advice = f"{c_name} middle {center_diff:+.1f}°C vs shoulders - pressure low. Raise tyre pressure."
+                    pressure_notes.append(f"{c_name} middle cool ({center_diff:+.1f}°C) - pressure low")
                 else:
                     p_status = "OPTIMAL"
-                    p_advice = f"{c_name} tyre pressure optimal (middle temp between inner and outer, no bulging)."
+                    p_advice = f"{c_name} profile flat (middle {center_diff:+.1f}°C, within ±3°C) - no pressure signal."
 
                 tyre_diag[c_name] = TyreThermalDiagnosis(
                     corner=c_name,
@@ -304,7 +305,7 @@ class PracticeTelemetryMonitor:
 
         avg_tag = " (flying lap averages)" if is_averaged else ""
         camber_summary_str = ("; ".join(camber_notes) if camber_notes else "Camber alignment well-balanced across all corners (~7°C inner spread).") + avg_tag
-        pressure_summary_str = ("; ".join(pressure_notes) if pressure_notes else "Tyre pressures uniform (no bulging in or out, middle sits between inner and outer).") + avg_tag
+        pressure_summary_str = ("; ".join(pressure_notes) if pressure_notes else "No pressure signal in the temperature profile (middle within ±3°C of the shoulders).") + avg_tag
 
         # Brake diagnostics
         cold_b = []

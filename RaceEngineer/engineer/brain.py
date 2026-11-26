@@ -39,7 +39,8 @@ from .prompts import (
     RACE_UPDATE_PROMPT,
     PRACTICE_BRIEFING_PROMPT,
     QUALI_SITREP_PROMPT,
-    PRACTICE_PIT_DEBRIEF_PROMPT
+    PRACTICE_PIT_DEBRIEF_PROMPT,
+    PRACTICE_TRACK_UPDATE_PROMPT,
 )
 from race.events import RaceEvent, EventType
 from .intent import classify_driver_intent
@@ -80,6 +81,10 @@ RESPONSE_SCHEMA = {
             "type": "string",
             "description": "Practice: a setup change the driver confirmed he has made / is making before the next run, with the amount. Empty otherwise.",
         },
+        "setup_proposal": {
+            "type": "string",
+            "description": "Practice: the ONE setup change you just asked the driver to make before the next run, with the amount (e.g. 'front ARB -2 clicks'). Empty otherwise.",
+        },
         "setup_conclusion": {
             "type": "string",
             "description": "Practice: a verdict from comparing runs (e.g. 'front -0.05 bar: mid-corner push reduced, 0.2s faster - keep'). Empty otherwise.",
@@ -98,6 +103,7 @@ REPLY AS JSON with the fields above plus:
 PRACTICE_JSON_SUFFIX = """
 - car_fact: if the driver told you something lasting about this car (e.g. "camber is fixed", "ARBs not adjustable", "pressures adjust in 0.01 bar steps", "front pressure is 1.70 bar cold"), one short line, else "".
 - setup_change: if the driver confirmed a change he made / is making for the next run (e.g. "front cold pressures -0.05 bar"), one short line with the amount, else "".
+- setup_proposal: if you just asked him to make a setup change before the next run, that change with the amount (e.g. "all four cold pressures -0.10 bar"), else "". The app then logs it as made once the car goes to the garage, so he doesn't have to report it.
 - setup_conclusion: if you just judged a change using run-vs-run data, the verdict in one line (keep / revert and why), else ""."""
 
 # Proactive events that are routine enough for the optional fast model
@@ -119,6 +125,7 @@ class EngineerReply:
     remember: str = ""
     car_fact: str = ""
     setup_change: str = ""
+    setup_proposal: str = ""
     setup_conclusion: str = ""
     ok: bool = False          # a model reply was obtained and parsed
     latency: float = 0.0
@@ -547,6 +554,7 @@ class RaceEngineerBrain:
             reply.remember = str(data.get("remember", "") or "")
             reply.car_fact = str(data.get("car_fact", "") or "").strip()
             reply.setup_change = str(data.get("setup_change", "") or "").strip()
+            reply.setup_proposal = str(data.get("setup_proposal", "") or "").strip()
             reply.setup_conclusion = str(data.get("setup_conclusion", "") or "").strip()
         else:
             reply.transcript, reply.emotion, reply.delivery, reply.response = self._parse_llm_response(raw_text)
@@ -733,7 +741,7 @@ class RaceEngineerBrain:
         if reply.remember:
             self.remember(reply.remember)
         for kind_, text_ in (("car_fact", reply.car_fact), ("setup_change", reply.setup_change),
-                             ("setup_conclusion", reply.setup_conclusion)):
+                             ("setup_proposal", reply.setup_proposal), ("setup_conclusion", reply.setup_conclusion)):
             if text_ and self.knowledge_sink is not None:
                 try:
                     self.knowledge_sink(kind_, text_)
@@ -749,7 +757,8 @@ class RaceEngineerBrain:
         extra += f" | TOKENS {reply.tokens}" if reply.tokens else ""
         if reply.remember:
             extra += f" | NOTE: {reply.remember}"
-        for lbl, txt in (("CAR FACT", reply.car_fact), ("SETUP CHANGE", reply.setup_change), ("CONCLUSION", reply.setup_conclusion)):
+        for lbl, txt in (("CAR FACT", reply.car_fact), ("SETUP CHANGE", reply.setup_change),
+                         ("PROPOSAL", reply.setup_proposal), ("CONCLUSION", reply.setup_conclusion)):
             if txt:
                 extra += f" | {lbl}: {txt}"
         interaction_logger.log_interaction(
@@ -954,7 +963,7 @@ class RaceEngineerBrain:
             return "Radio check: Check your in-car dash for telemetry numbers.", fallback_emotion, fallback_delivery
 
         if session_group == "PRACTICE" and ("[PRACTICE RUN DEBRIEF]" in context_str or "PRACTICE / SETUP" in context_str):
-            template = PRACTICE_PIT_DEBRIEF_PROMPT
+            template = PRACTICE_TRACK_UPDATE_PROMPT if "[WHERE THE CAR IS]: ON TRACK" in context_str else PRACTICE_PIT_DEBRIEF_PROMPT
         else:
             template = RACE_UPDATE_PROMPT
         prompt = template.format(telemetry_context=context_str, radio_history=self._prompt_extras())

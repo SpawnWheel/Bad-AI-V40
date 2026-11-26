@@ -166,6 +166,7 @@ class TelemetrySnapshot:
     tyre_rps: tuple = (0.0, 0.0, 0.0, 0.0)
     ride_height_cm: tuple = (0.0, 0.0, 0.0, 0.0)
     tyre_pressures_raw: tuple = (0.0, 0.0, 0.0, 0.0)
+    tyre_air_temps_c: tuple = ()                   # internal air temperature (AMS2); empty when not reported
     brake_bias_raw: float = -1.0
     session_additional_laps: int = 0
     num_participants: int = 0
@@ -597,6 +598,9 @@ class TelemetryCollector:
             tyre_rps=tuple(float(raw.mTyreRPS[i]) for i in range(4)),
             ride_height_cm=tuple(ride_height_cm),
             tyre_pressures_raw=tuple(float(raw.mAirPressure[i]) for i in range(4)),
+            # internal air temp (Kelvin in shared memory) -> lets practice tell set-pressure changes from heat
+            tyre_air_temps_c=tuple((float(raw.mTyreInternalAirTemp[i]) - 273.15) if float(raw.mTyreInternalAirTemp[i]) > 150.0 else 0.0
+                                   for i in range(4)),
             brake_bias_raw=brake_bias_raw,
             session_additional_laps=int(getattr(raw, "mSessionAdditionalLaps", 0)),
             num_participants=int(raw.mNumParticipants),
